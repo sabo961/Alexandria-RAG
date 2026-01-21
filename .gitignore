@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Logs
+logs/*.json
+logs/*.log
+*.log
+
+# Progress tracking (runtime files)
+scripts/batch_ingest_progress.json
+
+# Book directories (too large for git)
+ingest/
+ingested/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Generated outputs
+docs/book-inventory.txt
+
+# Test collections
+*_test/

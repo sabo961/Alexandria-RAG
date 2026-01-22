@@ -33,6 +33,7 @@ ingested/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Streamlit
 .streamlit/secrets.toml

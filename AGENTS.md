@@ -73,7 +73,8 @@ DOMAIN_CHUNK_SIZES = {
     'philosophy': {
         'min': 1200,
         'max': 1800,
-        'overlap': 180
+        'overlap': 180,
+        'use_argument_chunking': True  # Pre-chunk based on conceptual oppositions
     },
     'history': {
         'min': 1500,
@@ -81,6 +82,15 @@ DOMAIN_CHUNK_SIZES = {
         'overlap': 200
     }
 }
+```
+
+### RAG Query Parameters
+```python
+DEFAULT_FETCH_MULTIPLIER = 3  # Fetch limit × N results from Qdrant
+                              # Higher = better quality, slower retrieval
+                              # Educational use: 5-10
+                              # Production agents: 2-3
+                              # Min fetch always: 20
 ```
 
 ### File Formats Supported
@@ -91,37 +101,114 @@ SUPPORTED_FORMATS = ['epub', 'pdf', 'txt', 'md']
 
 ---
 
+## Architecture Principle
+
+**CRITICAL:** All business logic lives in `scripts/` - GUI is just a thin presentation layer.
+
+### Why?
+- **AI agents** need to call functions directly (not via GUI)
+- **CLI tools** need same logic as GUI
+- **Single source of truth** for all operations
+- **Easy testing** without GUI overhead
+
+### Rules
+1. ✅ **GUI (`alexandria_app.py`)** - Calls functions from `scripts/`, displays results
+2. ✅ **Scripts (`scripts/*.py`)** - Contains all logic, usable by GUI/CLI/agents
+3. ❌ **Never** - Implement logic directly in GUI
+
 ## Production Scripts
 
 ### Primary Tools (Use These)
 ```bash
-batch_ingest.py          # Production ingestion (auto-logs to manifest)
-rag_query.py             # Query tool (LLM-ready markdown output)
-collection_manifest.py   # Track what's been ingested
-qdrant_utils.py          # Collection management
+# INGESTION
+batch_ingest.py          # Production book ingestion (auto-logs to manifest)
+ingest_books.py          # Core ingestion functions (imported by batch & GUI)
+philosophical_chunking.py # Argument-based chunking for philosophical texts
+                         # - Detects conceptual oppositions (words↔body, mind↔flesh)
+                         # - Preserves complete arguments in chunks
+                         # - Author-specific patterns (Mishima, Nietzsche, Cioran)
+                         # - Activated via domains.json flag: use_argument_chunking
+
+# QUERY
+rag_query.py             # Unified RAG query engine (CLI + module interface)
+                         # - Semantic search via Qdrant
+                         # - Similarity threshold filtering
+                         # - Configurable fetch_multiplier (controls quality vs speed)
+                         # - Optional LLM reranking
+                         # - OpenRouter answer generation
+                         # Used by: CLI, GUI, AI agents
+
+# MANAGEMENT
+collection_manifest.py   # Track what's been ingested per collection
+qdrant_utils.py          # Collection admin (stats, search, copy, delete)
+```
+
+### Configuration Files
+```bash
+domains.json             # Domain list (technical, psychology, philosophy, history, literature)
+                         # - Loaded by GUI dropdowns
+                         # - Used for filtering in rag_query.py
+                         # - Contains use_argument_chunking flag per domain
 ```
 
 ### Development Tools
 ```bash
-ingest_books.py          # Single book ingestion (testing only)
 experiment_chunking.py   # A/B testing chunk strategies
+generate_book_inventory.py  # Calibre library scanning
+count_file_types.py      # File format statistics
 ```
 
 ### When to Use What
 - **Production ingestion:** `batch_ingest.py` (logs automatically)
 - **Check what's ingested:** `collection_manifest.py show <collection>`
-- **Query books:** `rag_query.py "your question" --limit 5`
+- **Query books (CLI):** `python rag_query.py "your question" --limit 5`
+- **Query books (Python):** `from rag_query import perform_rag_query`
+- **Query books (GUI):** Streamlit Query tab (calls `rag_query.py` logic)
 - **Admin tasks:** `qdrant_utils.py` (stats, search, copy, delete)
-- **Testing:** `ingest_books.py` or `experiment_chunking.py`
+- **Testing:** `experiment_chunking.py`
+
+### GUI Integration
+**File:** `alexandria_app.py`
+
+**What it does:**
+- Loads domains from `scripts/domains.json`
+- Calls `ingest_books.py` functions for ingestion
+- Calls `perform_rag_query()` from `rag_query.py` for queries
+- Calls `collection_manifest.py` for statistics
+- Uses `generate_embeddings()` from `ingest_books.py`
+
+**What it does NOT do:**
+- ❌ Implement ingestion logic
+- ❌ Implement RAG query logic
+- ❌ Manage Qdrant connections
+- ❌ Define domain lists
 
 ---
 
 ## Logging & Tracking
 
+### Collection-Specific Logging (NEW - 2026-01-21)
+Each collection now has **separate log files**:
+
+**Manifest files:**
+- `logs/alexandria_manifest.json` - Alexandria collection manifest
+- `logs/alexandria_test_manifest.json` - Test collection manifest
+- `logs/{collection_name}_manifest.json` - Per-collection pattern
+
+**Progress files:**
+- `scripts/batch_ingest_progress_alexandria.json` - Alexandria progress
+- `scripts/batch_ingest_progress_{collection_name}.json` - Per-collection pattern
+
+**Auto-reset behavior:**
+- When collection is deleted from Qdrant, manifest is automatically reset to empty
+- Progress file is deleted to prevent stale resume attempts
+- Verified on every `batch_ingest.py` run via `verify_collection_exists()`
+
 ### Automatic Logging
-`batch_ingest.py` automatically logs to:
-- **Manifest:** `logs/collection_manifest.json` (master record)
-- **Progress:** `scripts/batch_ingest_progress.json` (resume support)
+`batch_ingest.py` automatically logs to collection-specific files:
+- **Manifest:** `logs/{collection_name}_manifest.json` (master record)
+- **Progress:** `scripts/batch_ingest_progress_{collection_name}.json` (resume support)
+- **CSV Export:** `logs/{collection_name}_manifest.csv` (human-readable)
 
 ### Check What's Ingested
 ```bash
@@ -159,10 +246,14 @@ ls ../ingest/  # Books waiting to be processed
 ls ../ingested/  # Successfully ingested books (moved from ingest/)
 ```
 
-### Status Files
-- **Manifest:** `logs/collection_manifest.json` - What's in Qdrant
-- **Manifest CSV:** `logs/collection_manifest.csv` - Human-readable format
-- **Progress:** `scripts/batch_ingest_progress.json` - Batch ingestion tracker
+### Status Files (Collection-Specific)
+- **Manifest JSON:** `logs/{collection_name}_manifest.json` - What's in Qdrant
+- **Manifest CSV:** `logs/{collection_name}_manifest.csv` - Human-readable format
+- **Progress JSON:** `scripts/batch_ingest_progress_{collection_name}.json` - Batch ingestion tracker
+
+**Legacy files (backward compatibility):**
+- `logs/collection_manifest.json` - Old global manifest (deprecated)
+- `scripts/batch_ingest_progress.json` - Old global progress (deprecated)
 
 ---
 
@@ -267,19 +358,11 @@ Different content types need different chunk sizes:
 
 ### CRITICAL - Blocks Production
 
-1. **batch_ingest.py Import Errors**
-   - `generate_embeddings` function missing from `ingest_books.py`
-   - Blocks actual ingestion execution
-   - Priority: Fix before any ingestion
-
-2. **GUI Ingestion Not Implemented**
-   - `alexandria_app.py:384-410` - Start Ingestion button is placeholder
-   - Shows parameters but doesn't execute
-   - Need: subprocess call to batch_ingest.py
+**NONE** - All blocking issues resolved! ✅
 
 ### ANNOYING - UX Issues
 
-3. **Domain Switching Bug (Streamlit)**
+1. **Domain Switching Bug (Streamlit)**
    - Location: `alexandria_app.py:248-258`
    - Issue: Session state parameters don't reset when changing domain dropdown
    - Expected: technical (1500-2000-200) → psychology (1000-1500-150)
@@ -288,19 +371,15 @@ Different content types need different chunk sizes:
 
 ### NOT URGENT
 
-4. **MOBI Support**
+2. **MOBI Support**
    - Not yet implemented
    - Workaround: Convert to EPUB using Calibre
 
-5. **Open WebUI Integration**
+3. **Open WebUI Integration**
    - Configuration documented but not actively used
    - Focus is on Python CLI + Streamlit GUI
 
-6. **PDF Ingestion Quality**
-   - Not yet tested (Silverston Vol 1 & 2 are PDFs)
-   - May need tuning compared to EPUB
-
-7. **Image Handling**
+4. **Image Handling**
    - Currently ignored (text-only extraction)
    - Future: OCR or multimodal embeddings (CLIP)
 
@@ -308,10 +387,17 @@ Different content types need different chunk sizes:
 
 ## Agent Instructions
 
+### CRITICAL: Language & Token Efficiency
+**ALWAYS communicate in ENGLISH** when working with this user.
+- English responses use ~30% fewer tokens than Croatian
+- User preference: English for technical work
+- Exception: Only use Croatian if explicitly requested by user
+
 ### When Starting a Session
 1. Check this file first (AGENTS.md) for defaults
 2. Verify working directory: `Alexandria/scripts`
 3. Check current status: `python collection_manifest.py list`
+4. **Speak English** - more token-efficient
 
 ### When Adding New Features
 1. Update this file with new defaults/conventions
@@ -351,7 +437,7 @@ fix(qdrant): update deprecated search API to query_points
 ## Project Phases
 
 ### Phase 1: Proof of Concept (Current)
-- ✅ Basic ingestion pipeline (EPUB, PDF, TXT)
+- ✅ Basic ingestion pipeline: EPUB/HTML/MD, DOCX, PDF (born-digital)
 - ✅ Domain-specific chunking
 - ✅ Qdrant upload with embeddings
 - ✅ RAG query tool
@@ -398,7 +484,7 @@ Professional web-based control panel for Alexandria RAG system.
   - File info: format icon, name, size in MB
 
 - **Domain Selection:**
-  - technical / psychology / philosophy / history
+  - technical / psychology / philosophy / history / literature
   - Auto-loads domain-specific chunking defaults
 
 - **Advanced Settings Expander:**
@@ -422,8 +508,8 @@ Professional web-based control panel for Alexandria RAG system.
   - Shows: command to run manually (placeholder)
   - TODO: Implement actual subprocess call
 
-#### ⏸️ Tab 3: Query (Not Implemented)
-- Placeholder for semantic search interface
+#### ⏸️ Tab 3: Query (Implemented)
+- TODO: enter details
 
 #### ⏸️ Tab 4: Statistics (Partial)
 - Shows manifest data if available
@@ -436,7 +522,7 @@ Professional web-based control panel for Alexandria RAG system.
 - Purple gradient theme (`#667eea` → `#764ba2`)
 - Greek title with fancy Unicode: "𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤"
 - Professional layout with columns and expanders
-- Icons for file types (📕 EPUB, 📄 PDF, 📝 TXT/MD)
+- Icons for file types (📕 EPUB, ? HTML, 📝 MD, 📄 PDF, ? DOCX)
 
 **Session State Management:**
 - `selected_books` - checkbox states
@@ -449,70 +535,77 @@ Professional web-based control panel for Alexandria RAG system.
 
 ---
 
-## TODO List (Priority Order)
+## Current Work & TODO
 
-### 🔴 HIGH PRIORITY - Blockers for Production
+For current sprint tasks, priorities, and work items, see **[TODO.md](TODO.md)**.
 
-1. **Fix batch_ingest.py import errors**
-   - File: `scripts/batch_ingest.py`
-   - Issue: `from ingest_books import generate_embeddings` fails
-   - Action: Check `ingest_books.py`, implement missing function or fix import path
-
-2. **Implement actual ingestion in GUI**
-   - File: `alexandria_app.py:384-410`
-   - Current: Shows parameters only (placeholder)
-   - Action: Add subprocess call to `batch_ingest.py` with:
-     - Selected book paths from `st.session_state.selected_books`
-     - All ingestion parameters (domain, collection, tokens, model, batch_size)
-     - Real-time output streaming to GUI
-
-3. **Test full ingestion workflow**
-   - Action: End-to-end test with 2-3 sample books
-   - Verify: EPUB parsing → chunking → embedding → Qdrant upload
-   - Check: Collection creation, metadata, vector storage, manifest update
-
-### 🟡 MEDIUM PRIORITY - UX Improvements
-
-4. **Fix domain switching parameter reset**
-   - File: `alexandria_app.py:248-258`
-   - Current: `del st.session_state[key]` + `st.rerun()` doesn't work
-   - Alternative approaches:
-     - Use widget callbacks with `on_change`
-     - Force remount with unique keys based on domain
-     - Separate user modifications from domain defaults
-   - Test: Switch technical→psychology→technical, verify reset each time
-
-5. **Add real-time progress tracking**
-   - Monitor: `scripts/batch_ingest_progress.json`
-   - Display: Progress bar, current book, chunks processed, ETA
-   - Update method: Streamlit auto-refresh or polling
-   - UI: Show live log output from subprocess
-
-6. **Implement Resume functionality**
-   - File: `alexandria_app.py:412-414`
-   - Use: `batch_ingest.py --resume` flag
-   - Display: Previously processed books, failed books, restart point
-   - Button: Resume from last position
-
-### 🟢 LOW PRIORITY - Nice to Have
-
-7. **Query interface (Tab 3)**
-   - File: `alexandria_app.py:452-475`
-   - Implement: Text input → embedding → Qdrant search → display results
-   - UI Components:
-     - Query text area
-     - Domain filter dropdown
-     - Result limit slider (1-20)
-     - Results: book title, author, relevant chunk, similarity score
-     - Pagination for multiple results
-
-8. **Test embedding model lock**
-   - Verify: Dropdown disabled when `points_count > 0`
-   - Test case: Ingest 1 book, reload GUI, check if lock appears
-   - Edge case: Empty collection should show unlocked dropdown
+AGENTS.md contains stable reference documentation (paths, defaults, conventions).
+TODO.md contains dynamic workflow (current tasks, blockers, backlog).
 
 ---
 
-**Last Updated:** 2026-01-21 22:00
-**Next Review:** After fixing batch_ingest.py imports
-**Next Milestone:** First successful GUI-initiated ingestion
+## Recent Changes (2026-01-22 02:15)
+
+### ✅ Query Tab Refactoring (2026-01-22)
+- **COMPLETED**: Eliminated 160+ lines of duplicated RAG logic in GUI
+- Query tab now calls `perform_rag_query()` from `rag_query.py` (lines 894-948)
+- Added missing `RAGResult` attributes: `initial_count`, `error`, `sources` property
+- GUI properly displays search info, filters, and error handling
+- Single source of truth for RAG logic (usable by CLI, GUI, and AI agents)
+
+### ✅ Configurable Fetch Multiplier (2026-01-22)
+- Added `fetch_multiplier` parameter to `search_qdrant()` and `perform_rag_query()`
+- Default: 3 (good balance of quality vs speed)
+- CLI: `--fetch-multiplier` argument (1-10)
+- GUI: Number input in Advanced Settings (1-10)
+- Educational use: Can increase to 5-10 for better quality
+- Production agents: Can decrease to 2 for faster responses
+- Controls how many extra results to fetch for filtering/reranking
+
+### ✅ Philosophical Chunking Module (2026-01-22)
+- **CREATED**: `scripts/philosophical_chunking.py`
+- Implements argument-based chunking for philosophical texts
+- Preserves complete conceptual oppositions (both poles + authorial stance)
+- Author-specific opposition pairs:
+  - Mishima: words↔body, intellect↔muscle, ideal↔death, civilization↔nature
+  - Nietzsche: slave↔master, morality↔transvaluation, reason↔life
+  - Cioran: hope↔despair, life↔death
+  - Default: mind↔body, ideal↔real, theory↔practice
+- Activated via `use_argument_chunking` flag in `domains.json`
+- Philosophy domain: `use_argument_chunking: true`
+- CLI testing interface: `python philosophical_chunking.py <file> --author <name>`
+- **PENDING**: Integration into `ingest_books.py`
+
+### ✅ Language Preference
+- **ENGLISH ONLY** for all AI interactions (saves ~30% tokens)
+- Added to Agent Instructions section
+
+### ✅ Collection-Specific Logging
+- Each collection now has separate manifest: `logs/{collection_name}_manifest.json`
+- Each collection has separate progress: `batch_ingest_progress_{collection_name}.json`
+- Auto-reset behavior: manifest cleared when collection deleted from Qdrant
+- Implemented via `verify_collection_exists()` in `CollectionManifest`
+
+### ✅ Ingestion System Fixes
+- Fixed chunking logic (PDFs merge pages: 98 chunks vs 525)
+- Added UUID point IDs (prevents conflicts)
+- Added `generate_embeddings()` and `get_token_count()` helpers
+- GUI ingestion now fully functional
+
+### ✅ GUI Improvements (2026-01-22)
+- Removed debug caption section for cleaner interface
+- Added compact vertical spacing CSS (0.25rem margins, 1.4 line-height)
+- Combined success message with file movement into single colored block
+- Proper Markdown line breaks (`  \n`) for multi-line messages within success blocks
+- Query tab Advanced Settings: similarity threshold, fetch_multiplier, reranking controls
+
+### ✅ Documentation Restructure (2026-01-22)
+- **SPLIT**: Extracted TODO section from AGENTS.md into separate [TODO.md](TODO.md) file
+- AGENTS.md = stable reference (paths, defaults, conventions, architecture)
+- TODO.md = dynamic workflow (current sprint, priorities, backlog)
+- Clearer separation of concerns for AI agents and developers
+
+---
+
+**Last Updated:** 2026-01-22
+**For Current Tasks:** See [TODO.md](TODO.md)

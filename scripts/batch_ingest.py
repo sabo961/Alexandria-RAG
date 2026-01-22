@@ -35,6 +35,7 @@ from ingest_books import (
     get_token_count
 )
 from collection_manifest import CollectionManifest
+from calibre_db import CalibreDB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -133,7 +134,8 @@ def ingest_book(
     collection_name: str,
     host: str,
     port: int,
-    manifest: Optional[CollectionManifest] = None
+    manifest: Optional[CollectionManifest] = None,
+    calibre_db: Optional[CalibreDB] = None
 ) -> int:
     """
     Ingest a single book file.
@@ -144,6 +146,8 @@ def ingest_book(
         collection_name: Qdrant collection name
         host: Qdrant host
         port: Qdrant port
+        manifest: Optional manifest tracker
+        calibre_db: Optional Calibre DB for metadata lookup
 
     Returns:
         Number of chunks created
@@ -214,6 +218,19 @@ def ingest_book(
     # Update manifest if provided
     if manifest:
         file_size_mb = filepath.stat().st_size / (1024 * 1024)
+        file_type = filepath.suffix.upper().replace('.', '')
+
+        # Try to get language from Calibre DB
+        language = 'unknown'
+        if calibre_db:
+            try:
+                calibre_book = calibre_db.match_file_to_book(filepath.name)
+                if calibre_book:
+                    language = calibre_book.language
+                    logger.info(f"   📚 Matched to Calibre: language={language}")
+            except Exception as e:
+                logger.warning(f"   ⚠️  Could not lookup Calibre metadata: {e}")
+
         manifest.add_book(
             collection_name=collection_name,
             book_path=str(filepath),
@@ -221,7 +238,9 @@ def ingest_book(
             author=author,
             domain=domain,
             chunks_count=len(all_chunks),
-            file_size_mb=file_size_mb
+            file_size_mb=file_size_mb,
+            file_type=file_type,
+            language=language
         )
 
     return len(all_chunks)
@@ -262,9 +281,21 @@ def batch_ingest(
     logger.info("=" * 80)
     logger.info("")
 
-    # Initialize tracker and manifest
-    tracker = BatchIngestionTracker()
-    manifest = CollectionManifest()
+    # Initialize collection-specific tracker and manifest
+    tracker = BatchIngestionTracker(tracker_file=f'batch_ingest_progress_{collection_name}.json')
+    manifest = CollectionManifest(collection_name=collection_name)
+
+    # Verify collection exists in Qdrant (reset manifest if deleted)
+    manifest.verify_collection_exists(collection_name, host=host, port=port)
+
+    # Initialize Calibre DB for metadata lookup (optional)
+    calibre_db = None
+    try:
+        calibre_db = CalibreDB("G:\\My Drive\\alexandria")
+        logger.info("✅ Connected to Calibre DB for metadata enrichment")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not connect to Calibre DB: {e}")
+        logger.warning("   Continuing without Calibre metadata lookup")
 
     # Create ingested folder if moving completed books
     if move_completed:
@@ -295,7 +326,8 @@ def batch_ingest(
                 collection_name=collection_name,
                 host=host,
                 port=port,
-                manifest=manifest
+                manifest=manifest,
+                calibre_db=calibre_db
             )
             tracker.mark_processed(str(book_path), chunks_count)
 

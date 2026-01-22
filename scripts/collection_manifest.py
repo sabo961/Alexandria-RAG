@@ -37,9 +37,30 @@ logger = logging.getLogger(__name__)
 class CollectionManifest:
     """Manage collection manifests"""
 
-    def __init__(self, manifest_file: str = '../logs/collection_manifest.json'):
-        self.manifest_file = Path(manifest_file)
+    def __init__(self, manifest_file: str = '../logs/collection_manifest.json', collection_name: Optional[str] = None):
+        """
+        Initialize CollectionManifest.
+
+        Args:
+            manifest_file: Path to global manifest (for backward compatibility)
+            collection_name: If provided, use collection-specific manifest file
+        """
+        # Support collection-specific manifest files
+        if collection_name:
+            # Detect logs directory (works from both GUI and scripts)
+            logs_dir = Path(__file__).parent.parent / 'logs'
+            if not logs_dir.exists():
+                # Fallback for CLI usage from scripts directory
+                logs_dir = Path('../logs')
+
+            self.manifest_file = logs_dir / f'{collection_name}_manifest.json'
+            self.progress_file = Path(f'batch_ingest_progress_{collection_name}.json')
+        else:
+            self.manifest_file = Path(manifest_file)
+            self.progress_file = Path('batch_ingest_progress.json')
+
         self.manifest_file.parent.mkdir(parents=True, exist_ok=True)
+        self.collection_name = collection_name
         self.manifest = self._load_manifest()
 
     def _load_manifest(self) -> Dict:
@@ -52,6 +73,41 @@ class CollectionManifest:
             'last_updated': datetime.now().isoformat(),
             'collections': {}
         }
+
+    def verify_collection_exists(self, collection_name: str, qdrant_host: str = '192.168.0.151', qdrant_port: int = 6333) -> bool:
+        """
+        Verify collection exists in Qdrant. If not, reset manifest for this collection.
+
+        Args:
+            collection_name: Name of collection to verify
+            qdrant_host: Qdrant server host
+            qdrant_port: Qdrant server port
+
+        Returns:
+            True if collection exists, False if it was deleted (and manifest reset)
+        """
+        try:
+            client = QdrantClient(host=qdrant_host, port=qdrant_port)
+            collections = [c.name for c in client.get_collections().collections]
+
+            if collection_name not in collections:
+                # Collection was deleted - reset manifest
+                if collection_name in self.manifest['collections']:
+                    logger.warning(f"⚠️  Collection '{collection_name}' not found in Qdrant - resetting manifest")
+                    del self.manifest['collections'][collection_name]
+                    self.save_manifest()
+
+                    # Reset progress file if exists
+                    if self.progress_file.exists():
+                        self.progress_file.unlink()
+                        logger.info(f"🗑️  Deleted progress file: {self.progress_file}")
+
+                return False
+
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error verifying collection: {e}")
+            return False
 
     def save_manifest(self):
         """Save manifest to file (both JSON and CSV)"""
@@ -77,18 +133,29 @@ class CollectionManifest:
 
             # Header
             writer.writerow([
-                'Collection', 'Book Title', 'Author', 'Domain',
+                'Collection', 'Book Title', 'Author', 'Language', 'Domain', 'File Type',
                 'Chunks', 'Size (MB)', 'File Name', 'Ingested At'
             ])
 
             # Data rows
             for collection_name, collection in self.manifest['collections'].items():
                 for book in collection['books']:
+                    # Extract file type from filename or use stored value
+                    file_type = book.get('file_type')
+                    if not file_type:
+                        # Fallback: extract from filename
+                        file_type = Path(book['file_name']).suffix.upper().replace('.', '')
+
+                    # Get language (with fallback for old manifests)
+                    language = book.get('language', 'unknown')
+
                     writer.writerow([
                         collection_name,
                         book['book_title'],
                         book['author'],
+                        language,
                         book['domain'],
+                        file_type,
                         book['chunks_count'],
                         book['file_size_mb'],
                         book['file_name'],
@@ -97,7 +164,7 @@ class CollectionManifest:
 
             # Summary row
             writer.writerow([])
-            writer.writerow(['TOTAL', '', '', '',
+            writer.writerow(['TOTAL', '', '', '', '', '',  # Extra '' for Language and File Type columns
                            sum(c['total_chunks'] for c in self.manifest['collections'].values()),
                            sum(c['total_size_mb'] for c in self.manifest['collections'].values()),
                            '', ''])
@@ -112,9 +179,11 @@ class CollectionManifest:
         domain: str,
         chunks_count: int,
         file_size_mb: float,
-        ingested_at: Optional[str] = None
+        ingested_at: Optional[str] = None,
+        file_type: Optional[str] = None,
+        language: Optional[str] = None
     ):
-        """Add book to manifest"""
+        """Add book to manifest with metadata"""
         if collection_name not in self.manifest['collections']:
             self.manifest['collections'][collection_name] = {
                 'created_at': datetime.now().isoformat(),
@@ -137,12 +206,18 @@ class CollectionManifest:
             return
 
         # Add book
+        # Auto-detect file type if not provided
+        if not file_type:
+            file_type = Path(book_path).suffix.upper().replace('.', '')
+
         book_entry = {
             'file_path': book_path,
             'file_name': Path(book_path).name,
             'book_title': book_title,
             'author': author,
             'domain': domain,
+            'file_type': file_type,
+            'language': language or 'unknown',
             'chunks_count': chunks_count,
             'file_size_mb': round(file_size_mb, 2),
             'ingested_at': ingested_at or datetime.now().isoformat()

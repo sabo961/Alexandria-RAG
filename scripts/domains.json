@@ -1,0 +1,34 @@
+{
+  "domains": [
+    {
+      "id": "technical",
+      "name": "Technical",
+      "description": "Technical books, programming, engineering, data modeling",
+      "use_argument_chunking": false
+    },
+    {
+      "id": "psychology",
+      "name": "Psychology",
+      "description": "Psychology, psychotherapy, human behavior",
+      "use_argument_chunking": false
+    },
+    {
+      "id": "philosophy",
+      "name": "Philosophy",
+      "description": "Philosophy, ethics, existentialism",
+      "use_argument_chunking": true
+    },
+    {
+      "id": "history",
+      "name": "History",
+      "description": "Historical works, biographies, events",
+      "use_argument_chunking": false
+    },
+    {
+      "id": "literature",
+      "name": "Literature",
+      "description": "Fiction, novels, literary works (Mishima, Murakami, etc.)",
+      "use_argument_chunking": false
+    }
+  ]
+}

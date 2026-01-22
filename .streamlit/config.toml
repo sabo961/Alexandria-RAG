@@ -1,0 +1,26 @@
+[server]
+# Bind to all network interfaces (accessible from any device on network)
+address = "0.0.0.0"
+
+# Port (default 8501)
+port = 8501
+
+# Enable CORS for cross-origin requests
+enableCORS = false
+enableXsrfProtection = false
+
+# Max upload size (for file uploads in GUI)
+maxUploadSize = 200
+
+[browser]
+# Don't automatically open browser on start
+serverAddress = "localhost"
+gatherUsageStats = false
+
+[theme]
+# Optional: set theme colors
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"

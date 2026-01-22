@@ -11,6 +11,7 @@ Usage:
 
 import os
 import argparse
+import uuid
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
@@ -194,10 +195,87 @@ DOMAIN_CHUNK_SIZES = {
 }
 
 
+def get_token_count(text: str) -> int:
+    """
+    Estimate token count from text.
+    Uses simple word count * 1.3 approximation.
+    For production, use tiktoken for accurate counting.
+    """
+    return int(len(text.split()) * 1.3)
+
+
+def calculate_optimal_chunk_params(sections: List[Dict], domain: str = 'technical') -> Dict:
+    """
+    Calculate optimal chunking parameters based on content analysis.
+
+    Analyzes total content size and calculates target chunk size to achieve
+    optimal chunk count (balancing context size vs chunk count).
+
+    Args:
+        sections: List of sections/chapters/pages with 'text' field
+        domain: Domain category for base strategy
+
+    Returns:
+        Dict with 'max_tokens', 'overlap', 'target_chunks' keys
+    """
+    # Count total words and sections
+    total_words = sum(len(section['text'].split()) for section in sections)
+    total_sections = len(sections)
+    avg_words_per_section = total_words / total_sections if total_sections > 0 else 0
+
+    # Get domain base strategy
+    strategy = DOMAIN_CHUNK_SIZES.get(domain, DOMAIN_CHUNK_SIZES['default'])
+
+    # Calculate estimated tokens
+    estimated_tokens = int(total_words * 1.3)
+
+    # Target chunk count based on content size
+    # Small books (< 50k tokens): aim for 20-40 chunks
+    # Medium books (50k-150k): aim for 40-100 chunks
+    # Large books (> 150k): aim for 100-200 chunks
+    if estimated_tokens < 50000:
+        target_chunks = 30
+    elif estimated_tokens < 150000:
+        target_chunks = 70
+    else:
+        target_chunks = 150
+
+    # Calculate optimal max tokens
+    optimal_max = int(estimated_tokens / target_chunks)
+
+    # Clamp to reasonable range (500-3000 tokens)
+    optimal_max = max(500, min(3000, optimal_max))
+
+    # Use domain overlap ratio
+    overlap_ratio = strategy['overlap'] / strategy['max']
+    optimal_overlap = int(optimal_max * overlap_ratio)
+
+    logger.info("📊 Content Analysis:")
+    logger.info(f"   Total words: {total_words:,}")
+    logger.info(f"   Estimated tokens: {estimated_tokens:,}")
+    logger.info(f"   Sections: {total_sections}")
+    logger.info(f"   Avg words/section: {avg_words_per_section:.0f}")
+    logger.info("📐 Optimal Chunking:")
+    logger.info(f"   Target chunks: ~{target_chunks}")
+    logger.info(f"   Max tokens: {optimal_max}")
+    logger.info(f"   Overlap: {optimal_overlap}")
+
+    return {
+        'max_tokens': optimal_max,
+        'overlap': optimal_overlap,
+        'target_chunks': target_chunks,
+        'estimated_tokens': estimated_tokens
+    }
+
+
 def chunk_text(
     text: str,
     domain: str = 'technical',
-    overlap: Optional[int] = None
+    max_tokens: Optional[int] = None,
+    overlap: Optional[int] = None,
+    section_name: str = '',
+    book_title: str = '',
+    author: str = ''
 ) -> List[Dict]:
     """
     Chunk text according to domain-specific strategy.
@@ -207,20 +285,27 @@ def chunk_text(
     Args:
         text: Full text to chunk
         domain: Domain category (technical/psychology/philosophy/history)
+        max_tokens: Maximum chunk size (overrides domain default)
         overlap: Token overlap between chunks (overrides domain default)
+        section_name: Section/chapter/page name for metadata
+        book_title: Book title for metadata
+        author: Author name for metadata
 
     Returns:
-        List of chunk dicts with 'text', 'chunk_id', 'token_count'
+        List of chunk dicts with 'text', 'chunk_id', 'token_count', metadata
     """
     strategy = DOMAIN_CHUNK_SIZES.get(domain, DOMAIN_CHUNK_SIZES['default'])
-    chunk_size = strategy['max']
+    chunk_max = max_tokens if max_tokens is not None else strategy['max']
     chunk_overlap = overlap if overlap is not None else strategy['overlap']
 
     # Simple word-based chunking (tokens ≈ words * 1.3 for English)
-    # For production, use tiktoken or similar for accurate token counting
     words = text.split()
-    target_words = int(chunk_size / 1.3)
+    target_words = int(chunk_max / 1.3)
     overlap_words = int(chunk_overlap / 1.3)
+
+    # Skip empty text
+    if len(words) == 0:
+        return []
 
     chunks = []
     start_idx = 0
@@ -237,47 +322,96 @@ def chunk_text(
                 'chunk_id': chunk_id,
                 'token_count': len(chunk_words),
                 'start_word': start_idx,
-                'end_word': end_idx
+                'end_word': end_idx,
+                'section_name': section_name,
+                'book_title': book_title,
+                'author': author
             })
             chunk_id += 1
 
-        # Move start index forward (with overlap)
-        start_idx = end_idx - overlap_words
+        # Move start index forward (subtract overlap to create overlap between chunks)
+        start_idx += target_words - overlap_words
 
-        # Break if we've reached the end
+        # Prevent infinite loop - ensure we're making progress
+        if start_idx <= (chunks[-1]['start_word'] if chunks else 0):
+            start_idx = end_idx
+
+        # Break if we've processed all words
         if end_idx >= len(words):
             break
 
-    logger.info(f"Created {len(chunks)} chunks (domain: {domain}, avg {sum(c['token_count'] for c in chunks) / len(chunks):.0f} tokens/chunk)")
+    if chunks:
+        avg_tokens = sum(c['token_count'] for c in chunks) / len(chunks)
+        logger.info(f"Created {len(chunks)} chunks (domain: {domain}, avg {avg_tokens:.0f} tokens/chunk)")
+
     return chunks
 
 
 def create_chunks_from_sections(
     sections: List[Dict],
     metadata: Dict,
-    domain: str = 'technical'
+    domain: str = 'technical',
+    max_tokens: Optional[int] = None,
+    overlap: Optional[int] = None,
+    merge_sections: bool = False
 ) -> List[Dict]:
     """
     Create chunks from book sections/chapters/pages.
     Preserves section metadata in each chunk.
+
+    Args:
+        sections: List of sections/chapters/pages with 'text' field
+        metadata: Book metadata (title, author, etc.)
+        domain: Domain category for chunking strategy
+        max_tokens: Override max chunk size
+        overlap: Override chunk overlap
+        merge_sections: If True, merge all sections into one text before chunking (better for PDFs)
+
+    Returns:
+        List of chunks with metadata
     """
     all_chunks = []
+    book_title = metadata.get('title', 'Unknown')
+    author = metadata.get('author', 'Unknown')
 
-    for section in sections:
-        section_text = section['text']
-        section_name = section.get('chapter_name') or section.get('page_number') or section.get('section_name')
+    if merge_sections:
+        # Merge all sections into one text and chunk it
+        # This is better for PDFs where each "section" is just a page
+        full_text = '\n\n'.join(section['text'] for section in sections)
 
-        # Chunk this section
-        chunks = chunk_text(section_text, domain=domain)
-
-        # Add section metadata to each chunk
-        for chunk in chunks:
-            chunk['section_name'] = section_name
-            chunk['section_order'] = section.get('order', 0)
-            chunk['book_title'] = metadata.get('title', 'Unknown')
-            chunk['book_author'] = metadata.get('author', 'Unknown')
+        chunks = chunk_text(
+            text=full_text,
+            domain=domain,
+            max_tokens=max_tokens,
+            overlap=overlap,
+            section_name='merged',
+            book_title=book_title,
+            author=author
+        )
 
         all_chunks.extend(chunks)
+    else:
+        # Chunk each section separately (better for EPUBs with actual chapters)
+        for section in sections:
+            section_text = section['text']
+            section_name = str(section.get('chapter_name') or section.get('page_number') or section.get('section_name', ''))
+
+            # Chunk this section with metadata
+            chunks = chunk_text(
+                text=section_text,
+                domain=domain,
+                max_tokens=max_tokens,
+                overlap=overlap,
+                section_name=section_name,
+                book_title=book_title,
+                author=author
+            )
+
+            # Add section order to each chunk
+            for chunk in chunks:
+                chunk['section_order'] = section.get('order', 0)
+
+            all_chunks.extend(chunks)
 
     return all_chunks
 
@@ -310,6 +444,21 @@ class EmbeddingGenerator:
         logger.info(f"Generating embeddings for {len(texts)} chunks...")
         embeddings = model.encode(texts, show_progress_bar=True)
         return embeddings.tolist()
+
+
+# Convenience function for generating embeddings
+def generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """
+    Generate embeddings for a list of texts using sentence-transformers.
+
+    Args:
+        texts: List of text strings to embed
+
+    Returns:
+        List of embedding vectors
+    """
+    embedding_gen = EmbeddingGenerator()
+    return embedding_gen.generate_embeddings(texts)
 
 
 # ============================================================================
@@ -363,6 +512,11 @@ def upload_to_qdrant(
     Upload chunks and embeddings to Qdrant.
     Uses Open WebUI compatible format.
     """
+    # Handle empty chunks/embeddings
+    if not chunks or not embeddings:
+        logger.warning(f"⚠️  No chunks to upload (chunks: {len(chunks)}, embeddings: {len(embeddings)})")
+        return
+
     client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
     # Ensure collection exists
@@ -370,9 +524,12 @@ def upload_to_qdrant(
 
     # Prepare points
     points = []
-    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    for chunk, embedding in zip(chunks, embeddings):
+        # Generate UUID for point ID
+        point_id = str(uuid.uuid4())
+
         point = PointStruct(
-            id=idx,  # Simple sequential ID (use UUID for production)
+            id=point_id,
             vector=embedding,
             payload={
                 # Core content
@@ -380,13 +537,13 @@ def upload_to_qdrant(
                 "text_length": chunk['token_count'],
 
                 # Book metadata
-                "book_title": chunk['book_title'],
-                "author": chunk['book_author'],
+                "book_title": chunk.get('book_title', 'Unknown'),
+                "author": chunk.get('author', 'Unknown'),
                 "domain": domain,
 
                 # Location metadata
-                "section_name": chunk['section_name'],
-                "section_order": chunk['section_order'],
+                "section_name": chunk.get('section_name', ''),
+                "section_order": chunk.get('section_order', 0),
                 "chunk_id": chunk['chunk_id'],
 
                 # Ingestion metadata
@@ -396,8 +553,8 @@ def upload_to_qdrant(
 
                 # Open WebUI compatibility
                 "metadata": {
-                    "source": chunk['book_title'],
-                    "section": chunk['section_name'],
+                    "source": chunk.get('book_title', 'Unknown'),
+                    "section": chunk.get('section_name', ''),
                     "domain": domain
                 }
             }
@@ -445,16 +602,42 @@ def ingest_book(
     sections, metadata = extract_text(filepath)
     logger.info(f"Book: {metadata['title']} by {metadata['author']}")
 
-    # Step 2: Chunk text
-    chunks = create_chunks_from_sections(sections, metadata, domain=domain)
-    logger.info(f"Total chunks created: {len(chunks)}")
+    # Check if any content was extracted
+    if not sections or all(not section.get('text', '').strip() for section in sections):
+        logger.error(f"❌ No content extracted from {filepath}")
+        logger.error("   The file may be encrypted, corrupted, or in an unsupported format")
+        return
 
-    # Step 3: Generate embeddings
+    # Step 2: Calculate optimal chunking parameters
+    optimal_params = calculate_optimal_chunk_params(sections, domain=domain)
+
+    # Step 3: Chunk text
+    # For PDFs, merge all pages before chunking (better chunk sizes)
+    # For EPUBs, keep chapters separate (preserve structure)
+    file_format = metadata.get('format', '')
+    merge_sections = (file_format == 'PDF')
+
+    chunks = create_chunks_from_sections(
+        sections,
+        metadata,
+        domain=domain,
+        max_tokens=optimal_params['max_tokens'],
+        overlap=optimal_params['overlap'],
+        merge_sections=merge_sections
+    )
+
+    actual_chunks = len(chunks)
+    target_chunks = optimal_params['target_chunks']
+    efficiency = (target_chunks / actual_chunks * 100) if actual_chunks > 0 else 0
+
+    logger.info(f"Total chunks created: {actual_chunks} (target: ~{target_chunks}, efficiency: {efficiency:.0f}%)")
+
+    # Step 4: Generate embeddings
     embedding_gen = EmbeddingGenerator()
     texts = [chunk['text'] for chunk in chunks]
     embeddings = embedding_gen.generate_embeddings(texts)
 
-    # Step 4: Upload to Qdrant
+    # Step 5: Upload to Qdrant
     upload_to_qdrant(
         chunks=chunks,
         embeddings=embeddings,

@@ -9,6 +9,7 @@ Launch:
 
 import streamlit as st
 import sys
+import os
 from pathlib import Path
 
 # Add scripts to path
@@ -17,7 +18,14 @@ sys.path.append(str(Path(__file__).parent / 'scripts'))
 from generate_book_inventory import scan_calibre_library, write_inventory
 from count_file_types import count_file_types
 from collection_manifest import CollectionManifest
+from ingest_books import generate_embeddings, ingest_book
+from rag_query import perform_rag_query
+from calibre_db import CalibreDB
 import json
+import pandas as pd
+
+# Constants
+MANIFEST_GLOB_PATTERN = '*_manifest.json'
 
 # Page config
 st.set_page_config(
@@ -100,8 +108,235 @@ st.markdown("""
         background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
         box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
+
+    /* Compact ingestion output */
+    .element-container:has(p) {
+        margin-bottom: 0.25rem;
+    }
+
+    .stMarkdown p {
+        margin-bottom: 0.25rem;
+        line-height: 1.4;
+    }
+
+    /* Subtle pagination arrow buttons */
+    .pagination-nav .stButton > button { /* Pagination buttons */
+        background-color: transparent !important;
+        border: none !important; /* Remove border */
+        color: #bbb !important; /* Lighter color */
+        border: none !important;
+        color: transparent !important; /* Make text invisible until hover */
+        box-shadow: none !important; /* Remove shadow */
+        padding: 0.2rem 0.5rem !important; /* Smaller padding */
+        font-size: 1rem !important; /* Slightly smaller font */
+        transition: all 0.15s ease !important;
+    }
+
+    .pagination-nav .stButton > button:hover {
+        background-color: #f0f0f0 !important; /* Subtle background on hover */
+        border: 1px solid #ccc !important; /* Add a subtle border on hover */
+        color: #666 !important; /* Darker color on hover */
+        background-color: #f8f9fa !important; /* Very subtle background on hover */
+        border: none !important;
+        color: #888 !important; /* Make text visible on hover */
+        box-shadow: none !important; /* Keep shadow removed */
+    }
+
+    .pagination-nav .stButton > button:active {
+        transform: translateY(1px);
+        box-shadow: none !important; /* Keep shadow removed */
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
+
+def load_domains():
+    """Load domain list from domains.json"""
+    domains_file = Path(__file__).parent / 'scripts' / 'domains.json'
+    try:
+        with open(domains_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return [d['id'] for d in data['domains']]
+    except Exception as e:
+        # Fallback to hardcoded list if file doesn't exist
+        return ["technical", "psychology", "philosophy", "history", "literature"]
+
+def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, host, port, move_files):
+    """Run batch ingestion for selected files with dynamic chunk optimization"""
+    import sys
+    from pathlib import Path
+
+    # File format constants
+    EPUB_EXT = '.epub'
+    PDF_EXT = '.pdf'
+    TXT_EXT = '.txt'
+    MD_EXT = '.md'
+
+    # Import from scripts
+    scripts_path = Path(__file__).parent / 'scripts'
+    sys.path.insert(0, str(scripts_path))
+    from ingest_books import (
+        extract_text_from_epub,
+        extract_text_from_pdf,
+        extract_text_from_txt,
+        calculate_optimal_chunk_params,
+        create_chunks_from_sections,
+        generate_embeddings,
+        upload_to_qdrant
+    )
+
+    # Resolve all file paths to absolute paths BEFORE changing directory
+    selected_files = [str(Path(f).resolve()) for f in selected_files]
+    ingest_dir = str(Path(ingest_dir).resolve())
+
+    # Change to scripts directory for CollectionManifest to find logs folder
+    import os
+    original_cwd = os.getcwd()
+    os.chdir(scripts_path)
+
+    from collection_manifest import CollectionManifest
+
+    results = {
+        'total': len(selected_files),
+        'completed': 0,
+        'failed': 0,
+        'errors': []
+    }
+
+    # Initialize collection-specific manifest
+    manifest = CollectionManifest(collection_name=collection_name)
+
+    # Verify collection exists in Qdrant (reset manifest if deleted)
+    manifest.verify_collection_exists(collection_name, qdrant_host=host, qdrant_port=port)
+
+    for file_path in selected_files:
+        try:
+            st.write(f"📖 Processing: {Path(file_path).name}")
+
+            # Extract text based on format
+            ext = Path(file_path).suffix.lower()
+
+            if ext == EPUB_EXT:
+                chapters, metadata = extract_text_from_epub(file_path)
+                book_title = metadata.get('title', Path(file_path).stem)
+                author = metadata.get('author', 'Unknown')
+            elif ext == PDF_EXT:
+                pages, metadata = extract_text_from_pdf(file_path)
+                chapters = pages
+                book_title = metadata.get('title', Path(file_path).stem)
+                author = metadata.get('author', 'Unknown')
+            elif ext in [TXT_EXT, MD_EXT]:
+                text, metadata = extract_text_from_txt(file_path)
+                # extract_text_from_txt returns a list of text sections
+                if isinstance(text, list):
+                    # Join all sections into one text block (simpler for small MD files)
+                    combined_text = '\n\n'.join(str(section) for section in text if section)
+                    chapters = [{'text': combined_text, 'name': Path(file_path).stem}]
+                else:
+                    # Fallback: single text string
+                    chapters = [{'text': str(text), 'name': Path(file_path).stem}]
+                book_title = Path(file_path).stem
+                author = 'Unknown'
+            else:
+                raise ValueError(f"Unsupported format: {ext}")
+
+            st.write(f"Book: {book_title} by {author}, Sections: {len(chapters)}")
+
+            # Check if any content was extracted
+            def has_content(text_value):
+                """Check if text value (string or list) has content"""
+                if isinstance(text_value, str):
+                    return bool(text_value.strip())
+                elif isinstance(text_value, list):
+                    return any(has_content(item) for item in text_value)
+                return False
+
+            if not chapters or all(not has_content(ch.get('text', '')) for ch in chapters):
+                st.error(f"❌ No content extracted from {Path(file_path).name}")
+                st.error("   The file may be encrypted, corrupted, or in an unsupported format")
+                results['failed'] += 1
+                results['errors'].append(f"{Path(file_path).name}: No content extracted")
+                continue
+
+            # Calculate optimal chunking parameters
+            optimal_params = calculate_optimal_chunk_params(chapters, domain=domain)
+            st.write(f"📊 Analysis: {optimal_params['estimated_tokens']:,} tokens → target ~{optimal_params['target_chunks']} chunks")
+
+            # Chunk text
+            # For PDFs, merge all pages before chunking (better chunk sizes)
+            # For EPUBs, keep chapters separate (preserve structure)
+            file_format = metadata.get('format', '')
+            merge_sections = (file_format == 'PDF')
+
+            # Use optimal parameters instead of GUI settings for better results
+            all_chunks = create_chunks_from_sections(
+                sections=chapters,
+                metadata=metadata,
+                domain=domain,
+                max_tokens=optimal_params['max_tokens'],
+                overlap=optimal_params['overlap'],
+                merge_sections=merge_sections
+            )
+
+            actual_chunks = len(all_chunks)
+            target_chunks = optimal_params['target_chunks']
+            efficiency = (target_chunks / actual_chunks * 100) if actual_chunks > 0 else 0
+
+            st.write(f"✅ Created {actual_chunks} chunks (efficiency: {efficiency:.0f}%)")
+
+            # Generate embeddings
+            st.write("Generating embeddings...")
+            embeddings = generate_embeddings([c['text'] for c in all_chunks])
+
+            # Upload to Qdrant
+            st.write("Uploading to Qdrant...")
+            upload_to_qdrant(
+                chunks=all_chunks,
+                embeddings=embeddings,
+                domain=domain,
+                collection_name=collection_name,
+                qdrant_host=host,
+                qdrant_port=port
+            )
+
+            # Update manifest
+            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+            manifest.add_book(
+                collection_name=collection_name,
+                book_path=file_path,
+                book_title=book_title,
+                author=author,
+                domain=domain,
+                chunks_count=len(all_chunks),
+                file_size_mb=file_size_mb
+            )
+
+            # Move file if requested and show combined success message
+            if move_files:
+                import shutil
+                ingested_dir = Path(ingest_dir).parent / 'ingested'
+                ingested_dir.mkdir(exist_ok=True)
+                shutil.move(file_path, ingested_dir / Path(file_path).name)
+                st.success(f"✅ {Path(file_path).name} - {len(all_chunks)} chunks uploaded  \n📦 Moved to: {ingested_dir / Path(file_path).name}")
+            else:
+                st.success(f"✅ {Path(file_path).name} - {len(all_chunks)} chunks uploaded")
+
+            results['completed'] += 1
+
+        except Exception as e:
+            st.error(f"❌ Failed: {Path(file_path).name}")
+            st.error(f"   Error: {str(e)}")
+            results['failed'] += 1
+            results['errors'].append({'file': Path(file_path).name, 'error': str(e)})
+
+    # Restore original directory
+    os.chdir(original_cwd)
+
+    return results
+
 
 # Header
 st.markdown('<div class="main-title">𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤</div>', unsafe_allow_html=True)
@@ -132,79 +367,568 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 Quick Stats")
 
-    # Load stats if available
-    manifest_file = Path("logs/collection_manifest.json")
-    if manifest_file.exists():
-        with open(manifest_file, 'r', encoding='utf-8') as f:
-            manifest = json.load(f)
-            total_collections = len(manifest.get('collections', {}))
-            total_chunks = sum(c.get('total_chunks', 0) for c in manifest.get('collections', {}).values())
-            st.metric("Collections", total_collections)
-            st.metric("Total Chunks", f"{total_chunks:,}")
+    # Load stats from all manifest files
+    manifest_dir = Path("logs")
+    manifest_files = list(manifest_dir.glob(MANIFEST_GLOB_PATTERN))
+
+    if manifest_files:
+        total_collections = len(manifest_files)
+        total_books = 0
+        total_chunks = 0
+
+        for mf in manifest_files:
+            try:
+                with open(mf, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Each manifest has collections dict
+                    for collection_data in data.get('collections', {}).values():
+                        books = collection_data.get('books', [])
+                        total_books += len(books)
+                        total_chunks += collection_data.get('total_chunks', 0)
+            except:
+                pass
+
+        st.metric("Collections", total_collections)
+        st.metric("Total Books", total_books)
+        st.metric("Total Chunks", f"{total_chunks:,}")
     else:
         st.info("No manifest found. Run ingestion first.")
 
 # Main content
-tab1, tab2, tab3, tab4 = st.tabs(["📚 Library", "🔄 Ingestion", "🔍 Query", "📊 Statistics"])
+tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    "📚 Calibre Library",
+    "📖 Ingested Books",
+    "🔄 Ingestion",
+    "🔍 Query",
+    "📊 Statistics"
+])
 
 # ============================================
-# TAB 1: Library Management
+# TAB 0: Calibre Library Browser
+# ============================================
+with tab0:
+    st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
+
+    # Initialize Calibre DB
+    try:
+        if 'calibre_db' not in st.session_state:
+            with st.spinner("Connecting to Calibre database..."):
+                st.session_state.calibre_db = CalibreDB(library_dir)
+
+        calibre_db = st.session_state.calibre_db
+
+        # Get all books
+        if 'calibre_books' not in st.session_state:
+            with st.spinner("Loading books from Calibre... (this may take a moment)"):
+                st.session_state.calibre_books = calibre_db.get_all_books()
+
+        all_books = st.session_state.calibre_books
+
+        # Stats at top
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("📚 Total Books", f"{len(all_books):,}")
+
+        # Count unique authors
+        unique_authors = len(set(b.author for b in all_books))
+        col2.metric("✍️ Authors", f"{unique_authors:,}")
+
+        # Count languages
+        unique_languages = len(set(b.language for b in all_books))
+        col3.metric("🌍 Languages", f"{unique_languages}")
+
+        # Count formats
+        all_formats = set()
+        for book in all_books:
+            all_formats.update(book.formats)
+        col4.metric("📁 Formats", f"{len(all_formats)}")
+
+        st.markdown("---")
+
+        # Filters
+        st.markdown("#### 🔍 Filters")
+        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+
+        with filter_col1:
+            author_search = st.text_input("Author contains", placeholder="e.g., Mishima", key="calibre_author_search")
+
+        with filter_col2:
+            title_search = st.text_input("Title contains", placeholder="e.g., Steel", key="calibre_title_search")
+
+        with filter_col3:
+            # Get available languages
+            available_languages = sorted(set(b.language for b in all_books if b.language))
+            language_filter = st.multiselect("Language", options=available_languages, key="calibre_language_filter")
+
+        with filter_col4:
+            # Get available formats
+            format_options = sorted(all_formats)
+            format_filter = st.multiselect("Format", options=format_options, key="calibre_format_filter")
+
+        # Apply filters
+        filtered_books = all_books
+
+        if author_search:
+            filtered_books = [b for b in filtered_books if author_search.lower() in b.author.lower()]
+
+        if title_search:
+            filtered_books = [b for b in filtered_books if title_search.lower() in b.title.lower()]
+
+        if language_filter:
+            filtered_books = [b for b in filtered_books if b.language in language_filter]
+
+        if format_filter:
+            filtered_books = [b for b in filtered_books if any(fmt in b.formats for fmt in format_filter)]
+
+        # Sort options
+        sort_col1, sort_col2 = st.columns([3, 1])
+        with sort_col1:
+            st.info(f"📚 Showing {len(filtered_books):,} of {len(all_books):,} books")
+
+        with sort_col2:
+            sort_by = st.selectbox("Sort by", [
+                "Date Added (newest)",
+                "Date Added (oldest)",
+                "Title (A-Z)",
+                "Title (Z-A)",
+                "Author (A-Z)",
+                "Author (Z-A)"
+            ], key="calibre_sort")
+
+        # Apply sorting
+        if "newest" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.timestamp, reverse=True)
+        elif "oldest" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.timestamp)
+        elif "Title (A-Z)" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.title.lower())
+        elif "Title (Z-A)" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.title.lower(), reverse=True)
+        elif "Author (A-Z)" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.author.lower())
+        elif "Author (Z-A)" in sort_by:
+            filtered_books = sorted(filtered_books, key=lambda x: x.author.lower(), reverse=True)
+
+        # Display as DataFrame with pagination
+        if filtered_books:
+            # Pagination controls at top
+            pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
+
+            with pagination_col1:
+                rows_per_page = st.selectbox(
+                    "Rows per page",
+                    options=[20, 50, 100, 200],
+                    index=1,  # Default to 50
+                    key="calibre_rows_per_page"
+                )
+
+            # Initialize current page in session state
+            if 'calibre_current_page' not in st.session_state:
+                st.session_state.calibre_current_page = 1
+
+            # Calculate total pages
+            total_books = len(filtered_books)
+            total_pages = (total_books + rows_per_page - 1) // rows_per_page  # Ceiling division
+
+            # Ensure current page is within bounds
+            if st.session_state.calibre_current_page > total_pages:
+                st.session_state.calibre_current_page = total_pages
+            if st.session_state.calibre_current_page < 1:
+                st.session_state.calibre_current_page = 1
+
+            current_page = st.session_state.calibre_current_page
+
+            with pagination_col2:
+                st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total books)</div>", unsafe_allow_html=True)
+
+            # Calculate slice for current page
+            start_idx = (current_page - 1) * rows_per_page
+            end_idx = min(start_idx + rows_per_page, total_books)
+
+            # Build DataFrame for current page with global row numbers
+            df_data = []
+            for idx, book in enumerate(filtered_books[start_idx:end_idx]):
+                # Format icons
+                format_icons = []
+                if 'epub' in book.formats:
+                    format_icons.append('📕')
+                if 'pdf' in book.formats:
+                    format_icons.append('📄')
+                if 'mobi' in book.formats or 'azw3' in book.formats:
+                    format_icons.append('📱')
+                if 'txt' in book.formats or 'md' in book.formats:
+                    format_icons.append('📝')
+
+                # Series info
+                series_info = f"{book.series} #{book.series_index:.0f}" if book.series else ""
+
+                # Global row number (1-based)
+                global_row_num = start_idx + idx + 1
+
+                df_data.append({
+                    '#': global_row_num,
+                    '': ' '.join(format_icons) if format_icons else '📄',
+                    'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
+                    'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,
+                    'Language': book.language.upper(),
+                    'Series': series_info,
+                    'Formats': ', '.join(book.formats[:3]),  # Show first 3 formats
+                    'Added': book.timestamp[:10]
+                })
+
+            df = pd.DataFrame(df_data)
+            # Hide default index since we have our own "#" column
+            st.dataframe(df, use_container_width=True, height=500, hide_index=True)
+
+            # Pagination controls - minimal with arrow buttons
+            st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+            st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)
+
+            nav_col1, nav_col2, nav_col3 = st.columns([0.3, 6, 0.3])
+
+            with nav_col1:
+                if current_page > 1 and st.button("←", key="calibre_prev", type="secondary"):
+                    st.session_state.calibre_current_page -= 1
+                    st.rerun()
+
+            with nav_col2:
+                st.markdown(
+                    f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
+                    f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+            with nav_col3:
+                if current_page < total_pages and st.button("→", key="calibre_next", type="secondary"):
+                    st.session_state.calibre_current_page += 1
+                    st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Direct Ingestion Section (collapsible)
+            st.markdown("---")
+            with st.expander("🚀 Direct Ingestion from Calibre", expanded=False):
+                st.info("💡 Browse the table above, then select books here to ingest directly into Alexandria.")
+
+                # Ingestion configuration
+                config_col1, config_col2, config_col3 = st.columns(3)
+
+                with config_col1:
+                    calibre_domain = st.selectbox(
+                        "Domain",
+                        load_domains(),
+                        help="Content domain for chunking strategy",
+                        key="calibre_ingest_domain"
+                    )
+
+                with config_col2:
+                    calibre_collection = st.text_input(
+                        "Collection Name",
+                        value="alexandria",
+                        help="Qdrant collection name",
+                        key="calibre_ingest_collection"
+                    )
+
+                with config_col3:
+                    preferred_format = st.selectbox(
+                        "Preferred Format",
+                        ["epub", "pdf", "txt", "md"],
+                        help="Which format to use when multiple available",
+                        key="calibre_preferred_format"
+                    )
+
+                st.markdown("---")
+
+                # Selection scope toggle
+                selection_scope = st.radio(
+                    "Selection scope",
+                    options=["Current page only", "All filtered books (up to 500)"],
+                    index=0,
+                    horizontal=True,
+                    help="Choose whether to select from current page or all filtered results"
+                )
+
+                # Create book selection multiselect
+                if selection_scope == "Current page only":
+                    # Show only books from current page
+                    books_to_show = filtered_books[start_idx:end_idx]
+                    scope_text = f"current page ({len(books_to_show)} books)"
+                else:
+                    # Show all filtered books (up to 500 for performance)
+                    books_to_show = filtered_books[:500]
+                    scope_text = f"all filtered results ({min(len(filtered_books), 500)} books)"
+
+                book_options = {}
+                for book in books_to_show:
+                    # Format icons
+                    icon = '📕' if 'epub' in book.formats else '📄' if 'pdf' in book.formats else '📝'
+                    label = f"{icon} {book.title} — {book.author} ({', '.join(book.formats[:2])})"
+                    book_options[label] = book
+
+                selected_labels = st.multiselect(
+                    f"Select books to ingest (from {scope_text})",
+                    options=list(book_options.keys()),
+                    help="Type to search, or scroll to select books. Use filters above to narrow down the list."
+                )
+
+                selected_books = [book_options[label] for label in selected_labels]
+
+                # Display selection summary and ingest button
+                st.markdown("---")
+                if selected_books:
+                    st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
+
+                    if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
+                        # Progress tracking
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+
+                        success_count = 0
+                        error_count = 0
+                        errors = []
+
+                        for idx, book in enumerate(selected_books):
+                            # Update progress
+                            progress = (idx + 1) / len(selected_books)
+                            progress_bar.progress(progress)
+                            status_text.text(f"Ingesting {idx + 1}/{len(selected_books)}: {book.title}")
+
+                            try:
+                                # Determine which format to use
+                                format_to_use = None
+                                if preferred_format in book.formats:
+                                    format_to_use = preferred_format
+                                else:
+                                    # Fallback to first available format
+                                    format_to_use = book.formats[0] if book.formats else None
+
+                                if not format_to_use:
+                                    errors.append(f"{book.title}: No supported format available")
+                                    error_count += 1
+                                    continue
+
+                                # Construct absolute file path
+                                book_dir = calibre_db.library_path / book.path
+
+                                # Find the actual file
+                                matching_files = list(book_dir.glob(f"*.{format_to_use}"))
+
+                                if not matching_files:
+                                    errors.append(f"{book.title}: File not found for format {format_to_use}")
+                                    error_count += 1
+                                    continue
+
+                                file_path = matching_files[0]
+
+                                # Ingest the book
+                                ingest_book(
+                                    filepath=str(file_path),
+                                    domain=calibre_domain,
+                                    collection_name=calibre_collection,
+                                    qdrant_host=qdrant_host,
+                                    qdrant_port=qdrant_port
+                                )
+
+                                success_count += 1
+
+                            except Exception as e:
+                                errors.append(f"{book.title}: {str(e)}")
+                                error_count += 1
+
+                        # Final status
+                        progress_bar.progress(1.0)
+                        status_text.text("✅ Ingestion complete!")
+
+                        if success_count > 0:
+                            st.success(f"✅ Successfully ingested {success_count} books!")
+
+                        if error_count > 0:
+                            st.error(f"❌ Failed to ingest {error_count} books")
+                            with st.expander("Show errors"):
+                                for error in errors:
+                                    st.text(f"• {error}")
+                else:
+                    st.info("👆 Select books from the multiselect above to begin")
+
+            if len(filtered_books) > 500:
+                st.warning(f"⚠️ Showing first 500 books. {len(filtered_books) - 500} more books match your filters. Refine filters to see more.")
+
+        else:
+            st.warning("No books match the filters.")
+
+    except Exception as e:
+        st.error(f"❌ Error connecting to Calibre database: {e}")
+        st.info("Make sure the Calibre library path is correct in the sidebar.")
+
+# ============================================
+# TAB 1: Ingested Books
 # ============================================
 with tab1:
-    st.markdown('<div class="section-header">📚 Library Management</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📖 Ingested Books</div>', unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    # Collection selector
+    manifest_col1, manifest_col2 = st.columns([2, 2])
 
-    with col1:
-        st.markdown("#### Book Inventory")
-        if st.button("🔄 Generate Book Inventory", use_container_width=True):
-            with st.spinner("Scanning Calibre library..."):
-                try:
-                    books = scan_calibre_library(library_dir)
-                    output_file = "docs/book-inventory.txt"
-                    write_inventory(books, output_file)
-                    st.success(f"✅ Found {len(books):,} books!")
-                    st.info(f"📄 Inventory saved to: {output_file}")
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+    with manifest_col1:
+        try:
+            # Load manifest to get available collections
+            from pathlib import Path as PathLib
+            manifest_dir = PathLib(__file__).parent / 'logs'
+            manifest_files = list(manifest_dir.glob(MANIFEST_GLOB_PATTERN))
 
-        if st.button("📊 Count File Types", use_container_width=True):
-            with st.spinner("Analyzing file types..."):
-                try:
-                    extensions, total_size_by_ext, files_by_ext = count_file_types(library_dir, recursive=True)
-
-                    total_files = sum(extensions.values())
-                    total_size = sum(total_size_by_ext.values())
-
-                    st.success(f"✅ Found {total_files:,} files")
-
-                    # Display top formats
-                    st.markdown("**Top File Formats:**")
-                    for ext, count in extensions.most_common(10):
-                        percentage = (count / total_files) * 100
-                        st.write(f"- `{ext}`: {count:,} files ({percentage:.1f}%)")
-
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
-
-    with col2:
-        st.markdown("#### Search Books")
-        search_query = st.text_input("Search by author or title", placeholder="e.g., Silverston, Kahneman")
-
-        if search_query:
-            inventory_file = Path("docs/book-inventory.txt")
-            if inventory_file.exists():
-                with open(inventory_file, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-                    matches = [line for line in lines if search_query.lower() in line.lower()]
-
-                if matches:
-                    st.success(f"Found {len(matches)} matches:")
-                    st.code('\n'.join(matches[:20]), language=None)  # Show first 20
-                else:
-                    st.warning("No matches found.")
+            if manifest_files:
+                collection_names = [f.stem.replace('_manifest', '') for f in manifest_files]
+                selected_collection = st.selectbox("Collection", collection_names, index=0, key="ingested_collection_select")
             else:
-                st.warning("⚠️ Book inventory not generated yet. Click 'Generate Book Inventory' first.")
+                st.warning("No collections found. Run ingestion first.")
+                selected_collection = None
+        except Exception as e:
+            st.error(f"Error loading collections: {e}")
+            selected_collection = None
+
+    if selected_collection:
+        try:
+            # Load manifest for selected collection
+            manifest = CollectionManifest(collection_name=selected_collection)
+
+            if selected_collection in manifest.manifest['collections']:
+                collection_data = manifest.manifest['collections'][selected_collection]
+                books = collection_data['books']
+
+                # Stats at top
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("📚 Books", f"{len(books)}")
+                col2.metric("🧩 Chunks", f"{collection_data['total_chunks']:,}")
+                col3.metric("💾 Size", f"{collection_data['total_size_mb']:.1f} MB")
+
+                # Count formats
+                formats_count = len(set(b.get('file_type', 'UNKNOWN') for b in books))
+                col4.metric("📁 Formats", f"{formats_count}")
+
+                st.markdown("---")
+
+                # Filters
+                st.markdown("#### 🔍 Filters")
+                ing_filter_col1, ing_filter_col2, ing_filter_col3, ing_filter_col4 = st.columns(4)
+
+                with ing_filter_col1:
+                    ing_author_search = st.text_input("Author contains", placeholder="e.g., Mishima", key="ingested_author_search")
+
+                with ing_filter_col2:
+                    ing_title_search = st.text_input("Title contains", placeholder="e.g., Steel", key="ingested_title_search")
+
+                with ing_filter_col3:
+                    # Get available languages (with fallback for old manifests)
+                    available_langs = sorted(set(b.get('language', 'unknown') for b in books))
+                    ing_language_filter = st.multiselect("Language", options=available_langs, key="ingested_language_filter")
+
+                with ing_filter_col4:
+                    # Get available domains
+                    available_domains = sorted(set(b['domain'] for b in books))
+                    ing_domain_filter = st.multiselect("Domain", options=available_domains, key="ingested_domain_filter")
+
+                # Format filter (separate row)
+                ing_format_filter = st.multiselect("Format", options=['EPUB', 'PDF', 'TXT', 'MD', 'MOBI'], key="ingested_format_filter")
+
+                # Apply filters
+                filtered_books = books
+
+                if ing_author_search:
+                    filtered_books = [b for b in filtered_books if ing_author_search.lower() in b['author'].lower()]
+
+                if ing_title_search:
+                    filtered_books = [b for b in filtered_books if ing_title_search.lower() in b['book_title'].lower()]
+
+                if ing_language_filter:
+                    filtered_books = [b for b in filtered_books if b.get('language', 'unknown') in ing_language_filter]
+
+                if ing_domain_filter:
+                    filtered_books = [b for b in filtered_books if b['domain'] in ing_domain_filter]
+
+                if ing_format_filter:
+                    filtered_books = [b for b in filtered_books if b.get('file_type', PathLib(b['file_name']).suffix.upper().replace('.', '')) in ing_format_filter]
+
+                # Sort options
+                ing_sort_col1, ing_sort_col2 = st.columns([3, 1])
+                with ing_sort_col1:
+                    st.info(f"📚 Showing {len(filtered_books)} of {len(books)} books")
+
+                with ing_sort_col2:
+                    ing_sort_by = st.selectbox("Sort by", [
+                        "Ingested (newest)",
+                        "Ingested (oldest)",
+                        "Title (A-Z)",
+                        "Author (A-Z)",
+                        "Chunks (most)",
+                        "Size (largest)"
+                    ], key="ingested_sort")
+
+                # Apply sorting
+                if "newest" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'], reverse=True)
+                elif "oldest" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'])
+                elif "Title" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['book_title'].lower())
+                elif "Author" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['author'].lower())
+                elif "Chunks" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['chunks_count'], reverse=True)
+                elif "Size" in ing_sort_by:
+                    filtered_books = sorted(filtered_books, key=lambda x: x['file_size_mb'], reverse=True)
+
+                # Display as DataFrame
+                if filtered_books:
+                    df_data = []
+                    for book in filtered_books:
+                        # Get file type
+                        file_type = book.get('file_type')
+                        if not file_type:
+                            file_type = PathLib(book['file_name']).suffix.upper().replace('.', '')
+
+                        # Icon
+                        icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝', 'MOBI': '📱'}.get(file_type, '📄')
+
+                        # Language with fallback
+                        language = book.get('language', 'unknown').upper()
+
+                        df_data.append({
+                            '': icon,
+                            'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],
+                            'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],
+                            'Lang': language,
+                            'Domain': book['domain'],
+                            'Type': file_type,
+                            'Chunks': book['chunks_count'],
+                            'Size (MB)': f"{book['file_size_mb']:.2f}",
+                            'Ingested': book['ingested_at'][:10]
+                        })
+
+                    df = pd.DataFrame(df_data)
+                    st.dataframe(df, use_container_width=True, height=600)
+                else:
+                    st.warning("No books match the filters.")
+
+                # Export button
+                st.markdown("---")
+                csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
+                if csv_file.exists():
+                    with open(csv_file, 'r', encoding='utf-8') as f:
+                        csv_data = f.read()
+                    st.download_button(
+                        label="📥 Download CSV",
+                        data=csv_data,
+                        file_name=f"{selected_collection}_manifest.csv",
+                        mime="text/csv",
+                        use_container_width=False
+                    )
+            else:
+                st.info(f"Collection '{selected_collection}' has no ingested books yet.")
+
+        except Exception as e:
+            st.error(f"Error loading manifest: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
 # ============================================
 # TAB 2: Ingestion
@@ -225,7 +949,7 @@ with tab2:
 
         domain = st.selectbox(
             "Domain",
-            ["technical", "psychology", "philosophy", "history"],
+            load_domains(),
             help="Content domain for chunking strategy"
         )
 
@@ -235,71 +959,19 @@ with tab2:
             help="Qdrant collection name"
         )
 
-        # Domain-specific chunking defaults
-        DOMAIN_DEFAULTS = {
-            "technical": {"min": 1500, "max": 2000, "overlap": 200},
-            "psychology": {"min": 1000, "max": 1500, "overlap": 150},
-            "philosophy": {"min": 1200, "max": 1800, "overlap": 175},
-            "history": {"min": 1500, "max": 2000, "overlap": 200}
-        }
-
-        defaults = DOMAIN_DEFAULTS[domain]
-
-        # Track domain changes and reset values when domain changes
-        if 'last_domain' not in st.session_state:
-            st.session_state.last_domain = domain
-
-        if st.session_state.last_domain != domain:
-            # Domain changed - delete old widget values and update tracking
-            for key in ['min_tokens', 'max_tokens', 'overlap_tokens']:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.session_state.last_domain = domain
-            st.rerun()
-
-        # Use domain defaults as the value for widgets
-        min_tokens_default = defaults["min"]
-        max_tokens_default = defaults["max"]
-        overlap_tokens_default = defaults["overlap"]
-
         # Advanced Settings Expander
         with st.expander("⚙️ Advanced Settings", expanded=False):
             st.markdown("#### Chunking Strategy")
+            st.info("""
+                🤖 **Automatic Optimization Enabled**
 
-            col_min, col_max, col_overlap = st.columns(3)
+                Chunking parameters are automatically calculated based on:
+                - Content size and structure
+                - Domain-specific strategies
+                - Token distribution analysis
 
-            with col_min:
-                st.number_input(
-                    "Min Tokens",
-                    min_value=500,
-                    max_value=3000,
-                    value=min_tokens_default,
-                    step=100,
-                    help="Minimum chunk size in tokens",
-                    key="min_tokens"
-                )
-
-            with col_max:
-                st.number_input(
-                    "Max Tokens",
-                    min_value=500,
-                    max_value=3000,
-                    value=max_tokens_default,
-                    step=100,
-                    help="Maximum chunk size in tokens",
-                    key="max_tokens"
-                )
-
-            with col_overlap:
-                st.number_input(
-                    "Overlap",
-                    min_value=0,
-                    max_value=500,
-                    value=overlap_tokens_default,
-                    step=50,
-                    help="Token overlap between chunks",
-                    key="overlap_tokens"
-                )
+                Target efficiency: 85-90% of optimal chunk count
+            """)
 
             st.markdown("#### Embedding Configuration")
 
@@ -357,22 +1029,6 @@ with tab2:
                 key="batch_size"
             )
 
-            # Reset button
-            col_reset, col_info = st.columns([1, 3])
-            with col_reset:
-                if st.button("🔄 Reset to Defaults", use_container_width=True):
-                    # Delete keys to force reset on next rerun
-                    for key in ['min_tokens', 'max_tokens', 'overlap_tokens']:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.session_state.needs_reset = True
-                    st.rerun()
-            with col_info:
-                current_min = st.session_state.get('min_tokens', min_tokens_default)
-                current_max = st.session_state.get('max_tokens', max_tokens_default)
-                current_overlap = st.session_state.get('overlap_tokens', overlap_tokens_default)
-                st.info(f"📊 {current_min}-{current_max} tokens, {current_overlap} overlap")
-
         col_a, col_b, col_c = st.columns(3)
         with col_a:
             start_ingest = st.button("🚀 Start Ingestion", use_container_width=True)
@@ -382,32 +1038,63 @@ with tab2:
             move_files = st.checkbox("Move completed files", value=True)
 
         if start_ingest:
-            # Count selected books
-            if 'selected_books' in st.session_state:
-                selected_count = sum(1 for selected in st.session_state.selected_books.values() if selected)
-            else:
-                selected_count = 0
+            # Scan ingest directory to build selected files list
+            app_root = Path(__file__).parent
+            ingest_path = Path(ingest_dir) if Path(ingest_dir).is_absolute() else app_root / ingest_dir
+
+            selected_files = []
+            if ingest_path.exists():
+                supported_formats = {'.epub', '.pdf', '.txt', '.md'}
+                for file in sorted(ingest_path.iterdir()):
+                    if file.is_file() and file.suffix.lower() in supported_formats:
+                        checkbox_key = f"book_checkbox_{file.name}"
+                        if st.session_state.get(checkbox_key, True):  # Default True if not found
+                            selected_files.append(str(file))
+
+            selected_count = len(selected_files)
 
             if selected_count == 0:
                 st.error("❌ No books selected for ingestion!")
             else:
-                st.success(f"✅ Ready to ingest {selected_count} book(s)")
-
                 # Display ingestion parameters
                 st.info(f"""
                 **Ingestion Parameters:**
                 - Domain: {domain}
                 - Collection: {collection_name}
-                - Min Tokens: {st.session_state.get('min_tokens', defaults['min'])}
-                - Max Tokens: {st.session_state.get('max_tokens', defaults['max'])}
-                - Overlap: {st.session_state.get('overlap_tokens', defaults['overlap'])}
+                - Chunking: **Auto-optimized** (analyzes content for optimal size)
                 - Embedding Model: {st.session_state.get('embedding_model', 'all-MiniLM-L6-v2')}
-                - Batch Size: {st.session_state.get('batch_size', 100)}
+                - Move completed files: {move_files}
+                - Files to process: {selected_count}
                 """)
 
-                st.warning("🚧 **Ingestion via GUI is under development!**")
-                st.info("💡 For now, manually run:")
-                st.code(f"python scripts/batch_ingest.py --directory {ingest_dir} --domain {domain} --collection {collection_name}")
+                # Run ingestion with dynamic optimization
+                with st.spinner(f"Ingesting {selected_count} book(s)..."):
+                    try:
+                        results = run_batch_ingestion(
+                            selected_files=selected_files,
+                            ingest_dir=ingest_dir,
+                            domain=domain,
+                            collection_name=collection_name,
+                            host=qdrant_host,
+                            port=qdrant_port,
+                            move_files=move_files
+                        )
+
+                        # Display results with visual separation
+                        st.markdown("---")
+                        st.success("✅ Ingestion complete!")
+                        st.markdown("### Results:")
+                        st.write(f"- **Total:** {results['total']}")
+                        st.write(f"- **Completed:** {results['completed']}")
+                        st.write(f"- **Failed:** {results['failed']}")
+
+                        if results['errors']:
+                            st.markdown("### Errors:")
+                            for error in results['errors']:
+                                st.error(f"❌ {error['file']}: {error['error']}")
+
+                    except Exception as e:
+                        st.error(f"❌ Ingestion failed: {str(e)}")
 
         if resume_ingest:
             st.warning("🚧 Resume functionality coming soon!")
@@ -416,7 +1103,10 @@ with tab2:
     with col2:
         st.markdown("#### Files in Ingest Folder")
 
-        ingest_path = Path(ingest_dir)
+        # Resolve ingest_dir relative to application root, not current working directory
+        app_root = Path(__file__).parent
+        ingest_path = Path(ingest_dir) if Path(ingest_dir).is_absolute() else app_root / ingest_dir
+
         if ingest_path.exists():
             book_files = []
             supported_formats = {'.epub', '.pdf', '.txt', '.md'}
@@ -434,26 +1124,28 @@ with tab2:
             if book_files:
                 st.success(f"📚 {len(book_files)} books ready to ingest")
 
-                # Initialize session state for checkboxes
-                if 'selected_books' not in st.session_state:
-                    st.session_state.selected_books = {book['name']: True for book in book_files}
+                # Initialize checkbox keys in session state (default all selected)
+                for book in book_files:
+                    checkbox_key = f"book_checkbox_{book['name']}"
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = True
 
                 # Bulk selection controls
                 col_all, col_none, col_epub = st.columns(3)
                 with col_all:
-                    if st.button("✅ Select All", key="select_all", use_container_width=True):
+                    if st.button("✅\nSelect All", key="select_all", use_container_width=True):
                         for book in book_files:
-                            st.session_state.selected_books[book['name']] = True
+                            st.session_state[f"book_checkbox_{book['name']}"] = True
                         st.rerun()
                 with col_none:
-                    if st.button("❌ Deselect All", key="deselect_all", use_container_width=True):
+                    if st.button("❌\nDeselect All", key="deselect_all", use_container_width=True):
                         for book in book_files:
-                            st.session_state.selected_books[book['name']] = False
+                            st.session_state[f"book_checkbox_{book['name']}"] = False
                         st.rerun()
                 with col_epub:
-                    if st.button("📕 EPUB Only", key="epub_only", use_container_width=True):
+                    if st.button("📕\nEPUB Only", key="epub_only", use_container_width=True):
                         for book in book_files:
-                            st.session_state.selected_books[book['name']] = (book['format'] == '.epub')
+                            st.session_state[f"book_checkbox_{book['name']}"] = (book['format'] == '.epub')
                         st.rerun()
 
                 st.markdown("---")
@@ -462,14 +1154,18 @@ with tab2:
                 selected_count = 0
                 for book in book_files:
                     icon = "📕" if book['format'] == '.epub' else "📄" if book['format'] == '.pdf' else "📝"
+                    checkbox_key = f"book_checkbox_{book['name']}"
 
-                    # Checkbox with book info
+                    # Format file size: use KB for files < 1 MB, otherwise MB
+                    if book['size_mb'] < 1.0:
+                        size_str = f"{book['size_mb'] * 1024:.0f} KB"
+                    else:
+                        size_str = f"{book['size_mb']:.1f} MB"
+
                     is_selected = st.checkbox(
-                        f"{icon} **{book['name']}** ({book['size_mb']:.1f} MB)",
-                        value=st.session_state.selected_books.get(book['name'], True),
-                        key=f"book_{book['name']}"
+                        f"{icon} **{book['name']}** ({size_str})",
+                        key=checkbox_key
                     )
-                    st.session_state.selected_books[book['name']] = is_selected
 
                     if is_selected:
                         selected_count += 1
@@ -479,8 +1175,51 @@ with tab2:
 
             else:
                 st.info("📭 Ingest folder is empty. Add books to start ingestion.")
+
+                # Show upload section when no files
+                st.markdown("#### 📤 Upload Books")
+                st.caption("Add new books to the ingest folder using the upload section below")
+
         else:
             st.warning(f"⚠️ Ingest folder not found: {ingest_dir}")
+
+        st.markdown("---")
+
+        # File uploader section (at bottom)
+        with st.expander("📤 Upload New Books", expanded=False):
+            uploaded_files = st.file_uploader(
+                "Choose book files to upload",
+                type=['epub', 'pdf', 'txt', 'md'],
+                accept_multiple_files=True,
+                help="Upload EPUB, PDF, TXT, or MD files. Files will be saved to the ingest folder."
+            )
+
+            if uploaded_files:
+                # Resolve ingest_dir relative to application root
+                upload_app_root = Path(__file__).parent
+                upload_ingest_path = Path(ingest_dir) if Path(ingest_dir).is_absolute() else upload_app_root / ingest_dir
+                upload_ingest_path.mkdir(exist_ok=True)
+
+                if st.button("💾 Save Uploaded Files", use_container_width=True):
+                    saved_count = 0
+                    for uploaded_file in uploaded_files:
+                        file_path = upload_ingest_path / uploaded_file.name
+
+                        # Check if file already exists
+                        if file_path.exists():
+                            st.warning(f"⚠️ {uploaded_file.name} already exists - skipping")
+                            continue
+
+                        # Save file
+                        with open(file_path, 'wb') as f:
+                            f.write(uploaded_file.getbuffer())
+                        saved_count += 1
+
+                    if saved_count > 0:
+                        st.success(f"✅ Saved {saved_count} file(s) to ingest folder")
+                        st.rerun()
+                    else:
+                        st.info("ℹ️ No new files to save")
 
         st.markdown("---")
 
@@ -506,6 +1245,130 @@ with tab2:
 with tab3:
     st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
 
+    # OpenRouter configuration
+    st.markdown("#### 🔑 OpenRouter Configuration")
+
+    # Initialize session state for API key if not present
+    if 'openrouter_api_key' not in st.session_state:
+        # Try to load from secrets.toml first (persistent across restarts)
+        try:
+            st.session_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
+        except Exception:
+            st.session_state.openrouter_api_key = ""
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        openrouter_api_key = st.text_input(
+            "OpenRouter API Key",
+            type="password",
+            value=st.session_state.openrouter_api_key,
+            help="Get your API key from https://openrouter.ai/keys"
+        )
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 Save Permanently"):
+            if openrouter_api_key:
+                # Save to session state
+                st.session_state.openrouter_api_key = openrouter_api_key
+
+                # Save to secrets.toml for persistence across restarts
+                secrets_path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
+                try:
+                    secrets_path.parent.mkdir(exist_ok=True)
+                    with open(secrets_path, 'w') as f:
+                        f.write('# Streamlit Secrets - DO NOT COMMIT TO GIT\n')
+                        f.write('# This file stores sensitive API keys and credentials\n\n')
+                        f.write('# OpenRouter API Key\n')
+                        f.write('# Get your key from: https://openrouter.ai/keys\n')
+                        f.write(f'OPENROUTER_API_KEY = "{openrouter_api_key}"\n')
+                    st.success("✅ Saved permanently! Will persist across restarts.")
+                except Exception as e:
+                    st.error(f"❌ Failed to save: {e}")
+            else:
+                st.warning("⚠️ Enter API key first")
+
+    # Model selection - Fetch from OpenRouter API
+    st.markdown("#### 🤖 Model Selection")
+
+    # Fetch available models if API key is provided
+    if openrouter_api_key:
+        if st.button("🔄 Fetch Available Models"):
+            with st.spinner("Fetching models from OpenRouter..."):
+                try:
+                    import requests
+                    response = requests.get(
+                        "https://openrouter.ai/api/v1/models",
+                        headers={"Authorization": f"Bearer {openrouter_api_key}"}
+                    )
+
+                    if response.status_code == 200:
+                        models_data = response.json().get("data", [])
+
+                        # Build models dict with pricing info
+                        openrouter_models = {}
+                        for model in models_data:
+                            model_id = model.get("id", "")
+                            model_name = model.get("name", model_id)
+
+                            # Check if free (pricing = 0)
+                            pricing = model.get("pricing", {})
+                            prompt_price = float(pricing.get("prompt", "0"))
+                            completion_price = float(pricing.get("completion", "0"))
+                            is_free = (prompt_price == 0 and completion_price == 0)
+
+                            # Add emoji indicator
+                            emoji = "🆓" if is_free else "💰"
+                            display_name = f"{emoji} {model_name}"
+
+                            openrouter_models[display_name] = model_id
+
+                        # Sort: free first, then by name
+                        sorted_models = dict(sorted(
+                            openrouter_models.items(),
+                            key=lambda x: (0 if x[0].startswith("🆓") else 1, x[0])
+                        ))
+
+                        # Store in session state
+                        st.session_state['openrouter_models'] = sorted_models
+                        st.success(f"✅ Loaded {len(sorted_models)} models")
+                    else:
+                        st.error(f"Failed to fetch models: {response.status_code}")
+                        st.error(response.text)
+                except Exception as e:
+                    st.error(f"Error fetching models: {str(e)}")
+
+    # Use cached models or show empty state
+    if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
+        openrouter_models = st.session_state['openrouter_models']
+        st.caption(f"📊 {len(openrouter_models)} models available (🆓 = Free, 💰 = Paid)")
+
+        # Find default index (last selected model if exists)
+        default_index = 0
+        if 'last_selected_model' in st.session_state:
+            try:
+                default_index = list(openrouter_models.keys()).index(st.session_state['last_selected_model'])
+            except (ValueError, KeyError):
+                default_index = 0
+
+        selected_model_name = st.selectbox(
+            "Select Model",
+            list(openrouter_models.keys()),
+            index=default_index,
+            help="Free models are great for testing. Paid models offer better quality."
+        )
+
+        # Save last selected model
+        st.session_state['last_selected_model'] = selected_model_name
+        selected_model = openrouter_models[selected_model_name]
+    else:
+        # No models fetched yet - show placeholder
+        st.warning("⚠️ Please fetch available models first using the button above.")
+        selected_model_name = None
+        selected_model = None
+
+    st.markdown("---")
+    st.markdown("#### 💬 Query")
+
     query = st.text_area(
         "Enter your question",
         placeholder="e.g., What does Silverston say about shipment patterns?",
@@ -516,16 +1379,134 @@ with tab3:
     with col1:
         query_collection = st.selectbox("Collection", ["alexandria", "alexandria_test"])
     with col2:
-        query_domain = st.selectbox("Domain Filter", ["all", "technical", "psychology", "philosophy", "history"])
+        query_domain = st.selectbox("Domain Filter", ["all"] + load_domains())
     with col3:
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
 
+    # Advanced query settings
+    with st.expander("⚙️ Advanced Settings"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            similarity_threshold = st.slider(
+                "Similarity Threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.5,
+                step=0.05,
+                help="Filter out results below this similarity score (0.0 = all results, 1.0 = only perfect matches)"
+            )
+        with col2:
+            fetch_multiplier = st.number_input(
+                "Fetch Multiplier",
+                min_value=1,
+                max_value=10,
+                value=3,
+                help="Fetch limit × N results from Qdrant for better filtering/reranking. Higher = better quality, slower. (Min fetch: 20)"
+            )
+        with col3:
+            enable_reranking = st.checkbox(
+                "Enable LLM Reranking",
+                value=False,
+                help="Use LLM to rerank results by relevance (uses OpenRouter API, slower but more accurate)"
+            )
+
+            if enable_reranking:
+                # Use fetched models if available, otherwise use small hardcoded set
+                if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
+                    rerank_models = st.session_state['openrouter_models']
+                else:
+                    rerank_models = {
+                        "⚠️ Fetch models first": None,
+                    }
+
+                # Find default index for reranking model
+                default_rerank_index = 0
+                if 'last_selected_rerank_model' in st.session_state and st.session_state['last_selected_rerank_model'] in rerank_models:
+                    try:
+                        default_rerank_index = list(rerank_models.keys()).index(st.session_state['last_selected_rerank_model'])
+                    except (ValueError, KeyError):
+                        default_rerank_index = 0
+
+                rerank_model_name = st.selectbox(
+                    "Reranking Model",
+                    list(rerank_models.keys()),
+                    index=default_rerank_index,
+                    help="Model used for relevance scoring (free models = slower but no cost)"
+                )
+
+                # Save last selected reranking model
+                st.session_state['last_selected_rerank_model'] = rerank_model_name
+                rerank_model = rerank_models[rerank_model_name]
+            else:
+                rerank_model = None
+
     if st.button("🔍 Search", use_container_width=True):
-        if query:
-            st.warning("🚧 Query interface coming soon!")
-            st.info(f"💡 For now, use: `python scripts/rag_query.py \"{query}\" --limit {query_limit}`")
-        else:
+        if not query:
             st.warning("⚠️ Please enter a query.")
+        elif not openrouter_api_key:
+            st.error("❌ Please enter your OpenRouter API key first.")
+        elif not selected_model:
+            st.error("❌ Please fetch available models first.")
+        elif enable_reranking and not rerank_model:
+            st.error("❌ Please fetch available models for reranking.")
+        else:
+            try:
+                # Call unified RAG query function from scripts/rag_query.py
+                result = perform_rag_query(
+                    query=query,
+                    collection_name=query_collection,
+                    limit=query_limit,
+                    domain_filter=query_domain if query_domain != "all" else None,
+                    threshold=similarity_threshold,
+                    enable_reranking=enable_reranking,
+                    rerank_model=rerank_model if enable_reranking else None,
+                    generate_llm_answer=True,
+                    answer_model=selected_model,
+                    openrouter_api_key=openrouter_api_key,
+                    host=qdrant_host,
+                    port=qdrant_port,
+                    fetch_multiplier=fetch_multiplier
+                )
+
+                # Check if search was successful
+                if result.error:
+                    st.error(f"❌ Error: {result.error}")
+                    st.info("💡 **Tip:** Make sure your OpenRouter API key is valid. Get one at https://openrouter.ai/keys")
+                    st.info("🔑 Your API key should start with 'sk-or-v1-...'")
+                elif not result.sources:
+                    st.warning(f"⚠️ No results above similarity threshold {similarity_threshold:.2f}. Try lowering the threshold.")
+                else:
+                    # Display search info
+                    st.info(f"🔍 Retrieved {result.initial_count} initial results from Qdrant")
+                    if result.filtered_count < result.initial_count:
+                        st.info(f"🎯 Filtered to {result.filtered_count} results above threshold ({similarity_threshold:.2f})")
+                    if enable_reranking:
+                        st.success(f"✅ Reranked to top {len(result.sources)} most relevant chunks")
+                    else:
+                        st.success(f"✅ Using top {len(result.sources)} filtered chunks")
+
+                    # Display answer
+                    if result.answer:
+                        st.markdown("---")
+                        st.markdown("### 💡 Answer")
+                        st.markdown(result.answer)
+
+                    # Display sources
+                    st.markdown("---")
+                    st.markdown("### 📚 Sources")
+                    for idx, source in enumerate(result.sources, 1):
+                        with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
+                            st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
+                            st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
+                            st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
+                            st.markdown("**Content:**")
+                            text = source.get('text', '')
+                            st.text(text[:500] + "..." if len(text) > 500 else text)
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
 
 # ============================================
 # TAB 4: Statistics
@@ -533,32 +1514,56 @@ with tab3:
 with tab4:
     st.markdown('<div class="section-header">📊 Collection Statistics</div>', unsafe_allow_html=True)
 
-    if manifest_file.exists():
-        with open(manifest_file, 'r', encoding='utf-8') as f:
-            manifest = json.load(f)
+    # Load all manifest files
+    manifest_dir = Path("logs")
+    manifest_files = list(manifest_dir.glob(MANIFEST_GLOB_PATTERN))
 
+    if manifest_files:
         st.markdown("#### Collections Overview")
 
-        for collection_name, collection_data in manifest.get('collections', {}).items():
-            with st.expander(f"📚 {collection_name}", expanded=True):
-                col1, col2, col3 = st.columns(3)
+        for manifest_file in manifest_files:
+            try:
+                with open(manifest_file, 'r', encoding='utf-8') as f:
+                    manifest_data = json.load(f)
 
-                with col1:
-                    st.metric("Books", collection_data.get('total_books', 0))
-                with col2:
-                    st.metric("Chunks", f"{collection_data.get('total_chunks', 0):,}")
-                with col3:
-                    st.metric("Size", f"{collection_data.get('total_size_mb', 0):.1f} MB")
+                # Each manifest file contains collections dict
+                for collection_name, collection_data in manifest_data.get('collections', {}).items():
+                    with st.expander(f"📚 {collection_name}", expanded=True):
+                        col1, col2, col3 = st.columns(3)
 
-                # Book list
-                st.markdown("**Books in Collection:**")
-                books = collection_data.get('books', [])
-                if books:
-                    for book in books[:10]:  # Show first 10
-                        st.write(f"- **{book.get('book_title')}** by {book.get('author')} ({book.get('chunks_count')} chunks)")
+                        # Calculate total books from books array
+                        books = collection_data.get('books', [])
+                        total_books = len(books)
 
-                    if len(books) > 10:
-                        st.caption(f"... and {len(books) - 10} more books")
+                        with col1:
+                            st.metric("Books", total_books)
+                        with col2:
+                            st.metric("Chunks", f"{collection_data.get('total_chunks', 0):,}")
+                        with col3:
+                            st.metric("Size", f"{collection_data.get('total_size_mb', 0):.1f} MB")
+
+                        # Book list
+                        st.markdown("**Books in Collection:**")
+                        if books:
+                            for book in books[:10]:  # Show first 10
+                                file_type = book.get('file_type', 'UNKNOWN')
+                                language_code = book.get('language', 'unknown')
+
+                                # Format language display
+                                if language_code == 'unknown':
+                                    language_display = '🏳️'  # White flag for unknown
+                                else:
+                                    language_display = language_code.upper()
+
+                                icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝'}.get(file_type, '📄')
+
+                                st.write(f"{icon} **{book.get('book_title')}** by {book.get('author')} "
+                                        f"({language_display}, {book.get('chunks_count')} chunks)")
+
+                            if len(books) > 10:
+                                st.caption(f"... and {len(books) - 10} more books")
+            except Exception as e:
+                st.error(f"Error loading {manifest_file.name}: {e}")
     else:
         st.info("📭 No collections found. Run ingestion to create collections.")
 
@@ -572,7 +1577,7 @@ st.markdown("---")
 st.markdown(
     '<div style="text-align: center; color: #666; font-style: italic;">'
     '𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤 • '
-    'Built with ❤️ by BMad Team • 2026'
+    'Built with ❤️ by 137 Team • 2026'
     '</div>',
     unsafe_allow_html=True
 )

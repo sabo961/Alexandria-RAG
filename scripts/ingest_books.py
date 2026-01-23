@@ -45,6 +45,103 @@ logger = logging.getLogger(__name__)
 # TEXT EXTRACTION
 # ============================================================================
 
+def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
+    """
+    Normalize paths for cross-platform file access.
+
+    Returns:
+        path_for_open: Path safe for os.open/fitz/etc.
+        display_path: Readable absolute path for logs/UI
+        used_long_path: Whether Windows long-path prefix was applied
+    """
+    expanded = os.path.expanduser(filepath)
+    abs_path = os.path.abspath(expanded)
+    path_for_open = abs_path
+    used_long_path = False
+
+    if os.name == "nt" and not abs_path.startswith("\\\\?\\"):
+        # Windows long-path support (>= 248 chars for files)
+        if len(abs_path) >= 248:
+            if abs_path.startswith("\\\\"):
+                # UNC path
+                path_for_open = "\\\\?\\UNC\\" + abs_path.lstrip("\\")
+            else:
+                path_for_open = "\\\\?\\" + abs_path
+            used_long_path = True
+
+    return path_for_open, abs_path, used_long_path, len(abs_path)
+
+
+def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validate file exists and is readable. Returns (ok, error_message).
+    """
+    if not os.path.exists(path_for_open):
+        return False, (
+            f"File not found: {display_path}. "
+            "If this is a cloud-synced file, ensure it is available offline."
+        )
+
+    try:
+        os.stat(path_for_open)
+        with open(path_for_open, 'rb') as f:
+            f.read(1)
+        return True, None
+    except OSError as e:
+        hint_parts = []
+        if os.name == "nt" and getattr(e, "errno", None) == 22:
+            hint_parts.append(
+                "Windows path may be too long. Try moving the file to a shorter path "
+                "or enable long paths in Windows policy/registry."
+            )
+        hint_parts.append(
+            "If using Google Drive/OneDrive, ensure the file is fully downloaded."
+        )
+        hint = " ".join(hint_parts)
+        return False, f"{e.__class__.__name__}: {e}. {hint}"
+
+
+def _describe_path_diagnostics(
+    original_path: str,
+    display_path: str,
+    path_for_open: str,
+    path_length: int
+) -> Dict:
+    """Log diagnostic details for troubleshooting Windows file access errors."""
+    try:
+        logger.info(f"Path length: {path_length} chars")
+        logger.info(f"Path for open: {path_for_open}")
+        logger.info(f"Original path repr: {repr(original_path)}")
+
+        # Detect non-printable or null characters
+        non_printable = [ch for ch in display_path if ord(ch) < 32 or ord(ch) == 127]
+        if non_printable:
+            logger.warning(f"⚠️ Non-printable characters detected: {non_printable}")
+
+        null_positions = [idx for idx, ch in enumerate(display_path) if ch == '\x00']
+        if null_positions:
+            logger.warning(f"⚠️ Null byte(s) detected at positions: {null_positions}")
+
+        return {
+            "display_path": display_path,
+            "path_for_open": path_for_open,
+            "original_path": original_path,
+            "path_length": path_length,
+            "non_printable": non_printable,
+            "null_positions": null_positions,
+        }
+    except Exception as diag_error:
+        logger.warning(f"⚠️ Diagnostics error: {diag_error}")
+        return {
+            "display_path": display_path,
+            "path_for_open": path_for_open,
+            "original_path": original_path,
+            "path_length": path_length,
+            "non_printable": [],
+            "null_positions": [],
+            "error": str(diag_error)
+        }
+
 def extract_text_from_epub(filepath: str) -> Tuple[List[Dict], Dict]:
     """
     Extract text from EPUB file, preserving chapter structure.
@@ -619,11 +716,23 @@ def ingest_book(
         qdrant_host: Qdrant server host
         qdrant_port: Qdrant server port
     """
-    logger.info(f"Starting ingestion pipeline for: {filepath}")
+    normalized_path, display_path, used_long_path, path_length = normalize_file_path(filepath)
+    logger.info(f"Starting ingestion pipeline for: {display_path}")
+    logger.info(f"Path repr: {repr(display_path)}")
+    if used_long_path:
+        logger.info("⚙️ Windows long-path prefix applied for file access")
+
+    diagnostics = _describe_path_diagnostics(filepath, display_path, normalized_path, path_length)
+
+    ok, error_message = validate_file_access(normalized_path, display_path)
+    if not ok:
+        logger.error(f"❌ File access check failed: {error_message}")
+        return {'success': False, 'error': error_message, 'diagnostics': diagnostics}
+
     logger.info(f"Domain: {domain} | Collection: {collection_name}")
 
     # Step 1: Extract text
-    sections, metadata = extract_text(filepath)
+    sections, metadata = extract_text(normalized_path)
     logger.info(f"Book: {metadata['title']} by {metadata['author']}")
 
     # Check if any content was extracted
@@ -679,8 +788,9 @@ def ingest_book(
         'title': metadata.get('title', 'Unknown'),
         'author': metadata.get('author', 'Unknown'),
         'chunks': len(chunks),
-        'file_size_mb': os.path.getsize(filepath) / (1024 * 1024),
-        'filepath': filepath
+        'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
+        'filepath': display_path,
+        'diagnostics': diagnostics
     }
 
 

@@ -368,9 +368,12 @@ with st.sidebar:
 
     gui_settings = load_gui_settings()
     default_library_dir = gui_settings.get("library_dir", "G:\\My Drive\\alexandria")
+    default_show_diagnostics = gui_settings.get("show_ingestion_diagnostics", True)
 
     if "library_dir" not in st.session_state:
         st.session_state.library_dir = default_library_dir
+    if "show_ingestion_diagnostics" not in st.session_state:
+        st.session_state.show_ingestion_diagnostics = default_show_diagnostics
 
     library_dir = st.text_input(
         "Library Directory",
@@ -378,14 +381,30 @@ with st.sidebar:
         help="Path to Calibre library"
     )
 
+    settings_changed = False
+
     if library_dir != st.session_state.library_dir:
         st.session_state.library_dir = library_dir
         gui_settings["library_dir"] = library_dir
+        settings_changed = True
+
+    show_diagnostics = st.checkbox(
+        "Show ingestion diagnostics",
+        value=st.session_state.show_ingestion_diagnostics,
+        help="Toggle diagnostics display for the latest ingestion run"
+    )
+
+    if show_diagnostics != st.session_state.show_ingestion_diagnostics:
+        st.session_state.show_ingestion_diagnostics = show_diagnostics
+        gui_settings["show_ingestion_diagnostics"] = show_diagnostics
+        settings_changed = True
+
+    if settings_changed:
         try:
             save_gui_settings(gui_settings)
-            st.caption("💾 Library directory saved")
+            st.caption("💾 Settings saved")
         except Exception as e:
-            st.warning(f"⚠️ Could not save library directory: {e}")
+            st.warning(f"⚠️ Could not save settings: {e}")
 
     qdrant_host = st.text_input(
         "Qdrant Host",
@@ -412,7 +431,7 @@ with st.sidebar:
         st.warning("⚠️ Ingestion and queries will not work until Qdrant is available")
 
     last_diagnostics = st.session_state.get("last_ingestion_diagnostics")
-    if last_diagnostics:
+    if last_diagnostics and st.session_state.show_ingestion_diagnostics:
         st.markdown("---")
         st.markdown("### 🔍 Latest Ingestion Diagnostics")
         st.caption(f"{last_diagnostics['context']} • {last_diagnostics['captured_at']}")

@@ -350,25 +350,7 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
 
 
 # Header - monospace for both light and dark themes
-# ASCII art header for technical aesthetic
-st.markdown('''
-<pre style="text-align: center; line-height: 1.1; font-size: 0.65rem; margin-bottom: 0.5rem;">
- █████╗ ██╗     ███████╗██╗  ██╗ █████╗ ███╗   ██╗██████╗ ██████╗ ██╗ █████╗
-██╔══██╗██║     ██╔════╝╚██╗██╔╝██╔══██╗████╗  ██║██╔══██╗██╔══██╗██║██╔══██╗
-███████║██║     █████╗   ╚███╔╝ ███████║██╔██╗ ██║██║  ██║██████╔╝██║███████║
-██╔══██║██║     ██╔══╝   ██╔██╗ ██╔══██║██║╚██╗██║██║  ██║██╔══██╗██║██╔══██║
-██║  ██║███████╗███████╗██╔╝ ██╗██║  ██║██║ ╚████║██████╔╝██║  ██║██║██║  ██║
-╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝
-</pre>
-<pre style="text-align: center; line-height: 1.1; font-size: 0.65rem; margin-bottom: 1rem;">
-         ██████╗ ███████╗    ████████╗███████╗███╗   ███╗███████╗███╗   ██╗ ██████╗ ███████╗
-        ██╔═══██╗██╔════╝    ╚══██╔══╝██╔════╝████╗ ████║██╔════╝████╗  ██║██╔═══██╗██╔════╝
-        ██║   ██║█████╗         ██║   █████╗  ██╔████╔██║█████╗  ██╔██╗ ██║██║   ██║███████╗
-        ██║   ██║██╔══╝         ██║   ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║██║   ██║╚════██║
-        ╚██████╔╝██║            ██║   ███████╗██║ ╚═╝ ██║███████╗██║ ╚████║╚██████╔╝███████║
-         ╚═════╝ ╚═╝            ╚═╝   ╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝
-</pre>
-''', unsafe_allow_html=True)
+st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
 
 # Sidebar
@@ -560,10 +542,10 @@ with tab0:
         filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
 
         with filter_col1:
-            author_search = st.text_input("Author contains", placeholder="e.g., Mishima", key="calibre_author_search")
+            author_search = st.text_input("Author", placeholder="e.g., Mishima", key="calibre_author_search")
 
         with filter_col2:
-            title_search = st.text_input("Title contains", placeholder="e.g., Steel", key="calibre_title_search")
+            title_search = st.text_input("Title", placeholder="e.g., Steel", key="calibre_title_search")
 
         with filter_col3:
             # Get available languages
@@ -626,7 +608,7 @@ with tab0:
 
             with pagination_col1:
                 rows_per_page = st.selectbox(
-                    "Rows per page",
+                    "Rows",
                     options=[20, 50, 100, 200],
                     index=1,  # Default to 50
                     key="calibre_rows_per_page"
@@ -649,7 +631,7 @@ with tab0:
             current_page = st.session_state.calibre_current_page
 
             with pagination_col2:
-                st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total books)</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
 
             # Calculate slice for current page
             start_idx = (current_page - 1) * rows_per_page
@@ -966,10 +948,10 @@ with tab1:
                 ing_filter_col1, ing_filter_col2, ing_filter_col3, ing_filter_col4 = st.columns(4)
 
                 with ing_filter_col1:
-                    ing_author_search = st.text_input("Author contains", placeholder="e.g., Mishima", key="ingested_author_search")
+                    ing_author_search = st.text_input("Author", placeholder="e.g., Mishima", key="ingested_author_search")
 
                 with ing_filter_col2:
-                    ing_title_search = st.text_input("Title contains", placeholder="e.g., Steel", key="ingested_title_search")
+                    ing_title_search = st.text_input("Title", placeholder="e.g., Steel", key="ingested_title_search")
 
                 with ing_filter_col3:
                     # Get available languages (with fallback for old manifests)

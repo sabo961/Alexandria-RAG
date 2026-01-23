@@ -17,7 +17,13 @@ maxUploadSize = 200
 serverAddress = "localhost"
 gatherUsageStats = false
 
-# [theme]
-# Theme configuration disabled to enable built-in Light/Dark toggle
-# If you want custom colors, define both [theme.light] and [theme.dark] sections
-# For now, using Streamlit's default Light and Dark themes
+# Alexandria Theme Configuration
+# Users can toggle between Light, Dark (Matrix Terminal), and System setting
+
+[theme.dark]
+# Matrix/Terminal Dark Mode - "Hacker Mode"
+primaryColor = "#00ff41"              # Neon green (Matrix rain color)
+backgroundColor = "#0d1117"           # Deep dark (GitHub dark)
+secondaryBackgroundColor = "#161b22"  # Slightly lighter dark
+textColor = "#c9d1d9"                # Light gray text
+font = "monospace"                    # Terminal font (Courier/Consolas)

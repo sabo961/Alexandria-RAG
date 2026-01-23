@@ -146,6 +146,96 @@ st.markdown("""
         transform: translateY(1px);
         box-shadow: none !important; /* Keep shadow removed */
     }
+
+    /* ============================================
+       TERMINAL / MATRIX MODE (Dark Theme)
+       Activated when user selects Dark mode
+       ============================================ */
+
+    /* Scanline flicker effect */
+    @keyframes flicker {
+        0% { opacity: 0.97; }
+        5% { opacity: 1; }
+        10% { opacity: 0.98; }
+        100% { opacity: 1; }
+    }
+
+    /* CRT screen glow */
+    @media (prefers-color-scheme: dark) {
+        .stApp {
+            animation: flicker 0.15s infinite;
+        }
+
+        /* Green glow on buttons (Matrix style) */
+        .stButton>button {
+            background: #0d1117 !important;
+            border: 2px solid #00ff41 !important;
+            color: #00ff41 !important;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.3), inset 0 0 10px rgba(0, 255, 65, 0.1);
+            font-family: 'Courier New', 'Consolas', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stButton>button:hover {
+            background: rgba(0, 255, 65, 0.1) !important;
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.5), inset 0 0 15px rgba(0, 255, 65, 0.2);
+            transform: scale(1.02);
+        }
+
+        /* Terminal-style text inputs */
+        .stTextInput>div>input,
+        .stTextArea>div>textarea,
+        .stSelectbox>div>div {
+            background: #0d1117 !important;
+            border: 1px solid #00ff41 !important;
+            color: #00ff41 !important;
+            font-family: 'Courier New', 'Consolas', monospace;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+        }
+
+        /* Glowing cursor effect */
+        .stTextInput>div>input:focus,
+        .stTextArea>div>textarea:focus {
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+            border-color: #00ff41 !important;
+        }
+
+        /* Terminal prompt style for expanders */
+        .streamlit-expanderHeader {
+            color: #00ff41 !important;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Matrix-style scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            background: #0d1117;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+        }
+
+        /* ASCII art compatibility */
+        pre, code {
+            font-family: 'Courier New', 'Consolas', monospace;
+            color: #00ff41;
+        }
+
+        /* Stat boxes in terminal mode */
+        .stat-box {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%) !important;
+            border: 2px solid #00ff41 !important;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+
+        .stat-number {
+            color: #00ff41 !important;
+            text-shadow: 0 0 10px rgba(0, 255, 65, 0.8);
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -338,9 +428,32 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     return results
 
 
-# Header
-st.markdown('<div class="main-title">𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">η Βιβλιοθήκη της Αλεξάνδρειας • The Great Library Reborn</div>', unsafe_allow_html=True)
+# Header - show ASCII art in dark mode, fancy unicode in light mode
+st.markdown('''
+<div class="main-title">𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤</div>
+<div class="subtitle">η Βιβλιοθήκη της Αλεξάνδρειας • The Great Library Reborn</div>
+''', unsafe_allow_html=True)
+
+# Terminal mode ASCII art banner (appears in dark mode via CSS)
+st.markdown('''
+<div class="terminal-banner" style="display: none;">
+<pre style="color: #00ff41; text-align: center; font-family: monospace; line-height: 1.2; font-size: 0.8rem;">
+ █████╗ ██╗     ███████╗██╗  ██╗ █████╗ ███╗   ██╗██████╗ ██████╗ ██╗ █████╗
+██╔══██╗██║     ██╔════╝╚██╗██╔╝██╔══██╗████╗  ██║██╔══██╗██╔══██╗██║██╔══██╗
+███████║██║     █████╗   ╚███╔╝ ███████║██╔██╗ ██║██║  ██║██████╔╝██║███████║
+██╔══██║██║     ██╔══╝   ██╔██╗ ██╔══██║██║╚██╗██║██║  ██║██╔══██╗██║██╔══██║
+██║  ██║███████╗███████╗██╔╝ ██╗██║  ██║██║ ╚████║██████╔╝██║  ██║██║██║  ██║
+╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝
+    ═══════════════════ THE  GREAT  LIBRARY  REBORN ═══════════════════
+</pre>
+</div>
+<style>
+@media (prefers-color-scheme: dark) {
+    .main-title, .subtitle { display: none !important; }
+    .terminal-banner { display: block !important; }
+}
+</style>
+''', unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:

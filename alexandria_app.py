@@ -38,9 +38,8 @@ st.set_page_config(
 # Custom CSS for fancy styling
 st.markdown("""
 <style>
-    /* Main title styling */
+    /* Main title styling - uses monospace from theme */
     .main-title {
-        font-family: 'Georgia', serif;
         font-size: 3.5rem;
         font-weight: bold;
         text-align: center;
@@ -52,7 +51,6 @@ st.markdown("""
     }
 
     .subtitle {
-        font-family: 'Georgia', serif;
         font-size: 1.2rem;
         text-align: center;
         color: #666;
@@ -60,9 +58,13 @@ st.markdown("""
         font-style: italic;
     }
 
-    /* Section headers */
+    /* Hidden fancy header (preserved for future use) */
+    .fancy-header {
+        display: none;
+    }
+
+    /* Section headers - uses monospace from theme */
     .section-header {
-        font-family: 'Georgia', serif;
         font-size: 1.8rem;
         font-weight: 600;
         color: #667eea;
@@ -347,9 +349,17 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     return results
 
 
-# Header
-st.markdown('<div class="main-title">𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">η Βιβλιοθήκη της Αλεξάνδρειας • The Great Library Reborn</div>', unsafe_allow_html=True)
+# Header - monospace for both light and dark themes
+st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
+
+# Fancy unicode version (preserved but hidden)
+st.markdown('''
+<div class="fancy-header">
+    <div>𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤</div>
+    <div>η Βιβλιοθήκη της Αλεξάνδρειας</div>
+</div>
+''', unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:

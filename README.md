@@ -6,26 +6,33 @@
 
 Semantička RAG knjižnica koja povezuje 9000 multidisciplinarnih knjiga (tehnika, psihologija, filozofija, povijest) za sintezu znanja preko domena.
 
-**Status:** Phase 1 - Proof of Concept ✅ (Production-ready Python workflow)
+**Status:** Phase 1 - Production Ready ✅ (Streamlit GUI + Python CLI + Calibre Integration)
 
 ---
 
 ## Quick Start
 
+### GUI (Recommended)
 ```bash
-# 1. Open in VS Code
-code "c:\Users\goran\source\repos\Temenos\Akademija\Alexandria"
+# 1. Start Streamlit app
+streamlit run alexandria_app.py
 
-# 2. Navigate to scripts
+# 2. Open browser to http://localhost:8501
+# 3. Browse Calibre library, ingest books, query collection
+```
+
+### CLI (Advanced)
+```bash
+# Navigate to scripts directory
 cd scripts
 
-# 3. Check what's been ingested
+# Check what's been ingested
 python collection_manifest.py show alexandria
 
-# 4. Query books
+# Query books
 python rag_query.py "your question here" --limit 5
 
-# 5. Ingest new books
+# Batch ingest
 python batch_ingest.py --directory ../ingest --domain technical --collection alexandria
 ```
 
@@ -47,12 +54,15 @@ python batch_ingest.py --directory ../ingest --domain technical --collection ale
 
 ## Tehnologije
 
+- **GUI:** Streamlit web interface (localhost:8501)
 - **Vector DB:** Qdrant (192.168.0.151:6333)
-- **Embedding Model:** sentence-transformers/all-MiniLM-L6-v2 (384-dim)
-- **Chunking:** Domain-specific (Technical: 1500-2000 tokens, Psychology: 1000-1500, Philosophy: 1200-1800, History: 1500-2000)
-- **Workflow:** Python CLI through VS Code
+- **Embedding Model:** Nomic AI embedding model (768-dim)
+- **LLM:** OpenRouter API (configurable models, free & paid)
+- **Calibre:** Direct integration with Calibre library database
+- **Chunking:** Domain-specific automatic optimization (Technical: 1500-2000 tokens, Psychology: 1000-1500, Philosophy: 1200-1800, History: 1500-2000)
+- **Workflow:** Streamlit GUI + Python CLI
 - **Ingestion:** EPUB, PDF, TXT, MD support
-- **Tracking:** Automatic manifest logging
+- **Tracking:** Automatic collection-specific manifest logging
 
 ---
 
@@ -62,12 +72,19 @@ python batch_ingest.py --directory ../ingest --domain technical --collection ale
 Alexandria/
 ├── README.md                           # This file
 ├── AGENTS.md                           # AI agent configuration & defaults
-├── SETUP_COMPLETE.md                   # Original setup notes
+├── alexandria_app.py                   # 🌟 Streamlit GUI application
 ├── requirements.txt                    # Python dependencies
+│
+├── .streamlit/                         # Streamlit configuration
+│   ├── config.toml                     # Server & theme config
+│   └── secrets.toml                    # API keys (gitignored)
 │
 ├── .vscode/                            # VS Code configuration
 │   ├── launch.json                     # Debug configurations
 │   └── settings.json                   # Python settings
+│
+├── .claude/                            # Claude Code configuration
+│   └── config.json                     # Agent instructions
 │
 ├── docs/                               # Documentation
 │   ├── guides/                         # User guides
@@ -105,13 +122,23 @@ Alexandria/
 
 ## Current Status
 
-### Ingested Collections
-- **alexandria_test:** 153 chunks (Silverston Vol 3 EPUB) ✅
-- **alexandria:** Empty (production collection) ⏳
+### System Status
+- **GUI:** ✅ Fully functional Streamlit interface
+- **Calibre Integration:** ✅ Direct ingestion from library
+- **Vector DB:** ✅ Qdrant running on 192.168.0.151:6333
+- **RAG Query:** ✅ OpenRouter LLM integration
+- **Manifest Tracking:** ✅ Collection-specific logging
 
-### Available Scripts
-| Script | Purpose | Status |
-|--------|---------|--------|
+### Supported Content
+- Technical books (Data Modeling, Software Engineering, Architecture)
+- Literature (Fiction, Essays, Poetry)
+- Philosophy & Psychology
+- History & Social Sciences
+
+### Available Tools
+| Tool | Purpose | Status |
+|------|---------|--------|
+| `alexandria_app.py` | **Streamlit GUI** (browse, ingest, query) | ✅ Ready |
 | `batch_ingest.py` | Production ingestion + auto-logging | ✅ Ready |
 | `rag_query.py` | Query tool (LLM-ready markdown) | ✅ Ready |
 | `collection_manifest.py` | Track what's been ingested | ✅ Ready |
@@ -133,8 +160,21 @@ Alexandria/
 ### 🚀 Start Here
 - **[AGENTS.md](AGENTS.md)** - AI agent config & defaults (read this first!)
 - **[QUICK_REFERENCE.md](docs/guides/QUICK_REFERENCE.md)** - Command cheat sheet
+- **[TODO.md](TODO.md)** - Current tasks and roadmap
 
-### 📖 User Guides
+### 🏗️ Architecture (C4 Model)
+- **[Architecture Overview](docs/architecture/README.md)** - C4 diagrams + ADRs
+- **[System Context](docs/architecture/c4/01-context.md)** - Alexandria in ecosystem
+- **[Containers](docs/architecture/c4/02-container.md)** - Major components
+- **[Components](docs/architecture/c4/03-component.md)** - Internal structure
+- **[ADRs](docs/architecture/decisions/README.md)** - Architecture decisions
+- **Interactive Diagrams:** Run `scripts/start-structurizr.bat`
+
+### 📖 Feature Stories
+- **[Stories Index](docs/stories/README.md)** - Feature-focused documentation
+- Maps to C4 components (Ingestion, Chunking, Query, GUI, etc.)
+
+### 📚 User Guides
 - **[LOGGING_GUIDE.md](docs/guides/LOGGING_GUIDE.md)** - Track what's been ingested
 - **[PROFESSIONAL_SETUP_COMPLETE.md](docs/guides/PROFESSIONAL_SETUP_COMPLETE.md)** - Complete production guide
 - **[OPEN_WEBUI_CONFIG.md](docs/guides/OPEN_WEBUI_CONFIG.md)** - Open WebUI integration (optional)
@@ -142,42 +182,96 @@ Alexandria/
 ### 🔧 Technical Docs
 - **[scripts/README.md](scripts/README.md)** - Script usage documentation
 - **[logs/README.md](logs/README.md)** - Logging system details
-- **[SETUP_COMPLETE.md](SETUP_COMPLETE.md)** - Original setup notes
+- **[Qdrant Payload Structure](docs/architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md)** - Vector DB schema
+- **[PDF vs EPUB Comparison](docs/architecture/technical/PDF_vs_EPUB_COMPARISON.md)** - Format analysis
 
-### 📋 Project Docs
-- **[alexandria-qdrant-project-proposal.md](docs/alexandria-qdrant-project-proposal.md)** - Project proposal
-- **[missing-classics-analysis.md](docs/missing-classics-analysis.md)** - Gap analysis
+### 🔬 Research
+- **[Project Proposal](docs/research/alexandria-qdrant-project-proposal.md)** - Original proposal
+- **[Missing Classics Analysis](docs/research/missing-classics-analysis.md)** - Gap analysis
+- **[Philosophical Chunking Research](docs/research/argument_based_chunking_for_philosophical_texts_alexandria_rag.md)** - Argument-based chunking
+
+---
+
+## Key Features
+
+### 🖥️ Streamlit GUI
+- **Calibre Library Browser** - Browse and filter your entire Calibre library with pagination
+- **Direct Ingestion** - Select books from Calibre and ingest directly (no file copying needed)
+- **Query Interface** - RAG-powered Q&A with context from your books
+- **Advanced Settings** - Control similarity threshold, fetch multiplier, LLM reranking, temperature
+- **Collection Management** - View ingested books, stats, and manifest tracking
+- **OpenRouter Integration** - Use any LLM model (free or paid) for answer generation
+
+### 🔧 Python CLI
+- **Batch Ingestion** - Process multiple books with automatic resume on failure
+- **Manifest Tracking** - Collection-specific JSON manifests with CSV exports
+- **Experiment Tools** - A/B test different chunking strategies
+- **Direct Qdrant Access** - Low-level collection management and search
+
+### 📚 Calibre Integration
+- Direct SQLite database access to Calibre library
+- Rich metadata extraction (title, author, series, tags, languages)
+- Support for multiple formats (EPUB, PDF, MOBI, AZW3)
+- No file duplication - ingest directly from Calibre library paths
 
 ---
 
 ## Common Tasks
 
-### Check What's Been Ingested
+### GUI Workflow (Recommended)
+
+1. **Start the GUI:**
+   ```bash
+   streamlit run alexandria_app.py
+   ```
+
+2. **Browse Calibre Library:**
+   - Go to "Calibre Library" tab
+   - Use filters to find books (author, format, tags)
+   - Browse with pagination (20/50/100/200 rows)
+
+3. **Ingest Books:**
+   - Select books from Calibre Library tab
+   - Click "Start Ingestion"
+   - Or use "Ingestion" tab for manual folder ingestion
+
+4. **Query Collection:**
+   - Go to "Query" tab
+   - Configure OpenRouter API key in sidebar
+   - Ask questions, get LLM-generated answers with sources
+
+5. **View Statistics:**
+   - "Ingested Books" tab shows all books with filters
+   - View by collection, domain, format, language
+
+### CLI Workflow (Advanced)
+
+#### Check What's Been Ingested
 ```bash
 cd scripts
 python collection_manifest.py show alexandria
 ```
 
-### Query Books
+#### Query Books
 ```bash
 python rag_query.py "What does Silverston say about shipments?" --limit 5
 ```
 
-### Ingest New Books
+#### Batch Ingest
 ```bash
-# Batch process (production)
+# Process multiple books
 python batch_ingest.py --directory ../ingest --domain technical --collection alexandria
 
 # Resume after failure
 python batch_ingest.py --directory ../ingest --domain technical --resume
 ```
 
-### Test Retrieval Quality
+#### Test Retrieval Quality
 ```bash
 python qdrant_utils.py search alexandria "your test query" --limit 5
 ```
 
-### Experiment with Chunking
+#### Experiment with Chunking
 ```bash
 python experiment_chunking.py \
   --file "../ingest/book.epub" \
@@ -210,43 +304,27 @@ Terminal default: scripts/ directory
 
 ---
 
-## Phase 1 Goals (PoC)
+## Future Development
 
-### Immediate (This Week)
-- [ ] Batch ingest all 3 Silverston books
-- [ ] Test PDF ingestion quality
-- [ ] Query testing with real questions
+See [TODO.md](TODO.md) for current sprint tasks and backlog.
 
-### Short-term (Next 2-4 Weeks)
-- [ ] Ingest 10 representative books (mix of domains)
-- [ ] Manual retrieval quality evaluation
-- [ ] Compare chunking strategies
+### High Priority
+- Philosophical argument-based chunking integration
+- Domain parameter reset bug fix
+- Pagination arrow button styling
 
-### Medium-term (1-2 Months)
-- [ ] Scale to 50-100 books
-- [ ] Optimize chunking based on experiments
-- [ ] Production deployment strategy
+### Planned Features
+- Real-time batch ingestion progress tracking
+- Resume functionality in GUI
+- Advanced query history and export
+- Collection admin operations (copy, merge, delete)
+- MOBI format support
 
----
-
-## Next Steps
-
-1. **Batch ingest remaining Silverston books:**
-   ```bash
-   cd scripts
-   python batch_ingest.py --directory ../ingest --domain technical --collection alexandria
-   ```
-
-2. **Verify results:**
-   ```bash
-   python collection_manifest.py show alexandria
-   python qdrant_utils.py stats alexandria
-   ```
-
-3. **Test retrieval:**
-   ```bash
-   python rag_query.py "database normalization patterns" --limit 5
-   ```
+### Long-term Vision
+- Multi-domain knowledge synthesis
+- Cross-reference system between books
+- Obsidian vault integration
+- Web articles and YouTube transcript ingestion
 
 ---
 
@@ -260,6 +338,17 @@ Terminal default: scripts/ directory
 
 ---
 
-**Last Updated:** 2026-01-21
-**Phase:** 1 - Proof of Concept
-**Status:** ✅ Production-ready Python workflow established
+## Recent Updates (2026-01-23)
+
+- ✅ **Streamlit GUI** - Full-featured web interface with Calibre integration
+- ✅ **Calibre Direct Ingestion** - No need to copy files, ingest directly from library
+- ✅ **OpenRouter Integration** - RAG with LLM answer generation
+- ✅ **Advanced Query Settings** - Temperature control, reranking, fetch multiplier
+- ✅ **Collection Management** - Manifest tracking with CSV exports
+- ✅ **Bug Fixes** - Manifest tracking now properly updates after ingestion
+
+---
+
+**Last Updated:** 2026-01-23
+**Phase:** 1 - Production Ready
+**Status:** ✅ Streamlit GUI + Python CLI + Calibre Integration + RAG Query System

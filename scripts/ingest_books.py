@@ -30,6 +30,9 @@ from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
+# Philosophical chunking
+from philosophical_chunking import argument_prechunk, should_use_argument_chunking
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -374,44 +377,65 @@ def create_chunks_from_sections(
     book_title = metadata.get('title', 'Unknown')
     author = metadata.get('author', 'Unknown')
 
+    # Check if argument-based chunking should be used
+    use_argument_chunking = should_use_argument_chunking(domain)
+
+    if use_argument_chunking:
+        logger.info(f"📚 Using argument-based pre-chunking for domain: {domain}")
+
     if merge_sections:
         # Merge all sections into one text and chunk it
         # This is better for PDFs where each "section" is just a page
         full_text = '\n\n'.join(section['text'] for section in sections)
 
-        chunks = chunk_text(
-            text=full_text,
-            domain=domain,
-            max_tokens=max_tokens,
-            overlap=overlap,
-            section_name='merged',
-            book_title=book_title,
-            author=author
-        )
+        # Apply philosophical pre-chunking if enabled
+        if use_argument_chunking:
+            text_blocks = argument_prechunk(full_text, author=author)
+            logger.info(f"   Pre-chunked into {len(text_blocks)} argument blocks")
+        else:
+            text_blocks = [full_text]
 
-        all_chunks.extend(chunks)
+        # Apply token-based chunking to each pre-chunked block
+        for block in text_blocks:
+            chunks = chunk_text(
+                text=block,
+                domain=domain,
+                max_tokens=max_tokens,
+                overlap=overlap,
+                section_name='merged',
+                book_title=book_title,
+                author=author
+            )
+            all_chunks.extend(chunks)
     else:
         # Chunk each section separately (better for EPUBs with actual chapters)
         for section in sections:
             section_text = section['text']
             section_name = str(section.get('chapter_name') or section.get('page_number') or section.get('section_name', ''))
 
-            # Chunk this section with metadata
-            chunks = chunk_text(
-                text=section_text,
-                domain=domain,
-                max_tokens=max_tokens,
-                overlap=overlap,
-                section_name=section_name,
-                book_title=book_title,
-                author=author
-            )
+            # Apply philosophical pre-chunking if enabled
+            if use_argument_chunking:
+                text_blocks = argument_prechunk(section_text, author=author)
+            else:
+                text_blocks = [section_text]
 
-            # Add section order to each chunk
-            for chunk in chunks:
-                chunk['section_order'] = section.get('order', 0)
+            # Apply token-based chunking to each pre-chunked block
+            for block in text_blocks:
+                chunks = chunk_text(
+                    text=block,
+                    domain=domain,
+                    max_tokens=max_tokens,
+                    overlap=overlap,
+                    section_name=section_name,
+                    book_title=book_title,
+                    author=author
+                )
 
-            all_chunks.extend(chunks)
+                # Add section order to each chunk
+                for chunk in chunks:
+                    chunk['section_order'] = section.get('order', 0)
+
+                all_chunks.extend(chunks)
 
     return all_chunks
 
@@ -606,7 +630,7 @@ def ingest_book(
     if not sections or all(not section.get('text', '').strip() for section in sections):
         logger.error(f"❌ No content extracted from {filepath}")
         logger.error("   The file may be encrypted, corrupted, or in an unsupported format")
-        return
+        return {'success': False, 'error': 'No content extracted'}
 
     # Step 2: Calculate optimal chunking parameters
     optimal_params = calculate_optimal_chunk_params(sections, domain=domain)
@@ -648,6 +672,16 @@ def ingest_book(
     )
 
     logger.info(f"✅ Ingestion complete for: {metadata['title']}")
+
+    # Return success status and metadata for manifest logging
+    return {
+        'success': True,
+        'title': metadata.get('title', 'Unknown'),
+        'author': metadata.get('author', 'Unknown'),
+        'chunks': len(chunks),
+        'file_size_mb': os.path.getsize(filepath) / (1024 * 1024),
+        'filepath': filepath
+    }
 
 
 # ============================================================================

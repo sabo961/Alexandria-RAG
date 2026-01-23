@@ -1,0 +1,825 @@
+{
+  "configuration" : {
+    "scope" : "SoftwareSystem"
+  },
+  "description" : "Semantic search and knowledge synthesis across 9,000 books",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedAgent" : "structurizr-ui",
+  "lastModifiedDate" : "2026-01-23T00:50:34Z",
+  "model" : {
+    "people" : [ {
+      "description" : "Uses Alexandria to search and analyze books for insights and knowledge synthesis",
+      "id" : "1",
+      "name" : "Developer/Researcher",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Browses library, ingests books, queries for knowledge",
+        "destinationId" : "2",
+        "id" : "18",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Uses web interface",
+        "destinationId" : "3",
+        "id" : "21",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Web-based interface for browsing, ingesting, and querying books",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Streamlit GUI",
+        "properties" : {
+          "structurizr.dsl.identifier" : "gui"
+        },
+        "relationships" : [ {
+          "description" : "Calls business logic functions",
+          "destinationId" : "4",
+          "id" : "22",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Triggers book ingestion with domain selection",
+          "destinationId" : "5",
+          "id" : "27",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Executes RAG queries with parameters",
+          "destinationId" : "7",
+          "id" : "28",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Displays collection statistics and manifests",
+          "destinationId" : "8",
+          "id" : "29",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Browses Calibre library with filters",
+          "destinationId" : "9",
+          "id" : "30",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,Web Browser",
+        "technology" : "Python 3.14, Streamlit"
+      }, {
+        "components" : [ {
+          "description" : "Processes EPUB/PDF/TXT/MD books into chunks and uploads to Qdrant",
+          "documentation" : { },
+          "id" : "5",
+          "name" : "Ingestion Engine",
+          "properties" : {
+            "structurizr.dsl.identifier" : "ingestionEngine"
+          },
+          "relationships" : [ {
+            "description" : "Uses chunking strategies",
+            "destinationId" : "6",
+            "id" : "10",
+            "sourceId" : "5",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Logs ingested books to manifest",
+            "destinationId" : "8",
+            "id" : "11",
+            "sourceId" : "5",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion",
+          "technology" : "batch_ingest.py, ingest_books.py"
+        }, {
+          "description" : "Domain-specific chunking (technical, psychology, philosophy, history) with argument-based pre-chunking for philosophical texts",
+          "documentation" : { },
+          "id" : "6",
+          "name" : "Chunking Strategies",
+          "properties" : {
+            "structurizr.dsl.identifier" : "chunkingStrategies"
+          },
+          "tags" : "Element,Component,Chunking",
+          "technology" : "philosophical_chunking.py"
+        }, {
+          "description" : "Semantic search via Qdrant with similarity filtering, fetch multiplier, and LLM answer generation",
+          "documentation" : { },
+          "id" : "7",
+          "name" : "RAG Query Engine",
+          "properties" : {
+            "structurizr.dsl.identifier" : "ragQueryEngine"
+          },
+          "relationships" : [ {
+            "description" : "Checks collection status",
+            "destinationId" : "8",
+            "id" : "12",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Query",
+          "technology" : "rag_query.py"
+        }, {
+          "description" : "Tracks ingested books via per-collection manifests, CSV exports, and Qdrant statistics",
+          "documentation" : { },
+          "id" : "8",
+          "name" : "Collection Management",
+          "properties" : {
+            "structurizr.dsl.identifier" : "collectionManagement"
+          },
+          "tags" : "Element,Component,Management",
+          "technology" : "collection_manifest.py, qdrant_utils.py"
+        }, {
+          "description" : "Direct SQLite access to Calibre library for metadata and direct ingestion",
+          "documentation" : { },
+          "id" : "9",
+          "name" : "Calibre Integration",
+          "properties" : {
+            "structurizr.dsl.identifier" : "calibreIntegration"
+          },
+          "relationships" : [ {
+            "description" : "Provides book paths for ingestion",
+            "destinationId" : "5",
+            "id" : "13",
+            "sourceId" : "9",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Integration",
+          "technology" : "calibre_db.py"
+        } ],
+        "description" : "Core business logic for ingestion, chunking, querying, and management",
+        "documentation" : { },
+        "id" : "4",
+        "name" : "Scripts Package",
+        "properties" : {
+          "structurizr.dsl.identifier" : "scripts"
+        },
+        "relationships" : [ {
+          "description" : "Reads/writes books and manifests",
+          "destinationId" : "14",
+          "id" : "23",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Queries book metadata",
+          "destinationId" : "15",
+          "id" : "24",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Stores embeddings, retrieves semantic matches",
+          "destinationId" : "16",
+          "id" : "25",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Sends context + query for answer generation",
+          "destinationId" : "17",
+          "id" : "26",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Python 3.14"
+      }, {
+        "description" : "Book storage (ingest/, ingested/) and logs (logs/)",
+        "documentation" : { },
+        "id" : "14",
+        "name" : "File System",
+        "properties" : {
+          "structurizr.dsl.identifier" : "filesystem"
+        },
+        "tags" : "Element,Container,Storage",
+        "technology" : "File System"
+      }, {
+        "description" : "Book metadata (title, author, series, tags, languages)",
+        "documentation" : { },
+        "id" : "15",
+        "name" : "Calibre Database",
+        "properties" : {
+          "structurizr.dsl.identifier" : "calibreDb"
+        },
+        "tags" : "Element,Container,Database",
+        "technology" : "SQLite (metadata.db)"
+      } ],
+      "description" : "Retrieval-Augmented Generation system for multi-disciplinary book library",
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Alexandria RAG System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "alexandriaSystem"
+      },
+      "relationships" : [ {
+        "description" : "Stores/retrieves book chunk embeddings",
+        "destinationId" : "16",
+        "id" : "19",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Generates natural language answers from retrieved chunks",
+        "destinationId" : "17",
+        "id" : "20",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Vector search engine storing 384-dim embeddings with domain/book/author metadata",
+      "documentation" : { },
+      "id" : "16",
+      "name" : "Qdrant Vector DB",
+      "properties" : {
+        "structurizr.dsl.identifier" : "qdrant"
+      },
+      "tags" : "Element,Software System,External System,External"
+    }, {
+      "description" : "LLM inference for answer generation (multiple models supported)",
+      "documentation" : { },
+      "id" : "17",
+      "name" : "OpenRouter API",
+      "properties" : {
+        "structurizr.dsl.identifier" : "openrouter"
+      },
+      "tags" : "Element,Software System,External System,External"
+    } ]
+  },
+  "name" : "Alexandria RAG System",
+  "properties" : {
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.error" : "19",
+    "structurizr.inspection.warning" : "0",
+    "structurizr.dsl" : "d29ya3NwYWNlICJBbGV4YW5kcmlhIFJBRyBTeXN0ZW0iICJTZW1hbnRpYyBzZWFyY2ggYW5kIGtub3dsZWRnZSBzeW50aGVzaXMgYWNyb3NzIDksMDAwIGJvb2tzIiB7CgogICAgbW9kZWwgewogICAgICAgICMgUGVvcGxlCiAgICAgICAgdXNlciA9IHBlcnNvbiAiRGV2ZWxvcGVyL1Jlc2VhcmNoZXIiICJVc2VzIEFsZXhhbmRyaWEgdG8gc2VhcmNoIGFuZCBhbmFseXplIGJvb2tzIGZvciBpbnNpZ2h0cyBhbmQga25vd2xlZGdlIHN5bnRoZXNpcyIKCiAgICAgICAgIyBTb2Z0d2FyZSBTeXN0ZW1zCiAgICAgICAgYWxleGFuZHJpYVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJBbGV4YW5kcmlhIFJBRyBTeXN0ZW0iICJSZXRyaWV2YWwtQXVnbWVudGVkIEdlbmVyYXRpb24gc3lzdGVtIGZvciBtdWx0aS1kaXNjaXBsaW5hcnkgYm9vayBsaWJyYXJ5IiB7CgogICAgICAgICAgICAjIENvbnRhaW5lcnMKICAgICAgICAgICAgZ3VpID0gY29udGFpbmVyICJTdHJlYW1saXQgR1VJIiAiV2ViLWJhc2VkIGludGVyZmFjZSBmb3IgYnJvd3NpbmcsIGluZ2VzdGluZywgYW5kIHF1ZXJ5aW5nIGJvb2tzIiAiUHl0aG9uIDMuMTQsIFN0cmVhbWxpdCIgIldlYiBCcm93c2VyIgoKICAgICAgICAgICAgc2NyaXB0cyA9IGNvbnRhaW5lciAiU2NyaXB0cyBQYWNrYWdlIiAiQ29yZSBidXNpbmVzcyBsb2dpYyBmb3IgaW5nZXN0aW9uLCBjaHVua2luZywgcXVlcnlpbmcsIGFuZCBtYW5hZ2VtZW50IiAiUHl0aG9uIDMuMTQiIHsKICAgICAgICAgICAgICAgICMgQ29tcG9uZW50cwogICAgICAgICAgICAgICAgaW5nZXN0aW9uRW5naW5lID0gY29tcG9uZW50ICJJbmdlc3Rpb24gRW5naW5lIiAiUHJvY2Vzc2VzIEVQVUIvUERGL1RYVC9NRCBib29rcyBpbnRvIGNodW5rcyBhbmQgdXBsb2FkcyB0byBRZHJhbnQiICJiYXRjaF9pbmdlc3QucHksIGluZ2VzdF9ib29rcy5weSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIkluZ2VzdGlvbiIKICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICBjaHVua2luZ1N0cmF0ZWdpZXMgPSBjb21wb25lbnQgIkNodW5raW5nIFN0cmF0ZWdpZXMiICJEb21haW4tc3BlY2lmaWMgY2h1bmtpbmcgKHRlY2huaWNhbCwgcHN5Y2hvbG9neSwgcGhpbG9zb3BoeSwgaGlzdG9yeSkgd2l0aCBhcmd1bWVudC1iYXNlZCBwcmUtY2h1bmtpbmcgZm9yIHBoaWxvc29waGljYWwgdGV4dHMiICJwaGlsb3NvcGhpY2FsX2NodW5raW5nLnB5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiQ2h1bmtpbmciCiAgICAgICAgICAgICAgICB9CgogICAgICAgICAgICAgICAgcmFnUXVlcnlFbmdpbmUgPSBjb21wb25lbnQgIlJBRyBRdWVyeSBFbmdpbmUiICJTZW1hbnRpYyBzZWFyY2ggdmlhIFFkcmFudCB3aXRoIHNpbWlsYXJpdHkgZmlsdGVyaW5nLCBmZXRjaCBtdWx0aXBsaWVyLCBhbmQgTExNIGFuc3dlciBnZW5lcmF0aW9uIiAicmFnX3F1ZXJ5LnB5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiUXVlcnkiCiAgICAgICAgICAgICAgICB9CgogICAgICAgICAgICAgICAgY29sbGVjdGlvbk1hbmFnZW1lbnQgPSBjb21wb25lbnQgIkNvbGxlY3Rpb24gTWFuYWdlbWVudCIgIlRyYWNrcyBpbmdlc3RlZCBib29rcyB2aWEgcGVyLWNvbGxlY3Rpb24gbWFuaWZlc3RzLCBDU1YgZXhwb3J0cywgYW5kIFFkcmFudCBzdGF0aXN0aWNzIiAiY29sbGVjdGlvbl9tYW5pZmVzdC5weSwgcWRyYW50X3V0aWxzLnB5IiB7CiAgICAgICAgICAgICAgICAgICAgdGFncyAiTWFuYWdlbWVudCIKICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICBjYWxpYnJlSW50ZWdyYXRpb24gPSBjb21wb25lbnQgIkNhbGlicmUgSW50ZWdyYXRpb24iICJEaXJlY3QgU1FMaXRlIGFjY2VzcyB0byBDYWxpYnJlIGxpYnJhcnkgZm9yIG1ldGFkYXRhIGFuZCBkaXJlY3QgaW5nZXN0aW9uIiAiY2FsaWJyZV9kYi5weSIgewogICAgICAgICAgICAgICAgICAgIHRhZ3MgIkludGVncmF0aW9uIgogICAgICAgICAgICAgICAgfQoKICAgICAgICAgICAgICAgICMgQ29tcG9uZW50IHJlbGF0aW9uc2hpcHMKICAgICAgICAgICAgICAgIGluZ2VzdGlvbkVuZ2luZSAtPiBjaHVua2luZ1N0cmF0ZWdpZXMgIlVzZXMgY2h1bmtpbmcgc3RyYXRlZ2llcyIKICAgICAgICAgICAgICAgIGluZ2VzdGlvbkVuZ2luZSAtPiBjb2xsZWN0aW9uTWFuYWdlbWVudCAiTG9ncyBpbmdlc3RlZCBib29rcyB0byBtYW5pZmVzdCIKICAgICAgICAgICAgICAgIHJhZ1F1ZXJ5RW5naW5lIC0+IGNvbGxlY3Rpb25NYW5hZ2VtZW50ICJDaGVja3MgY29sbGVjdGlvbiBzdGF0dXMiCiAgICAgICAgICAgICAgICBjYWxpYnJlSW50ZWdyYXRpb24gLT4gaW5nZXN0aW9uRW5naW5lICJQcm92aWRlcyBib29rIHBhdGhzIGZvciBpbmdlc3Rpb24iCiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIGZpbGVzeXN0ZW0gPSBjb250YWluZXIgIkZpbGUgU3lzdGVtIiAiQm9vayBzdG9yYWdlIChpbmdlc3QvLCBpbmdlc3RlZC8pIGFuZCBsb2dzIChsb2dzLykiICJGaWxlIFN5c3RlbSIgIlN0b3JhZ2UiCiAgICAgICAgICAgIGNhbGlicmVEYiA9IGNvbnRhaW5lciAiQ2FsaWJyZSBEYXRhYmFzZSIgIkJvb2sgbWV0YWRhdGEgKHRpdGxlLCBhdXRob3IsIHNlcmllcywgdGFncywgbGFuZ3VhZ2VzKSIgIlNRTGl0ZSAobWV0YWRhdGEuZGIpIiAiRGF0YWJhc2UiCiAgICAgICAgfQoKICAgICAgICAjIEV4dGVybmFsIFN5c3RlbXMKICAgICAgICBxZHJhbnQgPSBzb2Z0d2FyZVN5c3RlbSAiUWRyYW50IFZlY3RvciBEQiIgIlZlY3RvciBzZWFyY2ggZW5naW5lIHN0b3JpbmcgMzg0LWRpbSBlbWJlZGRpbmdzIHdpdGggZG9tYWluL2Jvb2svYXV0aG9yIG1ldGFkYXRhIiAiRXh0ZXJuYWwgU3lzdGVtIiB7CiAgICAgICAgICAgIHRhZ3MgIkV4dGVybmFsIgogICAgICAgIH0KCiAgICAgICAgb3BlbnJvdXRlciA9IHNvZnR3YXJlU3lzdGVtICJPcGVuUm91dGVyIEFQSSIgIkxMTSBpbmZlcmVuY2UgZm9yIGFuc3dlciBnZW5lcmF0aW9uIChtdWx0aXBsZSBtb2RlbHMgc3VwcG9ydGVkKSIgIkV4dGVybmFsIFN5c3RlbSIgewogICAgICAgICAgICB0YWdzICJFeHRlcm5hbCIKICAgICAgICB9CgogICAgICAgICMgU3lzdGVtIENvbnRleHQgUmVsYXRpb25zaGlwcwogICAgICAgIHVzZXIgLT4gYWxleGFuZHJpYVN5c3RlbSAiQnJvd3NlcyBsaWJyYXJ5LCBpbmdlc3RzIGJvb2tzLCBxdWVyaWVzIGZvciBrbm93bGVkZ2UiCiAgICAgICAgYWxleGFuZHJpYVN5c3RlbSAtPiBxZHJhbnQgIlN0b3Jlcy9yZXRyaWV2ZXMgYm9vayBjaHVuayBlbWJlZGRpbmdzIgogICAgICAgIGFsZXhhbmRyaWFTeXN0ZW0gLT4gb3BlbnJvdXRlciAiR2VuZXJhdGVzIG5hdHVyYWwgbGFuZ3VhZ2UgYW5zd2VycyBmcm9tIHJldHJpZXZlZCBjaHVua3MiCgogICAgICAgICMgQ29udGFpbmVyIFJlbGF0aW9uc2hpcHMKICAgICAgICB1c2VyIC0+IGd1aSAiVXNlcyB3ZWIgaW50ZXJmYWNlIgogICAgICAgIGd1aSAtPiBzY3JpcHRzICJDYWxscyBidXNpbmVzcyBsb2dpYyBmdW5jdGlvbnMiCiAgICAgICAgc2NyaXB0cyAtPiBmaWxlc3lzdGVtICJSZWFkcy93cml0ZXMgYm9va3MgYW5kIG1hbmlmZXN0cyIKICAgICAgICBzY3JpcHRzIC0+IGNhbGlicmVEYiAiUXVlcmllcyBib29rIG1ldGFkYXRhIgogICAgICAgIHNjcmlwdHMgLT4gcWRyYW50ICJTdG9yZXMgZW1iZWRkaW5ncywgcmV0cmlldmVzIHNlbWFudGljIG1hdGNoZXMiCiAgICAgICAgc2NyaXB0cyAtPiBvcGVucm91dGVyICJTZW5kcyBjb250ZXh0ICsgcXVlcnkgZm9yIGFuc3dlciBnZW5lcmF0aW9uIgoKICAgICAgICAjIENvbXBvbmVudCBSZWxhdGlvbnNoaXBzIChmcm9tIEdVSSkKICAgICAgICBndWkgLT4gaW5nZXN0aW9uRW5naW5lICJUcmlnZ2VycyBib29rIGluZ2VzdGlvbiB3aXRoIGRvbWFpbiBzZWxlY3Rpb24iCiAgICAgICAgZ3VpIC0+IHJhZ1F1ZXJ5RW5naW5lICJFeGVjdXRlcyBSQUcgcXVlcmllcyB3aXRoIHBhcmFtZXRlcnMiCiAgICAgICAgZ3VpIC0+IGNvbGxlY3Rpb25NYW5hZ2VtZW50ICJEaXNwbGF5cyBjb2xsZWN0aW9uIHN0YXRpc3RpY3MgYW5kIG1hbmlmZXN0cyIKICAgICAgICBndWkgLT4gY2FsaWJyZUludGVncmF0aW9uICJCcm93c2VzIENhbGlicmUgbGlicmFyeSB3aXRoIGZpbHRlcnMiCiAgICB9CgogICAgdmlld3MgewogICAgICAgICMgU3lzdGVtIENvbnRleHQgVmlldwogICAgICAgIHN5c3RlbUNvbnRleHQgYWxleGFuZHJpYVN5c3RlbSAiU3lzdGVtQ29udGV4dCIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICAgICAgYXV0b2xheW91dCBscgogICAgICAgICAgICBkZXNjcmlwdGlvbiAiU3lzdGVtIGNvbnRleHQgZGlhZ3JhbSBzaG93aW5nIEFsZXhhbmRyaWEgUkFHIFN5c3RlbSBhbmQgZXh0ZXJuYWwgZGVwZW5kZW5jaWVzIgogICAgICAgIH0KCiAgICAgICAgIyBDb250YWluZXIgVmlldwogICAgICAgIGNvbnRhaW5lciBhbGV4YW5kcmlhU3lzdGVtICJDb250YWluZXJzIiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICBhdXRvbGF5b3V0IGxyCiAgICAgICAgICAgIGRlc2NyaXB0aW9uICJDb250YWluZXIgZGlhZ3JhbSBzaG93aW5nIG1ham9yIGFyY2hpdGVjdHVyYWwgY29tcG9uZW50cyBvZiBBbGV4YW5kcmlhIgogICAgICAgIH0KCiAgICAgICAgIyBDb21wb25lbnQgVmlldyAoU2NyaXB0cyBQYWNrYWdlKQogICAgICAgIGNvbXBvbmVudCBzY3JpcHRzICJDb21wb25lbnRzIiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICBhdXRvbGF5b3V0IGxyCiAgICAgICAgICAgIGRlc2NyaXB0aW9uICJDb21wb25lbnQgZGlhZ3JhbSBzaG93aW5nIGludGVybmFsIHN0cnVjdHVyZSBvZiBTY3JpcHRzIFBhY2thZ2UiCiAgICAgICAgfQoKICAgICAgICAjIER5bmFtaWMgVmlldzogQm9vayBJbmdlc3Rpb24gRmxvdyAoQ29udGFpbmVyIExldmVsKQogICAgICAgIGR5bmFtaWMgYWxleGFuZHJpYVN5c3RlbSAiQm9va0luZ2VzdGlvbkZsb3ciICJJbGx1c3RyYXRlcyB0aGUgYm9vayBpbmdlc3Rpb24gcHJvY2VzcyBmcm9tIHNlbGVjdGlvbiB0byBRZHJhbnQgdXBsb2FkIiB7CiAgICAgICAgICAgIHVzZXIgLT4gZ3VpICJTZWxlY3RzIGJvb2tzIGZyb20gQ2FsaWJyZSBsaWJyYXJ5IgogICAgICAgICAgICBndWkgLT4gc2NyaXB0cyAiQ2FsbHMgY2FsaWJyZV9kYi5nZXRfYWxsX2Jvb2tzKCkiCiAgICAgICAgICAgIHNjcmlwdHMgLT4gY2FsaWJyZURiICJRdWVyaWVzIGJvb2sgbWV0YWRhdGEiCiAgICAgICAgICAgIGd1aSAtPiBzY3JpcHRzICJUcmlnZ2VycyBpbmdlc3RfYm9va3MucHkgd2l0aCBkb21haW4iCiAgICAgICAgICAgIHNjcmlwdHMgLT4gZmlsZXN5c3RlbSAiUmVhZHMgYm9vayBmaWxlIChFUFVCL1BERi9UWFQpIgogICAgICAgICAgICBzY3JpcHRzIC0+IHFkcmFudCAiVXBsb2FkcyBjaHVua3Mgd2l0aCBlbWJlZGRpbmdzIgogICAgICAgICAgICBzY3JpcHRzIC0+IGZpbGVzeXN0ZW0gIldyaXRlcyBtYW5pZmVzdCBKU09OL0NTViIKICAgICAgICAgICAgZ3VpIC0+IHVzZXIgIkRpc3BsYXlzIGluZ2VzdGlvbiBzdWNjZXNzIgogICAgICAgICAgICBhdXRvbGF5b3V0IGxyCiAgICAgICAgfQoKICAgICAgICAjIER5bmFtaWMgVmlldzogUkFHIFF1ZXJ5IEZsb3cgKENvbnRhaW5lciBMZXZlbCkKICAgICAgICBkeW5hbWljIGFsZXhhbmRyaWFTeXN0ZW0gIlJBR1F1ZXJ5RmxvdyIgIklsbHVzdHJhdGVzIHRoZSBSQUcgcXVlcnkgcHJvY2VzcyBmcm9tIHF1ZXN0aW9uIHRvIGFuc3dlciIgewogICAgICAgICAgICB1c2VyIC0+IGd1aSAiRW50ZXJzIHF1ZXJ5ICsgcGFyYW1ldGVycyIKICAgICAgICAgICAgZ3VpIC0+IHNjcmlwdHMgIkNhbGxzIHBlcmZvcm1fcmFnX3F1ZXJ5KCkiCiAgICAgICAgICAgIHNjcmlwdHMgLT4gcWRyYW50ICJTZW1hbnRpYyBzZWFyY2ggd2l0aCBmZXRjaCBtdWx0aXBsaWVyIgogICAgICAgICAgICBzY3JpcHRzIC0+IG9wZW5yb3V0ZXIgIlNlbmRzIGNvbnRleHQgKyBxdWVyeSBmb3IgYW5zd2VyIgogICAgICAgICAgICBvcGVucm91dGVyIC0+IHNjcmlwdHMgIlJldHVybnMgZ2VuZXJhdGVkIGFuc3dlciIKICAgICAgICAgICAgc2NyaXB0cyAtPiBndWkgIlJldHVybnMgUkFHUmVzdWx0IChhbnN3ZXIgKyBzb3VyY2VzKSIKICAgICAgICAgICAgZ3VpIC0+IHVzZXIgIkRpc3BsYXlzIGFuc3dlciB3aXRoIHNvdXJjZSBjaXRhdGlvbnMiCiAgICAgICAgICAgIGF1dG9sYXlvdXQgbHIKICAgICAgICB9CgogICAgICAgICMgRHluYW1pYyBWaWV3OiBDb21wb25lbnQtTGV2ZWwgSW5nZXN0aW9uCiAgICAgICAgZHluYW1pYyBzY3JpcHRzICJDb21wb25lbnRJbmdlc3Rpb25GbG93IiAiRGV0YWlsZWQgY29tcG9uZW50IGludGVyYWN0aW9ucyBkdXJpbmcgYm9vayBpbmdlc3Rpb24iIHsKICAgICAgICAgICAgY2FsaWJyZUludGVncmF0aW9uIC0+IGluZ2VzdGlvbkVuZ2luZSAiUHJvdmlkZXMgYm9vayBwYXRoIGFuZCBtZXRhZGF0YSIKICAgICAgICAgICAgaW5nZXN0aW9uRW5naW5lIC0+IGNodW5raW5nU3RyYXRlZ2llcyAiQXBwbGllcyBkb21haW4tc3BlY2lmaWMgY2h1bmtpbmciCiAgICAgICAgICAgIGNodW5raW5nU3RyYXRlZ2llcyAtPiBpbmdlc3Rpb25FbmdpbmUgIlJldHVybnMgY2h1bmtzIgogICAgICAgICAgICBpbmdlc3Rpb25FbmdpbmUgLT4gY29sbGVjdGlvbk1hbmFnZW1lbnQgIkxvZ3MgdG8gbWFuaWZlc3QiCiAgICAgICAgICAgIGF1dG9sYXlvdXQgbHIKICAgICAgICB9CgogICAgICAgICMgRHluYW1pYyBWaWV3OiBDb21wb25lbnQtTGV2ZWwgUXVlcnkKICAgICAgICBkeW5hbWljIHNjcmlwdHMgIkNvbXBvbmVudFF1ZXJ5RmxvdyIgIkRldGFpbGVkIGNvbXBvbmVudCBpbnRlcmFjdGlvbnMgZHVyaW5nIFJBRyBxdWVyeSIgewogICAgICAgICAgICByYWdRdWVyeUVuZ2luZSAtPiBjb2xsZWN0aW9uTWFuYWdlbWVudCAiVmVyaWZpZXMgY29sbGVjdGlvbiBleGlzdHMiCiAgICAgICAgICAgIGNvbGxlY3Rpb25NYW5hZ2VtZW50IC0+IHJhZ1F1ZXJ5RW5naW5lICJSZXR1cm5zIGNvbGxlY3Rpb24gc3RhdHVzIgogICAgICAgICAgICBhdXRvbGF5b3V0IGxyCiAgICAgICAgfQoKICAgICAgICAjIFN0eWxlcwogICAgICAgIHN0eWxlcyB7CiAgICAgICAgICAgIGVsZW1lbnQgIlNvZnR3YXJlIFN5c3RlbSIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMTE2OGJkCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94CiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiRXh0ZXJuYWwgU3lzdGVtIiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM5OTk5OTkKICAgICAgICAgICAgICAgIGNvbG9yICNmZmZmZmYKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJDb250YWluZXIiIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzQzOGRkNQogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICAgICAgc2hhcGUgUm91bmRlZEJveAogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkNvbXBvbmVudCIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjODViYmYwCiAgICAgICAgICAgICAgICBjb2xvciAjMDAwMDAwCiAgICAgICAgICAgICAgICBzaGFwZSBDb21wb25lbnQKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsKICAgICAgICAgICAgICAgIHNoYXBlIHBlcnNvbgogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjMDg0MjdiCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiRGF0YWJhc2UiIHsKICAgICAgICAgICAgICAgIHNoYXBlIEN5bGluZGVyCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiU3RvcmFnZSIgewogICAgICAgICAgICAgICAgc2hhcGUgRm9sZGVyCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiV2ViIEJyb3dzZXIiIHsKICAgICAgICAgICAgICAgIHNoYXBlIFdlYkJyb3dzZXIKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICBjb25maWd1cmF0aW9uIHsKICAgICAgICBzY29wZSBzb2Z0d2FyZXN5c3RlbQogICAgfQp9"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "containerId" : "4",
+      "description" : "Component diagram showing internal structure of Scripts Package",
+      "dimensions" : {
+        "height" : 1708,
+        "width" : 3160
+      },
+      "elements" : [ {
+        "id" : "3",
+        "x" : 220,
+        "y" : 581
+      }, {
+        "id" : "5",
+        "x" : 1720,
+        "y" : 952
+      }, {
+        "id" : "6",
+        "x" : 2470,
+        "y" : 952
+      }, {
+        "id" : "7",
+        "x" : 1720,
+        "y" : 352
+      }, {
+        "id" : "8",
+        "x" : 2470,
+        "y" : 352
+      }, {
+        "id" : "9",
+        "x" : 970,
+        "y" : 352
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "Components",
+      "name" : "Component View: Alexandria RAG System - Scripts Package",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "11"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "13",
+        "vertices" : [ {
+          "x" : 1420,
+          "y" : 669
+        } ]
+      }, {
+        "id" : "27",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 877
+        } ]
+      }, {
+        "id" : "28",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 802
+        }, {
+          "x" : 1420,
+          "y" : 802
+        } ]
+      }, {
+        "id" : "29",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 202
+        }, {
+          "x" : 2170,
+          "y" : 202
+        } ]
+      }, {
+        "id" : "30"
+      } ]
+    } ],
+    "configuration" : {
+      "branding" : { },
+      "lastSavedView" : "Components",
+      "metadataSymbols" : "SquareBrackets",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#85bbf0",
+          "color" : "#000000",
+          "shape" : "Component",
+          "tag" : "Component"
+        }, {
+          "background" : "#438dd5",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Container"
+        }, {
+          "shape" : "Cylinder",
+          "tag" : "Database"
+        }, {
+          "background" : "#999999",
+          "color" : "#ffffff",
+          "tag" : "External System"
+        }, {
+          "background" : "#08427b",
+          "color" : "#ffffff",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#1168bd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Software System"
+        }, {
+          "shape" : "Folder",
+          "tag" : "Storage"
+        }, {
+          "shape" : "WebBrowser",
+          "tag" : "Web Browser"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Container diagram showing major architectural components of Alexandria",
+      "dimensions" : {
+        "height" : 2520,
+        "width" : 3070
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 199,
+        "y" : 712
+      }, {
+        "id" : "3",
+        "x" : 899,
+        "y" : 762
+      }, {
+        "id" : "4",
+        "x" : 1649,
+        "y" : 762
+      }, {
+        "id" : "14",
+        "x" : 2399,
+        "y" : 762
+      }, {
+        "id" : "15",
+        "x" : 2399,
+        "y" : 162
+      }, {
+        "id" : "16",
+        "x" : 2399,
+        "y" : 1362
+      }, {
+        "id" : "17",
+        "x" : 2399,
+        "y" : 1962
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "Containers",
+      "name" : "Container View: Alexandria RAG System",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "21"
+      }, {
+        "id" : "22"
+      }, {
+        "id" : "23"
+      }, {
+        "id" : "24"
+      }, {
+        "id" : "25"
+      }, {
+        "id" : "26",
+        "vertices" : [ {
+          "x" : 2399,
+          "y" : 1812
+        } ]
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "dynamicViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Illustrates the book ingestion process from selection to Qdrant upload",
+      "dimensions" : {
+        "height" : 2020,
+        "width" : 2390
+      },
+      "elementId" : "2",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 995,
+        "y" : 1363
+      }, {
+        "id" : "3",
+        "x" : 220,
+        "y" : 763
+      }, {
+        "id" : "4",
+        "x" : 970,
+        "y" : 763
+      }, {
+        "id" : "14",
+        "x" : 1720,
+        "y" : 763
+      }, {
+        "id" : "15",
+        "x" : 1720,
+        "y" : 163
+      }, {
+        "id" : "16",
+        "x" : 1720,
+        "y" : 1363
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "BookIngestionFlow",
+      "name" : "Dynamic View: Alexandria RAG System",
+      "order" : 4,
+      "relationships" : [ {
+        "description" : "Selects books from Calibre library",
+        "id" : "21",
+        "order" : "1",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 918,
+          "y" : 1124
+        } ]
+      }, {
+        "description" : "Calls calibre_db.get_all_books()",
+        "id" : "22",
+        "order" : "2",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 820,
+          "y" : 1063
+        } ]
+      }, {
+        "description" : "Queries book metadata",
+        "id" : "24",
+        "order" : "3",
+        "response" : false
+      }, {
+        "description" : "Triggers ingest_books.py with domain",
+        "id" : "22",
+        "order" : "4",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 820,
+          "y" : 763
+        } ]
+      }, {
+        "description" : "Reads book file (EPUB/PDF/TXT)",
+        "id" : "23",
+        "order" : "5",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 1570,
+          "y" : 1063
+        } ]
+      }, {
+        "description" : "Uploads chunks with embeddings",
+        "id" : "25",
+        "order" : "6",
+        "response" : false
+      }, {
+        "description" : "Writes manifest JSON/CSV",
+        "id" : "23",
+        "order" : "7",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 1570,
+          "y" : 763
+        } ]
+      }, {
+        "description" : "Displays ingestion success",
+        "id" : "21",
+        "order" : "8",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 721,
+          "y" : 1351
+        } ]
+      } ]
+    }, {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Illustrates the RAG query process from question to answer",
+      "dimensions" : {
+        "height" : 1700,
+        "width" : 2370
+      },
+      "elementId" : "2",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 994,
+        "y" : 1042
+      }, {
+        "id" : "3",
+        "x" : 219,
+        "y" : 442
+      }, {
+        "id" : "4",
+        "x" : 969,
+        "y" : 442
+      }, {
+        "id" : "16",
+        "x" : 1719,
+        "y" : 142
+      }, {
+        "id" : "17",
+        "x" : 1719,
+        "y" : 742
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "RAGQueryFlow",
+      "name" : "Dynamic View: Alexandria RAG System",
+      "order" : 5,
+      "relationships" : [ {
+        "description" : "Enters query + parameters",
+        "id" : "21",
+        "order" : "1",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 917,
+          "y" : 803
+        } ]
+      }, {
+        "description" : "Calls perform_rag_query()",
+        "id" : "22",
+        "order" : "2",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 819,
+          "y" : 742
+        } ]
+      }, {
+        "description" : "Semantic search with fetch multiplier",
+        "id" : "25",
+        "order" : "3",
+        "response" : false
+      }, {
+        "description" : "Sends context + query for answer",
+        "id" : "26",
+        "order" : "4",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 1513,
+          "y" : 881
+        } ]
+      }, {
+        "description" : "Returns generated answer",
+        "id" : "26",
+        "order" : "5",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 1624,
+          "y" : 602
+        } ]
+      }, {
+        "description" : "Returns RAGResult (answer + sources)",
+        "id" : "22",
+        "order" : "6",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 819,
+          "y" : 442
+        } ]
+      }, {
+        "description" : "Displays answer with source citations",
+        "id" : "21",
+        "order" : "7",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 720,
+          "y" : 1030
+        } ]
+      } ]
+    }, {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Detailed component interactions during book ingestion",
+      "dimensions" : {
+        "height" : 1538,
+        "width" : 2430
+      },
+      "elementId" : "4",
+      "elements" : [ {
+        "id" : "5",
+        "x" : 990,
+        "y" : 782
+      }, {
+        "id" : "6",
+        "x" : 1740,
+        "y" : 782
+      }, {
+        "id" : "8",
+        "x" : 1740,
+        "y" : 182
+      }, {
+        "id" : "9",
+        "x" : 240,
+        "y" : 782
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "ComponentIngestionFlow",
+      "name" : "Dynamic View: Alexandria RAG System - Scripts Package",
+      "order" : 6,
+      "relationships" : [ {
+        "description" : "Provides book path and metadata",
+        "id" : "13",
+        "order" : "1",
+        "response" : false
+      }, {
+        "description" : "Applies domain-specific chunking",
+        "id" : "10",
+        "order" : "2",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 1590,
+          "y" : 1082
+        } ]
+      }, {
+        "description" : "Returns chunks",
+        "id" : "10",
+        "order" : "3",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 1590,
+          "y" : 782
+        } ]
+      }, {
+        "description" : "Logs to manifest",
+        "id" : "11",
+        "order" : "4",
+        "response" : false
+      } ]
+    }, {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Detailed component interactions during RAG query",
+      "dimensions" : {
+        "height" : 938,
+        "width" : 1680
+      },
+      "elementId" : "4",
+      "elements" : [ {
+        "id" : "7",
+        "x" : 240,
+        "y" : 182
+      }, {
+        "id" : "8",
+        "x" : 990,
+        "y" : 182
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "ComponentQueryFlow",
+      "name" : "Dynamic View: Alexandria RAG System - Scripts Package",
+      "order" : 7,
+      "relationships" : [ {
+        "description" : "Verifies collection exists",
+        "id" : "12",
+        "order" : "1",
+        "response" : false,
+        "vertices" : [ {
+          "x" : 840,
+          "y" : 482
+        } ]
+      }, {
+        "description" : "Returns collection status",
+        "id" : "12",
+        "order" : "2",
+        "response" : true,
+        "vertices" : [ {
+          "x" : 840,
+          "y" : 182
+        } ]
+      } ]
+    } ],
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "System context diagram showing Alexandria RAG System and external dependencies",
+      "dimensions" : {
+        "height" : 1300,
+        "width" : 2300
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 199,
+        "y" : 393
+      }, {
+        "id" : "2",
+        "x" : 899,
+        "y" : 443
+      }, {
+        "id" : "16",
+        "x" : 1649,
+        "y" : 143
+      }, {
+        "id" : "17",
+        "x" : 1649,
+        "y" : 743
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "SystemContext",
+      "name" : "System Context View: Alexandria RAG System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "18"
+      }, {
+        "id" : "19"
+      }, {
+        "id" : "20"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

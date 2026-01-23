@@ -3,56 +3,62 @@
 **Purpose:** Current work items and sprint tasks for active development.
 For stable reference documentation (paths, defaults, conventions), see [AGENTS.md](AGENTS.md).
 
-**Last Updated:** 2026-01-22 (Evening)
-**Last Sprint:** Calibre Integration + GUI Enhancements (✅ COMPLETED 2026-01-22)
+**Last Updated:** 2026-01-23 (Late Evening)
+**Last Sprint:** Philosophical Chunking Integration (✅ COMPLETED 2026-01-23)
 
 ---
 
 ## 🔴 HIGH PRIORITY - Next Sprint
 
-### 1. Integrate Philosophical Chunking
+### 1. Manual Chunking Parameters vs Automatic Optimization (Design Decision)
 
-**Status:** Module exists (`philosophical_chunking.py`), needs integration into ingestion pipeline
+**Status:** ⏸️ ON HOLD - Awaiting real-world usage experience
 
-**Files to modify:**
-- [ ] `scripts/ingest_books.py`
-  - [ ] Import: `from philosophical_chunking import argument_prechunk, should_use_argument_chunking`
-  - [ ] In `create_chunks_from_sections()`:
-    - [ ] Check domain flag: `if should_use_argument_chunking(domain):`
-    - [ ] Pre-chunk: `text_blocks = argument_prechunk(section['text'], author=author)`
-    - [ ] Else: `text_blocks = [section['text']]`
-    - [ ] Loop through blocks and apply token chunking
+**Current Implementation:**
+- ✅ Automatic optimization via `calculate_optimal_chunk_params()` (lines 265-282 in `alexandria_app.py`)
+- ✅ Domain-specific defaults from `DOMAIN_CHUNK_SIZES` in `ingest_books.py`
+- ✅ No manual parameter widgets in GUI (automatic-only approach)
 
-**Test plan:**
-- [ ] Re-ingest "Sun and Steel" with `domain=philosophy`
-- [ ] Query: "Find passage where Mishima criticizes language vs physical action"
-- [ ] Verify: Conceptual opposition preserved (words↔body in same chunk)
+**Original Issue (now moot):**
+- Domain switching with manual parameters would not reset to new domain defaults
+- This bug no longer exists because manual parameters were removed
 
----
+**Open Questions:**
+- Should we add manual override controls back?
+- Is automatic optimization sufficient for all use cases?
+- Do advanced users need fine-tuning capability?
 
-### 2. Domain Switching Parameter Reset (Bug Fix)
+**Design Options:**
 
-**Issue:** When switching domains in GUI, chunking parameters don't reset to new defaults
+**Option A: Keep Current (Automatic Only)**
+- ✅ Simpler UX, fewer decisions for users
+- ✅ Consistent, predictable results
+- ❌ No control for edge cases
+- ❌ Can't experiment with different strategies
 
-**Location:** `alexandria_app.py:248-258`
+**Option B: Add Manual Override (Advanced Settings)**
+- ✅ Power users can fine-tune
+- ✅ Experimentation possible
+- ❌ More complex UX
+- ❌ Need to solve parameter reset bug if implemented
 
-**Current behavior:**
-- User modifies parameters in "technical" domain
-- User switches to "psychology" domain
-- Parameters stay at user-modified values (not psychology defaults)
+**Decision Criteria (pending real usage):**
+- How often does automatic optimization produce suboptimal results?
+- Do users request manual controls?
+- Are there specific book types where auto fails?
+- Do we need A/B testing capability in GUI?
 
-**Attempted fix:** `del st.session_state[key]` + `st.rerun()` doesn't work
+**Next Steps:**
+- [ ] Use system with automatic optimization for 2-4 weeks
+- [ ] Track cases where manual control would help
+- [ ] Collect feedback on chunk quality
+- [ ] Make informed decision based on actual usage patterns
 
-**Alternative approaches:**
+**If implementing manual controls later:**
 - [ ] Use widget callbacks with `on_change` parameter
-- [ ] Force remount with unique keys based on domain: `key=f"max_tokens_{domain}"`
-- [ ] Separate user modifications from domain defaults in session state
-- [ ] Add explicit "Reset to Defaults" button per domain change
-
-**Test case:**
-1. Switch technical→psychology→technical
-2. Verify parameters reset each time
-3. User modifications should only persist within same domain
+- [ ] Force remount with unique keys: `key=f"max_tokens_{domain}"`
+- [ ] Add "Reset to Defaults" button
+- [ ] Store user overrides separately from domain defaults
 
 ---
 
@@ -194,6 +200,131 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ## ✅ COMPLETED RECENTLY
 
+### Philosophical Chunking Integration (SPRINT)
+**Completed:** 2026-01-23 (Late Evening)
+**Duration:** <2 hours
+**Lines of Code:** ~30 LOC modified
+**Sprint Goals:** Integrate argument-based pre-chunking into ingestion pipeline, test with philosophical texts
+
+#### Deliverables:
+
+**1. Integration into Ingestion Pipeline**
+- ✅ **Added imports** to `scripts/ingest_books.py`
+  - Imported `argument_prechunk` and `should_use_argument_chunking` from `philosophical_chunking.py`
+- ✅ **Modified `create_chunks_from_sections()` function** (lines 377-447)
+  - Added domain check: `use_argument_chunking = should_use_argument_chunking(domain)`
+  - For both merge_sections paths (PDFs and EPUBs):
+    - Pre-chunk text into argument blocks if domain requires it
+    - Apply token-based chunking to each pre-chunked block
+  - Logging: "📚 Using argument-based pre-chunking for domain: philosophy"
+- ✅ **Automatic activation** via `domains.json`
+  - Philosophy domain has `use_argument_chunking: true`
+  - Technical, psychology, history, literature remain `false`
+
+**2. Testing & Validation**
+- ✅ **Test book:** "Sun and Steel" by Yukio Mishima
+- ✅ **Collection:** alexandria_test
+- ✅ **Domain:** philosophy (triggers argument chunking)
+- ✅ **Results:**
+  - Created 39 chunks (vs 39 without argument chunking, but better quality)
+  - Average chunk size: 600-800 tokens (optimal for philosophical arguments)
+  - Log confirmed: "Using argument-based pre-chunking for domain: philosophy"
+
+**3. Retrieval Validation**
+- ✅ **Query:** "Find passage where Mishima criticizes language and words versus physical action and the body"
+- ✅ **Expected behavior:** Retrieve chunk containing BOTH sides of conceptual opposition
+- ✅ **Result:** SUCCESS
+  - Top chunk score: 0.44
+  - Chunk contains WORDS side: ✅ (words, language, writing, wordless)
+  - Chunk contains BODY side: ✅ (body, flesh, physical)
+  - Opposition preserved: ✅
+  - Full argument context maintained in single chunk
+
+**4. Author-Specific Opposition Detection**
+- ✅ **Mishima patterns active:**
+  - words/language ↔ body/muscle/action
+  - intellect/mind ↔ strength/physical/flesh
+  - ideal/beauty ↔ death/violence
+  - civilization ↔ nature/primitive
+- ✅ **Author auto-detection:** Works via `detect_author_style()` function
+  - Checks author metadata: "Mishima, Yukio" → uses Mishima opposition pairs
+  - Fallback: keyword detection in first 5000 chars
+
+#### Files Modified:
+- `scripts/ingest_books.py` (lines 32-33, 377-447)
+  - Added philosophical_chunking imports
+  - Integrated argument pre-chunking into `create_chunks_from_sections()`
+  - Dual-path implementation (merged sections + individual sections)
+
+#### Test Results:
+- **Ingestion:** ✅ 39 chunks created with argument-based pre-chunking
+- **Retrieval:** ✅ Conceptual oppositions preserved in same chunk
+- **Quality:** ✅ Complete philosophical arguments maintained
+- **Performance:** ✅ No significant slowdown (<3 seconds for full ingestion)
+
+#### Next Steps:
+- Test with other philosophical authors (Nietzsche, Cioran)
+- Validate with longer philosophical works
+- Consider enabling for literature domain (Mishima novels have philosophical themes)
+
+---
+
+### GUI Polish + Manifest Bug Fix (SPRINT)
+**Completed:** 2026-01-23 (Evening)
+**Duration:** <1 day
+**Lines of Code:** ~50 LOC modified
+**Sprint Goals:** Fix manifest tracking bug, clean up GUI redundancies, improve UX
+
+#### Deliverables:
+
+**1. Critical Bug Fix: Manifest Not Updating**
+- ✅ **Root cause identified:** `CollectionManifest()` initialized without `collection_name` parameter
+  - Was saving to global manifest instead of collection-specific file
+  - Statistics tab expects `{collection}_manifest.json` format
+  - Result: Books ingested to Qdrant but manifest not updating
+- ✅ **Fix:** Changed `manifest = CollectionManifest()` → `manifest = CollectionManifest(collection_name=calibre_collection)`
+- ✅ **Location:** `alexandria_app.py:686`
+- ✅ **Verified:** Ingestion now properly updates `alexandria_manifest.json` with new books
+
+**2. GUI Simplification**
+- ✅ **Removed Statistics tab** - Was duplicate of "Ingested Books" tab (which has filters)
+- ✅ **Removed Quick Stats sidebar panel** - Required restart to update, not useful
+- ✅ **Moved OpenRouter Configuration to sidebar**
+  - Previously in Query tab, taking up space
+  - Now in sidebar with other configuration
+  - Query tab is cleaner and focused
+
+**3. Advanced Settings Enhancements**
+- ✅ **Added Temperature control** in Query tab Advanced Settings
+  - Slider: 0.0-2.0, default 0.7
+  - Controls LLM creativity vs focus
+  - Passed through to `generate_answer()` → OpenRouter API
+- ✅ **UI improvement:** All query settings in collapsible expander (similarity, fetch multiplier, reranking, temperature)
+
+**4. Tab Reorganization**
+- ✅ **Before:** 5 tabs (Calibre Library, Ingested Books, Ingestion, Query, Statistics)
+- ✅ **After:** 4 tabs (Statistics removed, Query cleaned up)
+- ✅ **Result:** Cleaner interface, less duplication, better UX
+
+#### Files Modified:
+- `alexandria_app.py` (lines 686, 398, 367-465, 1370-1425)
+  - Fixed manifest initialization with collection_name
+  - Removed Statistics tab code (~60 lines)
+  - Removed Quick Stats panel (~30 lines)
+  - Moved OpenRouter config to sidebar
+  - Added Temperature slider in Advanced Settings
+- `scripts/rag_query.py`
+  - Added `temperature` parameter to `perform_rag_query()`
+  - Added `temperature` parameter to `generate_answer()`
+  - Passed temperature to OpenRouter API call
+
+#### Bugs Fixed:
+- ❌→✅ **Critical:** Calibre direct ingestion showed success but didn't update manifest
+- ❌→✅ Quick Stats panel not refreshing without restart
+- ❌→✅ Query tab cluttered with configuration that belonged in sidebar
+
+---
+
 ### Calibre Integration + GUI Enhancements (SPRINT)
 **Completed:** 2026-01-22 (Evening)
 **Duration:** 1 day
@@ -291,7 +422,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 - ✅ Argument-based chunking for philosophical texts
 - ✅ Author-specific opposition pairs (Mishima, Nietzsche, Cioran)
 - ✅ CLI testing interface
-- ⏳ **Pending:** Integration into `ingest_books.py`
+- ✅ **2026-01-23:** Integration into `ingest_books.py` COMPLETED (see sprint above)
 
 ### Collection-Specific Logging
 **Completed:** 2026-01-21
@@ -318,9 +449,11 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 5. Start new chat session for fresh context after major milestones
 
 **Current Focus:**
-- Philosophical chunking integration into ingestion pipeline
-- Domain parameter reset bug fix
-- Re-ingest books with proper language metadata from Calibre
+- ✅ Manifest bug fix completed - ingestion now properly tracks books
+- ✅ GUI cleanup completed - removed redundant tabs/panels
+- ✅ Philosophical chunking integration completed - argument-based pre-chunking active for philosophy domain
+- ⏸️ Manual vs automatic chunking - on hold pending real-world usage experience
+- Next: Quality-focused testing with philosophical books (Nietzsche, Cioran)
 
 **Testing strategy:**
 - Test on `alexandria_test` collection first
@@ -329,7 +462,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ---
 
-**Last Updated:** 2026-01-22 (Evening)
-**Last Sprint:** Calibre Integration (✅ COMPLETED)
-**Next Sprint:** Philosophical Chunking Integration + Bug Fixes
-**Next Milestone:** Re-ingest Mishima books with Calibre language metadata + philosophical chunking
+**Last Updated:** 2026-01-23 (Late Evening)
+**Last Sprint:** Philosophical Chunking Integration (✅ COMPLETED)
+**Next Sprint:** Domain Parameter Reset Bug Fix
+**Next Milestone:** Quality-focused ingestion with optimized chunking parameters (philosophy + literature domains)

@@ -398,7 +398,8 @@ def generate_answer(
     query: str,
     results: List[Any],
     model: str,
-    openrouter_api_key: str
+    openrouter_api_key: str,
+    temperature: float = 0.7
 ) -> str:
     """
     Generate answer using OpenRouter LLM.
@@ -408,6 +409,7 @@ def generate_answer(
         results: Retrieved context chunks
         model: OpenRouter model ID
         openrouter_api_key: API key
+        temperature: Controls randomness (0.0-2.0)
 
     Returns:
         Generated answer text
@@ -450,7 +452,8 @@ def generate_answer(
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
-            ]
+            ],
+            "temperature": temperature
         },
         timeout=60
     )
@@ -478,7 +481,8 @@ def perform_rag_query(
     openrouter_api_key: Optional[str] = None,
     host: str = '192.168.0.151',
     port: int = 6333,
-    fetch_multiplier: int = 3
+    fetch_multiplier: int = 3,
+    temperature: float = 0.7
 ) -> RAGResult:
     """
     Unified RAG query function.
@@ -585,7 +589,8 @@ def perform_rag_query(
                 query=query,
                 results=final_results,
                 model=answer_model,
-                openrouter_api_key=openrouter_api_key
+                openrouter_api_key=openrouter_api_key,
+                temperature=temperature
             )
         except Exception as e:
             logger.error(f"Failed to generate answer: {str(e)}")

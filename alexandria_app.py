@@ -365,42 +365,124 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### 📊 Quick Stats")
+    st.markdown("### 🔑 OpenRouter")
 
-    # Load stats from all manifest files
-    manifest_dir = Path("logs")
-    manifest_files = list(manifest_dir.glob(MANIFEST_GLOB_PATTERN))
+    # Initialize session state for API key if not present
+    if 'openrouter_api_key' not in st.session_state:
+        # Try to load from secrets.toml first (persistent across restarts)
+        try:
+            st.session_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
+        except Exception:
+            st.session_state.openrouter_api_key = ""
 
-    if manifest_files:
-        total_collections = len(manifest_files)
-        total_books = 0
-        total_chunks = 0
+    openrouter_api_key = st.text_input(
+        "OpenRouter API Key",
+        type="password",
+        value=st.session_state.openrouter_api_key,
+        help="Get your API key from https://openrouter.ai/keys"
+    )
 
-        for mf in manifest_files:
+    if st.button("💾 Save Permanently", use_container_width=True):
+        if openrouter_api_key:
+            # Save to session state
+            st.session_state.openrouter_api_key = openrouter_api_key
+
+            # Save to secrets.toml for persistence across restarts
+            secrets_path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
             try:
-                with open(mf, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    # Each manifest has collections dict
-                    for collection_data in data.get('collections', {}).values():
-                        books = collection_data.get('books', [])
-                        total_books += len(books)
-                        total_chunks += collection_data.get('total_chunks', 0)
-            except:
-                pass
+                secrets_path.parent.mkdir(exist_ok=True)
+                with open(secrets_path, 'w') as f:
+                    f.write('# Streamlit Secrets - DO NOT COMMIT TO GIT\n')
+                    f.write('# This file stores sensitive API keys and credentials\n\n')
+                    f.write('# OpenRouter API Key\n')
+                    f.write('# Get your key from: https://openrouter.ai/keys\n')
+                    f.write(f'OPENROUTER_API_KEY = "{openrouter_api_key}"\n')
+                st.success("✅ Saved!")
+            except Exception as e:
+                st.error(f"❌ Failed: {e}")
+        else:
+            st.warning("⚠️ Enter API key first")
 
-        st.metric("Collections", total_collections)
-        st.metric("Total Books", total_books)
-        st.metric("Total Chunks", f"{total_chunks:,}")
+    # Model selection - Fetch from OpenRouter API
+    if openrouter_api_key:
+        if st.button("🔄 Fetch Models", use_container_width=True):
+            with st.spinner("Fetching..."):
+                try:
+                    import requests
+                    response = requests.get(
+                        "https://openrouter.ai/api/v1/models",
+                        headers={"Authorization": f"Bearer {openrouter_api_key}"}
+                    )
+
+                    if response.status_code == 200:
+                        models_data = response.json().get("data", [])
+
+                        # Build models dict with pricing info
+                        openrouter_models = {}
+                        for model in models_data:
+                            model_id = model.get("id", "")
+                            model_name = model.get("name", model_id)
+
+                            # Check if free (pricing = 0)
+                            pricing = model.get("pricing", {})
+                            prompt_price = float(pricing.get("prompt", "0"))
+                            completion_price = float(pricing.get("completion", "0"))
+                            is_free = (prompt_price == 0 and completion_price == 0)
+
+                            # Add emoji indicator
+                            emoji = "🆓" if is_free else "💰"
+                            display_name = f"{emoji} {model_name}"
+
+                            openrouter_models[display_name] = model_id
+
+                        # Sort: free first, then by name
+                        sorted_models = dict(sorted(
+                            openrouter_models.items(),
+                            key=lambda x: (0 if x[0].startswith("🆓") else 1, x[0])
+                        ))
+
+                        # Store in session state
+                        st.session_state['openrouter_models'] = sorted_models
+                        st.success(f"✅ {len(sorted_models)} models")
+                    else:
+                        st.error(f"Failed: {response.status_code}")
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+
+    # Use cached models or show empty state
+    if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
+        openrouter_models = st.session_state['openrouter_models']
+        st.caption(f"🆓 = Free, 💰 = Paid")
+
+        # Find default index (last selected model if exists)
+        default_index = 0
+        if 'last_selected_model' in st.session_state:
+            try:
+                default_index = list(openrouter_models.keys()).index(st.session_state['last_selected_model'])
+            except (ValueError, KeyError):
+                default_index = 0
+
+        selected_model_name = st.selectbox(
+            "Select Model",
+            list(openrouter_models.keys()),
+            index=default_index,
+            help="Free models are great for testing"
+        )
+
+        # Save last selected model
+        st.session_state['last_selected_model'] = selected_model_name
+        selected_model = openrouter_models[selected_model_name]
     else:
-        st.info("No manifest found. Run ingestion first.")
+        # No models fetched yet
+        selected_model_name = None
+        selected_model = None
 
 # Main content
-tab0, tab1, tab2, tab3, tab4 = st.tabs([
+tab0, tab1, tab2, tab3 = st.tabs([
     "📚 Calibre Library",
     "📖 Ingested Books",
     "🔄 Ingestion",
-    "🔍 Query",
-    "📊 Statistics"
+    "🔍 Query"
 ])
 
 # ============================================
@@ -679,6 +761,12 @@ with tab0:
                     st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
 
                     if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
+                        # Show configuration being used
+                        st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
+
+                        # Initialize manifest for tracking (collection-specific)
+                        manifest = CollectionManifest(collection_name=calibre_collection)
+
                         # Progress tracking
                         progress_bar = st.progress(0)
                         status_text = st.empty()
@@ -686,6 +774,7 @@ with tab0:
                         success_count = 0
                         error_count = 0
                         errors = []
+                        ingested_books = []
 
                         for idx, book in enumerate(selected_books):
                             # Update progress
@@ -721,7 +810,7 @@ with tab0:
                                 file_path = matching_files[0]
 
                                 # Ingest the book
-                                ingest_book(
+                                result = ingest_book(
                                     filepath=str(file_path),
                                     domain=calibre_domain,
                                     collection_name=calibre_collection,
@@ -729,7 +818,20 @@ with tab0:
                                     qdrant_port=qdrant_port
                                 )
 
-                                success_count += 1
+                                if result and result.get('success'):
+                                    success_count += 1
+                                    ingested_books.append({
+                                        'file_path': result['filepath'],
+                                        'book_title': result['title'],
+                                        'author': result['author'],
+                                        'domain': calibre_domain,
+                                        'chunks': result['chunks'],
+                                        'file_size_mb': result['file_size_mb']
+                                    })
+                                else:
+                                    error_msg = result.get('error', 'Failed to extract content or ingest') if result else 'Unknown error'
+                                    errors.append(f"{book.title}: {error_msg}")
+                                    error_count += 1
 
                             except Exception as e:
                                 errors.append(f"{book.title}: {str(e)}")
@@ -738,6 +840,29 @@ with tab0:
                         # Final status
                         progress_bar.progress(1.0)
                         status_text.text("✅ Ingestion complete!")
+
+                        # Update manifest with successfully ingested books
+                        if ingested_books:
+                            for book_info in ingested_books:
+                                manifest.add_book(
+                                    collection_name=calibre_collection,
+                                    book_path=book_info['file_path'],
+                                    book_title=book_info['book_title'],
+                                    author=book_info['author'],
+                                    domain=book_info['domain'],
+                                    chunks_count=book_info['chunks'],
+                                    file_size_mb=book_info['file_size_mb']
+                                )
+                            st.success(f"📝 Updated manifest with {len(ingested_books)} book(s)")
+
+                        # Verify ingestion by checking collection
+                        try:
+                            from qdrant_client import QdrantClient
+                            client = QdrantClient(host=qdrant_host, port=qdrant_port)
+                            collection_info = client.get_collection(calibre_collection)
+                            st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not verify collection: {e}")
 
                         if success_count > 0:
                             st.success(f"✅ Successfully ingested {success_count} books!")
@@ -1245,135 +1370,18 @@ with tab2:
 with tab3:
     st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
 
-    # OpenRouter configuration
-    st.markdown("#### 🔑 OpenRouter Configuration")
+    # Get API key and model from sidebar
+    openrouter_api_key = st.session_state.get('openrouter_api_key', '')
+    selected_model_name = st.session_state.get('last_selected_model', None)
 
-    # Initialize session state for API key if not present
-    if 'openrouter_api_key' not in st.session_state:
-        # Try to load from secrets.toml first (persistent across restarts)
-        try:
-            st.session_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
-        except Exception:
-            st.session_state.openrouter_api_key = ""
-
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        openrouter_api_key = st.text_input(
-            "OpenRouter API Key",
-            type="password",
-            value=st.session_state.openrouter_api_key,
-            help="Get your API key from https://openrouter.ai/keys"
-        )
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Save Permanently"):
-            if openrouter_api_key:
-                # Save to session state
-                st.session_state.openrouter_api_key = openrouter_api_key
-
-                # Save to secrets.toml for persistence across restarts
-                secrets_path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
-                try:
-                    secrets_path.parent.mkdir(exist_ok=True)
-                    with open(secrets_path, 'w') as f:
-                        f.write('# Streamlit Secrets - DO NOT COMMIT TO GIT\n')
-                        f.write('# This file stores sensitive API keys and credentials\n\n')
-                        f.write('# OpenRouter API Key\n')
-                        f.write('# Get your key from: https://openrouter.ai/keys\n')
-                        f.write(f'OPENROUTER_API_KEY = "{openrouter_api_key}"\n')
-                    st.success("✅ Saved permanently! Will persist across restarts.")
-                except Exception as e:
-                    st.error(f"❌ Failed to save: {e}")
-            else:
-                st.warning("⚠️ Enter API key first")
-
-    # Model selection - Fetch from OpenRouter API
-    st.markdown("#### 🤖 Model Selection")
-
-    # Fetch available models if API key is provided
-    if openrouter_api_key:
-        if st.button("🔄 Fetch Available Models"):
-            with st.spinner("Fetching models from OpenRouter..."):
-                try:
-                    import requests
-                    response = requests.get(
-                        "https://openrouter.ai/api/v1/models",
-                        headers={"Authorization": f"Bearer {openrouter_api_key}"}
-                    )
-
-                    if response.status_code == 200:
-                        models_data = response.json().get("data", [])
-
-                        # Build models dict with pricing info
-                        openrouter_models = {}
-                        for model in models_data:
-                            model_id = model.get("id", "")
-                            model_name = model.get("name", model_id)
-
-                            # Check if free (pricing = 0)
-                            pricing = model.get("pricing", {})
-                            prompt_price = float(pricing.get("prompt", "0"))
-                            completion_price = float(pricing.get("completion", "0"))
-                            is_free = (prompt_price == 0 and completion_price == 0)
-
-                            # Add emoji indicator
-                            emoji = "🆓" if is_free else "💰"
-                            display_name = f"{emoji} {model_name}"
-
-                            openrouter_models[display_name] = model_id
-
-                        # Sort: free first, then by name
-                        sorted_models = dict(sorted(
-                            openrouter_models.items(),
-                            key=lambda x: (0 if x[0].startswith("🆓") else 1, x[0])
-                        ))
-
-                        # Store in session state
-                        st.session_state['openrouter_models'] = sorted_models
-                        st.success(f"✅ Loaded {len(sorted_models)} models")
-                    else:
-                        st.error(f"Failed to fetch models: {response.status_code}")
-                        st.error(response.text)
-                except Exception as e:
-                    st.error(f"Error fetching models: {str(e)}")
-
-    # Use cached models or show empty state
-    if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
+    # Get the actual model ID from session state
+    if 'openrouter_models' in st.session_state and selected_model_name:
         openrouter_models = st.session_state['openrouter_models']
-        st.caption(f"📊 {len(openrouter_models)} models available (🆓 = Free, 💰 = Paid)")
-
-        # Find default index (last selected model if exists)
-        default_index = 0
-        if 'last_selected_model' in st.session_state:
-            try:
-                default_index = list(openrouter_models.keys()).index(st.session_state['last_selected_model'])
-            except (ValueError, KeyError):
-                default_index = 0
-
-        selected_model_name = st.selectbox(
-            "Select Model",
-            list(openrouter_models.keys()),
-            index=default_index,
-            help="Free models are great for testing. Paid models offer better quality."
-        )
-
-        # Save last selected model
-        st.session_state['last_selected_model'] = selected_model_name
-        selected_model = openrouter_models[selected_model_name]
+        selected_model = openrouter_models.get(selected_model_name)
     else:
-        # No models fetched yet - show placeholder
-        st.warning("⚠️ Please fetch available models first using the button above.")
-        selected_model_name = None
         selected_model = None
 
-    st.markdown("---")
     st.markdown("#### 💬 Query")
-
-    query = st.text_area(
-        "Enter your question",
-        placeholder="e.g., What does Silverston say about shipment patterns?",
-        height=100
-    )
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
@@ -1410,6 +1418,19 @@ with tab3:
                 help="Use LLM to rerank results by relevance (uses OpenRouter API, slower but more accurate)"
             )
 
+        # Second row for Temperature
+        st.markdown("")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.7,
+                step=0.1,
+                help="Controls randomness. Lower = more focused, Higher = more creative"
+            )
+
             if enable_reranking:
                 # Use fetched models if available, otherwise use small hardcoded set
                 if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
@@ -1440,6 +1461,12 @@ with tab3:
             else:
                 rerank_model = None
 
+    query = st.text_area(
+        "Enter your question",
+        placeholder="e.g., What does Silverston say about shipment patterns?",
+        height=100
+    )
+
     if st.button("🔍 Search", use_container_width=True):
         if not query:
             st.warning("⚠️ Please enter a query.")
@@ -1465,7 +1492,8 @@ with tab3:
                     openrouter_api_key=openrouter_api_key,
                     host=qdrant_host,
                     port=qdrant_port,
-                    fetch_multiplier=fetch_multiplier
+                    fetch_multiplier=fetch_multiplier,
+                    temperature=temperature
                 )
 
                 # Check if search was successful
@@ -1507,70 +1535,6 @@ with tab3:
                 st.error(f"❌ Error: {str(e)}")
                 import traceback
                 st.code(traceback.format_exc())
-
-# ============================================
-# TAB 4: Statistics
-# ============================================
-with tab4:
-    st.markdown('<div class="section-header">📊 Collection Statistics</div>', unsafe_allow_html=True)
-
-    # Load all manifest files
-    manifest_dir = Path("logs")
-    manifest_files = list(manifest_dir.glob(MANIFEST_GLOB_PATTERN))
-
-    if manifest_files:
-        st.markdown("#### Collections Overview")
-
-        for manifest_file in manifest_files:
-            try:
-                with open(manifest_file, 'r', encoding='utf-8') as f:
-                    manifest_data = json.load(f)
-
-                # Each manifest file contains collections dict
-                for collection_name, collection_data in manifest_data.get('collections', {}).items():
-                    with st.expander(f"📚 {collection_name}", expanded=True):
-                        col1, col2, col3 = st.columns(3)
-
-                        # Calculate total books from books array
-                        books = collection_data.get('books', [])
-                        total_books = len(books)
-
-                        with col1:
-                            st.metric("Books", total_books)
-                        with col2:
-                            st.metric("Chunks", f"{collection_data.get('total_chunks', 0):,}")
-                        with col3:
-                            st.metric("Size", f"{collection_data.get('total_size_mb', 0):.1f} MB")
-
-                        # Book list
-                        st.markdown("**Books in Collection:**")
-                        if books:
-                            for book in books[:10]:  # Show first 10
-                                file_type = book.get('file_type', 'UNKNOWN')
-                                language_code = book.get('language', 'unknown')
-
-                                # Format language display
-                                if language_code == 'unknown':
-                                    language_display = '🏳️'  # White flag for unknown
-                                else:
-                                    language_display = language_code.upper()
-
-                                icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝'}.get(file_type, '📄')
-
-                                st.write(f"{icon} **{book.get('book_title')}** by {book.get('author')} "
-                                        f"({language_display}, {book.get('chunks_count')} chunks)")
-
-                            if len(books) > 10:
-                                st.caption(f"... and {len(books) - 10} more books")
-            except Exception as e:
-                st.error(f"Error loading {manifest_file.name}: {e}")
-    else:
-        st.info("📭 No collections found. Run ingestion to create collections.")
-
-    st.markdown("---")
-
-    if st.button("🔄 Refresh Statistics"):
-        st.rerun()
 
 # Footer
 st.markdown("---")

@@ -18,7 +18,12 @@ serverAddress = "localhost"
 gatherUsageStats = false
 
 # Alexandria Theme Configuration
-# Users can toggle between Light, Dark (Matrix Terminal), and System setting
+# Both Light and Dark modes use monospace font for technical/code aesthetic
+
+[theme.light]
+# Light mode with monospace font
+primaryColor = "#667eea"              # Purple accent (Alexandria brand color)
+font = "monospace"                    # Terminal font (Courier/Consolas)
 
 [theme.dark]
 # Matrix/Terminal Dark Mode - "Hacker Mode"

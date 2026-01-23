@@ -4,6 +4,20 @@ Alexandria uses **Structurizr Lite** to visualize C4 architecture diagrams inter
 
 ---
 
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| **Start** Structurizr Lite | `scripts/start-structurizr.bat` |
+| **Stop** Structurizr Lite | `scripts/stop-structurizr.bat` |
+| **Export** diagrams (all formats) | `scripts/export-diagrams.bat all` |
+| **Export** PNG only | `scripts/export-diagrams.bat png` |
+| **Export** PlantUML only | `scripts/export-diagrams.bat plantuml` |
+| **Validate** workspace DSL | `scripts/validate-workspace.bat` |
+| **View** diagrams | Open http://localhost:8081 |
+
+---
+
 ## Quick Start
 
 ### Start Structurizr Lite
@@ -167,28 +181,116 @@ Alexandria uses **port 8081** to avoid conflict with WBF2 on port 8080.
 
 ## Exporting Diagrams
 
-### Export PNG/SVG (Using Structurizr CLI)
+### Quick Export (Batch Script)
 
+**Easiest method:**
 ```bash
-# Pull CLI image (if not already pulled)
-docker pull structurizr/cli
+scripts/export-diagrams.bat
+```
 
-# Export all diagrams as PNG
+**What it does:**
+- Prompts for format (PNG, SVG, PlantUML, Mermaid, DOT, or All)
+- Exports all diagrams to `docs/architecture/diagrams/`
+- Uses structurizr/cli Docker image
+
+**Export specific format:**
+```bash
+# Export PNG only
+scripts/export-diagrams.bat png
+
+# Export PlantUML only
+scripts/export-diagrams.bat plantuml
+
+# Export all formats
+scripts/export-diagrams.bat all
+```
+
+### Available Export Formats
+
+| Format | Extension | Use Case |
+|--------|-----------|----------|
+| **PNG** | `.png` | Raster images for docs/presentations |
+| **SVG** | `.svg` | Vector graphics (scalable, editable) |
+| **PlantUML** | `.puml` | Text-based UML (version control friendly) |
+| **Mermaid** | `.mmd` | Markdown diagrams (GitHub, GitLab support) |
+| **DOT** | `.dot` | Graphviz format (programmable graphs) |
+
+### Manual Export (Docker CLI)
+
+**PNG Export:**
+```bash
 docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
   structurizr/cli export -workspace workspace.dsl -format png -output diagrams
+```
 
-# Export as SVG
+**SVG Export:**
+```bash
 docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
   structurizr/cli export -workspace workspace.dsl -format svg -output diagrams
 ```
 
-**Output:** `docs/architecture/diagrams/*.png` (or `*.svg`)
+**PlantUML Export:**
+```bash
+docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
+  structurizr/cli export -workspace workspace.dsl -format plantuml -output diagrams
+```
+
+**Mermaid Export:**
+```bash
+docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
+  structurizr/cli export -workspace workspace.dsl -format mermaid -output diagrams
+```
+
+**DOT Export (Graphviz):**
+```bash
+docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
+  structurizr/cli export -workspace workspace.dsl -format dot -output diagrams
+```
+
+**Output:** `docs/architecture/diagrams/*.<format>`
 
 ### Export from Browser
-1. Open view in Structurizr Lite
-2. Click "Export" button
+1. Open view in Structurizr Lite (http://localhost:8081)
+2. Click "Export" button in top-right
 3. Choose PNG or SVG
 4. Save to `docs/architecture/diagrams/`
+
+**Note:** Browser export is per-diagram. CLI export processes all diagrams at once.
+
+---
+
+## Validating Workspace
+
+### Quick Validate (Batch Script)
+
+**Before committing changes:**
+```bash
+scripts/validate-workspace.bat
+```
+
+**What it checks:**
+- DSL syntax correctness
+- Model consistency
+- View definitions
+- Style rules
+
+**Expected output:**
+```
+✅ Workspace is valid!
+```
+
+### Manual Validation (Docker CLI)
+
+```bash
+docker run --rm -v "%cd%\docs\architecture:/usr/local/structurizr" ^
+  structurizr/cli validate -workspace workspace.dsl
+```
+
+**When to validate:**
+- After editing `workspace.dsl`
+- Before committing architecture changes
+- When diagrams fail to render in Structurizr Lite
+- After adding new views or components
 
 ---
 

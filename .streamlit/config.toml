@@ -17,10 +17,7 @@ maxUploadSize = 200
 serverAddress = "localhost"
 gatherUsageStats = false
 
-[theme]
-# Optional: set theme colors
-primaryColor = "#667eea"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
-font = "sans serif"
+# [theme]
+# Theme configuration disabled to enable built-in Light/Dark toggle
+# If you want custom colors, define both [theme.light] and [theme.dark] sections
+# For now, using Streamlit's default Light and Dark themes

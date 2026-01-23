@@ -1,0 +1,92 @@
+@startuml
+title <size:24>Component View: Alexandria RAG System - Scripts Package</size>\n<size:24>Component diagram showing internal structure of Scripts Package</size>
+
+set separator none
+left to right direction
+skinparam ranksep 60
+skinparam nodesep 30
+hide stereotype
+
+<style>
+  root {
+    BackgroundColor: #ffffff;
+    FontColor: #444444;
+  }
+  // Element,Component
+  .Element-RWxlbWVudCxDb21wb25lbnQ= {
+    BackgroundColor: #85bbf0;
+    LineColor: #5d82a8;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #000000;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Element,Container,Web Browser
+  .Element-RWxlbWVudCxDb250YWluZXIsV2ViIEJyb3dzZXI= {
+    BackgroundColor: #438dd5;
+    LineColor: #2e6295;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Relationship
+  .Relationship-UmVsYXRpb25zaGlw {
+    LineThickness: 2;
+    LineStyle: 10-10;
+    LineColor: #444444;
+    FontColor: #444444;
+    FontSize: 24;
+  }
+  // Alexandria RAG System
+  .Boundary-QWxleGFuZHJpYSBSQUcgU3lzdGVt {
+    BackgroundColor: #ffffff;
+    LineColor: #0b4884;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+  }
+  // Scripts Package
+  .Boundary-U2NyaXB0cyBQYWNrYWdl {
+    BackgroundColor: #ffffff;
+    LineColor: #2e6295;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+  }
+</style>
+
+rectangle "Alexandria RAG System\n<size:16>[Software System]</size>" <<Boundary-QWxleGFuZHJpYSBSQUcgU3lzdGVt>> {
+  rectangle "Scripts Package\n<size:16>[Container: Python 3.14]</size>" <<Boundary-U2NyaXB0cyBQYWNrYWdl>> {
+    component "==Ingestion Engine\n<size:16>[Component: batch_ingest.py, ingest_books.py]</size>\n\nProcesses EPUB/PDF/TXT/MD books into chunks and uploads to Qdrant" <<Element-RWxlbWVudCxDb21wb25lbnQ=>> as AlexandriaRAGSystem.ScriptsPackage.IngestionEngine
+    component "==Chunking Strategies\n<size:16>[Component: philosophical_chunking.py]</size>\n\nDomain-specific chunking (technical, psychology, philosophy, history) with argument-based pre-chunking for philosophical texts" <<Element-RWxlbWVudCxDb21wb25lbnQ=>> as AlexandriaRAGSystem.ScriptsPackage.ChunkingStrategies
+    component "==RAG Query Engine\n<size:16>[Component: rag_query.py]</size>\n\nSemantic search via Qdrant with similarity filtering, fetch multiplier, and LLM answer generation" <<Element-RWxlbWVudCxDb21wb25lbnQ=>> as AlexandriaRAGSystem.ScriptsPackage.RAGQueryEngine
+    component "==Collection Management\n<size:16>[Component: collection_manifest.py, qdrant_utils.py]</size>\n\nTracks ingested books via per-collection manifests, CSV exports, and Qdrant statistics" <<Element-RWxlbWVudCxDb21wb25lbnQ=>> as AlexandriaRAGSystem.ScriptsPackage.CollectionManagement
+    component "==Calibre Integration\n<size:16>[Component: calibre_db.py]</size>\n\nDirect SQLite access to Calibre library for metadata and direct ingestion" <<Element-RWxlbWVudCxDb21wb25lbnQ=>> as AlexandriaRAGSystem.ScriptsPackage.CalibreIntegration
+  }
+
+  rectangle "==Streamlit GUI\n<size:16>[Container: Python 3.14, Streamlit]</size>\n\nWeb-based interface for browsing, ingesting, and querying books" <<Element-RWxlbWVudCxDb250YWluZXIsV2ViIEJyb3dzZXI=>> as AlexandriaRAGSystem.StreamlitGUI
+}
+
+AlexandriaRAGSystem.ScriptsPackage.IngestionEngine --> AlexandriaRAGSystem.ScriptsPackage.ChunkingStrategies <<Relationship-UmVsYXRpb25zaGlw>> : "Uses chunking strategies"
+AlexandriaRAGSystem.ScriptsPackage.IngestionEngine --> AlexandriaRAGSystem.ScriptsPackage.CollectionManagement <<Relationship-UmVsYXRpb25zaGlw>> : "Logs ingested books to manifest"
+AlexandriaRAGSystem.ScriptsPackage.RAGQueryEngine --> AlexandriaRAGSystem.ScriptsPackage.CollectionManagement <<Relationship-UmVsYXRpb25zaGlw>> : "Checks collection status"
+AlexandriaRAGSystem.ScriptsPackage.CalibreIntegration --> AlexandriaRAGSystem.ScriptsPackage.IngestionEngine <<Relationship-UmVsYXRpb25zaGlw>> : "Provides book paths for ingestion"
+AlexandriaRAGSystem.StreamlitGUI --> AlexandriaRAGSystem.ScriptsPackage.IngestionEngine <<Relationship-UmVsYXRpb25zaGlw>> : "Triggers book ingestion with domain selection"
+AlexandriaRAGSystem.StreamlitGUI --> AlexandriaRAGSystem.ScriptsPackage.RAGQueryEngine <<Relationship-UmVsYXRpb25zaGlw>> : "Executes RAG queries with parameters"
+AlexandriaRAGSystem.StreamlitGUI --> AlexandriaRAGSystem.ScriptsPackage.CollectionManagement <<Relationship-UmVsYXRpb25zaGlw>> : "Displays collection statistics and manifests"
+AlexandriaRAGSystem.StreamlitGUI --> AlexandriaRAGSystem.ScriptsPackage.CalibreIntegration <<Relationship-UmVsYXRpb25zaGlw>> : "Browses Calibre library with filters"
+
+@enduml

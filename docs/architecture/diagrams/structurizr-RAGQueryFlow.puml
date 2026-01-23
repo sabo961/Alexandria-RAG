@@ -1,0 +1,103 @@
+@startuml
+title <size:24>Dynamic View: Alexandria RAG System</size>\n<size:24>Illustrates the RAG query process from question to answer</size>
+
+set separator none
+left to right direction
+skinparam ranksep 60
+skinparam nodesep 30
+hide stereotype
+
+<style>
+  root {
+    BackgroundColor: #ffffff;
+    FontColor: #444444;
+  }
+  // Element,Container
+  .Element-RWxlbWVudCxDb250YWluZXI= {
+    BackgroundColor: #438dd5;
+    LineColor: #2e6295;
+    LineStyle: 0;
+    LineThickness: 2;
+    RoundCorner: 20;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Element,Container,Web Browser
+  .Element-RWxlbWVudCxDb250YWluZXIsV2ViIEJyb3dzZXI= {
+    BackgroundColor: #438dd5;
+    LineColor: #2e6295;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Element,Person
+  .Element-RWxlbWVudCxQZXJzb24= {
+    BackgroundColor: #08427b;
+    LineColor: #052e56;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Element,Software System,External System
+  .Element-RWxlbWVudCxTb2Z0d2FyZSBTeXN0ZW0sRXh0ZXJuYWwgU3lzdGVt {
+    BackgroundColor: #999999;
+    LineColor: #6b6b6b;
+    LineStyle: 0;
+    LineThickness: 2;
+    RoundCorner: 20;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+    MaximumWidth: 450;
+  }
+  // Relationship
+  .Relationship-UmVsYXRpb25zaGlw {
+    LineThickness: 2;
+    LineStyle: 10-10;
+    LineColor: #444444;
+    FontColor: #444444;
+    FontSize: 24;
+  }
+  // Alexandria RAG System
+  .Boundary-QWxleGFuZHJpYSBSQUcgU3lzdGVt {
+    BackgroundColor: #ffffff;
+    LineColor: #0b4884;
+    LineStyle: 0;
+    LineThickness: 2;
+    FontColor: #ffffff;
+    FontSize: 24;
+    HorizontalAlignment: center;
+    Shadowing: 0;
+  }
+</style>
+
+rectangle "Alexandria RAG System\n<size:16>[Software System]</size>" <<Boundary-QWxleGFuZHJpYSBSQUcgU3lzdGVt>> {
+  rectangle "==Streamlit GUI\n<size:16>[Container: Python 3.14, Streamlit]</size>\n\nWeb-based interface for browsing, ingesting, and querying books" <<Element-RWxlbWVudCxDb250YWluZXIsV2ViIEJyb3dzZXI=>> as AlexandriaRAGSystem.StreamlitGUI
+  rectangle "==Scripts Package\n<size:16>[Container: Python 3.14]</size>\n\nCore business logic for ingestion, chunking, querying, and management" <<Element-RWxlbWVudCxDb250YWluZXI=>> as AlexandriaRAGSystem.ScriptsPackage
+}
+
+person "==Developer/Researcher\n<size:16>[Person]</size>\n\nUses Alexandria to search and analyze books for insights and knowledge synthesis" <<Element-RWxlbWVudCxQZXJzb24=>> as DeveloperResearcher
+rectangle "==Qdrant Vector DB\n<size:16>[Software System]</size>\n\nVector search engine storing 384-dim embeddings with domain/book/author metadata" <<Element-RWxlbWVudCxTb2Z0d2FyZSBTeXN0ZW0sRXh0ZXJuYWwgU3lzdGVt>> as QdrantVectorDB
+rectangle "==OpenRouter API\n<size:16>[Software System]</size>\n\nLLM inference for answer generation (multiple models supported)" <<Element-RWxlbWVudCxTb2Z0d2FyZSBTeXN0ZW0sRXh0ZXJuYWwgU3lzdGVt>> as OpenRouterAPI
+
+DeveloperResearcher --> AlexandriaRAGSystem.StreamlitGUI <<Relationship-UmVsYXRpb25zaGlw>> : "1: Enters query + parameters"
+AlexandriaRAGSystem.StreamlitGUI --> AlexandriaRAGSystem.ScriptsPackage <<Relationship-UmVsYXRpb25zaGlw>> : "2: Calls perform_rag_query()"
+AlexandriaRAGSystem.ScriptsPackage --> QdrantVectorDB <<Relationship-UmVsYXRpb25zaGlw>> : "3: Semantic search with fetch multiplier"
+AlexandriaRAGSystem.ScriptsPackage --> OpenRouterAPI <<Relationship-UmVsYXRpb25zaGlw>> : "4: Sends context + query for answer"
+AlexandriaRAGSystem.ScriptsPackage <-- OpenRouterAPI <<Relationship-UmVsYXRpb25zaGlw>> : "5: Returns generated answer"
+AlexandriaRAGSystem.StreamlitGUI <-- AlexandriaRAGSystem.ScriptsPackage <<Relationship-UmVsYXRpb25zaGlw>> : "6: Returns RAGResult (answer + sources)"
+DeveloperResearcher <-- AlexandriaRAGSystem.StreamlitGUI <<Relationship-UmVsYXRpb25zaGlw>> : "7: Displays answer with source citations"
+
+@enduml

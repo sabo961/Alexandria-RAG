@@ -161,7 +161,46 @@ Scripts Package → GUI (return book list)
         └── Qdrant (vector DB)
 ```
 
-### Future: Multi-User Server (Potential)
+### Future: NAS Deployment (Docker)
+```
+[NAS - 192.168.0.151]
+  ├── Docker: Alexandria Container (GUI + Scripts)
+  │   ├── Port: 8501 (Streamlit)
+  │   ├── Volume: /nas/books → /app/ingest
+  │   ├── Volume: /nas/calibre → /app/calibre
+  │   └── Secrets: .streamlit/secrets.toml
+  ├── Docker: Qdrant (already running)
+  │   └── Port: 6333
+  ├── Calibre Library (metadata.db)
+  └── Book Storage (EPUB/PDF files)
+```
+
+**Benefits:**
+- Always-on access (24/7 availability)
+- Multi-device support (phone, tablet, desktop)
+- Centralized storage with RAID backup
+- Low latency to Qdrant (same host)
+
+**Deployment:**
+```dockerfile
+FROM python:3.14
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 8501
+CMD ["streamlit", "run", "alexandria_app.py", \
+     "--server.address", "0.0.0.0"]
+```
+
+**When to Deploy:**
+- GUI stable (no frequent code changes)
+- Daily usage pattern established
+- Need multi-device access
+
+**Status:** Planned (see [TODO.md - Backlog #6](../../../TODO.md))
+
+### Future: Multi-User Server (Cloud - Alternative)
 ```
 [Web Server]
   ├── Alexandria GUI (Streamlit Cloud)
@@ -173,6 +212,8 @@ Scripts Package → GUI (return book list)
 [LLM API]
   └── OpenRouter (cloud)
 ```
+
+**Note:** NAS deployment preferred over cloud for privacy and cost.
 
 ---
 

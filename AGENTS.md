@@ -27,9 +27,15 @@ Logs: c:\Users\goran\source\repos\Temenos\Akademija\Alexandria\logs
 
 ### External Services
 ```
-Qdrant Server: 192.168.0.151:6333
-Open WebUI: https://ai.jedai.space (not currently integrated)
+Qdrant Server: 192.168.0.151:6333 (Dell "BUCO")
+Open WebUI: https://ai.jedai.space (uses same Qdrant instance)
 ```
+
+**Note:** Alexandria uses **local Qdrant with separate collections** (see ADR-0006):
+- **alexandria:** Curated book library (300-500 essential books, domain-specific chunking)
+- **ai_agents:** AI agent workspace for project research
+- **open_webui:** Ad-hoc document uploads via Open WebUI interface
+- **Why collections:** Same database, clear separation, zero vendor lock-in, $0/year
 
 ### Python Environment
 ```

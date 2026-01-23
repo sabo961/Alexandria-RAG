@@ -64,7 +64,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ## 🟡 MEDIUM PRIORITY - After Philosophical Chunking
 
-### 3. Real-Time Progress Tracking
+### 2. Real-Time Progress Tracking
 
 **Goal:** Show live progress during batch ingestion
 
@@ -76,7 +76,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ---
 
-### 4. Resume Functionality in GUI
+### 3. Resume Functionality in GUI
 
 **Goal:** Resume interrupted batch ingestion from GUI
 
@@ -95,7 +95,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ## 🟢 LOW PRIORITY - Nice to Have (Backlog)
 
-### 5. Advanced Query Features (Tab 3)
+### 4. Advanced Query Features (Tab 3)
 
 **Goal:** Enhance query interface beyond basic search
 
@@ -109,7 +109,7 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 
 ---
 
-### 6. Collection Management
+### 5. Collection Management
 
 **Goal:** Admin operations for Qdrant collections
 
@@ -130,6 +130,49 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 ## 🔵 BACKLOG - Future Ideas
 
 ## 🔵 BACKLOG - Future Ideas
+
+### 6. NAS Deployment (Docker)
+
+**Goal:** Deploy Alexandria as always-on service on NAS for multi-device access
+
+**Current Architecture:**
+- Alexandria GUI + Scripts: Local PC (localhost:8501)
+- Qdrant: Already on NAS (192.168.0.151:6333) ✅
+- Calibre Library + Books: Local file system
+
+**Target Architecture (NAS):**
+- Alexandria GUI + Scripts: NAS Docker container
+- Qdrant: NAS (same host)
+- Calibre Library + Books: NAS storage
+
+**Benefits:**
+- ✅ 24/7 access without running desktop
+- ✅ Multi-device support (phone, tablet, other PCs)
+- ✅ Centralized data (everything on NAS)
+- ✅ Automatic backups (NAS RAID)
+
+**Implementation Steps:**
+- ✅ Add Qdrant health check on GUI startup (COMPLETED 2026-01-23 - see COMPLETED RECENTLY)
+- [ ] Create Dockerfile for Alexandria (Python 3.14 + dependencies)
+- [ ] Move Calibre library to NAS share
+- [ ] Move book files (ingest/, ingested/) to NAS
+- [ ] Update config paths for NAS storage
+- [ ] Configure secrets management (.streamlit/secrets.toml in volume)
+- [ ] Add authentication (currently single-user, no auth)
+- [ ] Deploy container on NAS (Synology/QNAP Docker support)
+- [ ] Network access: http://nas-ip:8501
+
+**When to Deploy:**
+- ✅ GUI is stable (no frequent changes)
+- ✅ Daily usage pattern established
+- ✅ Need multi-device access
+
+**Current Status:** ⏸️ ON HOLD - Still in active development phase
+
+**Related Docs:**
+- See [Container Diagram - Deployment Model](docs/architecture/c4/02-container.md#deployment-model)
+
+---
 
 ### 7. Calibre Metadata Enhancement
 
@@ -199,6 +242,46 @@ For stable reference documentation (paths, defaults, conventions), see [AGENTS.m
 ---
 
 ## ✅ COMPLETED RECENTLY
+
+### Qdrant Health Check on Startup
+**Completed:** 2026-01-23 (Late Evening)
+**Duration:** <30 minutes
+**Lines of Code:** ~40 LOC added
+**Goal:** Production readiness - verify Qdrant availability on GUI startup
+
+#### Deliverables:
+
+**1. Health Check Function**
+- ✅ Created `check_qdrant_health(host, port, timeout=5)` in `alexandria_app.py`
+  - Returns tuple: (is_healthy, message)
+  - 5-second timeout to avoid long hangs
+  - Simplifies common error messages (connection refused, timeout)
+  - Catches all exceptions gracefully
+
+**2. Sidebar Status Indicator**
+- ✅ Added health check call in sidebar after Qdrant configuration
+- ✅ Green success message: "✅ Qdrant: Connected"
+- ✅ Red error message: "❌ Qdrant: Cannot reach 192.168.0.151:6333"
+- ✅ Warning: "⚠️ Ingestion and queries will not work until Qdrant is available"
+
+**3. Main Page Warning Banner**
+- ✅ Session state tracking: `st.session_state.qdrant_healthy`
+- ✅ Warning banner displayed at top of page if Qdrant offline
+- ✅ Clear user feedback before attempting operations
+
+**Files Modified:**
+- `alexandria_app.py` (lines 352-382, 387-393, 409-417)
+
+**Impact:**
+- Users immediately see if Qdrant is unreachable
+- No cryptic ConnectionError messages during ingestion/queries
+- Critical for NAS deployment (network reliability)
+
+**Next Steps (Deferred):**
+- Conditional button disabling (not critical - errors caught gracefully)
+- Cache health check with TTL (Streamlit reruns are fast enough)
+
+---
 
 ### Philosophical Chunking Integration (SPRINT)
 **Completed:** 2026-01-23 (Late Evening)

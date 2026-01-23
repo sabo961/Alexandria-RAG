@@ -6,7 +6,7 @@
   "documentation" : { },
   "id" : 1,
   "lastModifiedAgent" : "structurizr-ui",
-  "lastModifiedDate" : "2026-01-23T00:50:34Z",
+  "lastModifiedDate" : "2026-01-23T02:52:58Z",
   "model" : {
     "people" : [ {
       "description" : "Uses Alexandria to search and analyze books for insights and knowledge synthesis",
@@ -385,7 +385,7 @@
     },
     "containerViews" : [ {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -394,38 +394,34 @@
         "vertices" : false
       },
       "description" : "Container diagram showing major architectural components of Alexandria",
-      "dimensions" : {
-        "height" : 2520,
-        "width" : 3070
-      },
       "elements" : [ {
         "id" : "1",
-        "x" : 199,
-        "y" : 712
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "3",
-        "x" : 899,
-        "y" : 762
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "4",
-        "x" : 1649,
-        "y" : 762
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "14",
-        "x" : 2399,
-        "y" : 762
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "15",
-        "x" : 2399,
-        "y" : 162
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "16",
-        "x" : 2399,
-        "y" : 1362
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "17",
-        "x" : 2399,
-        "y" : 1962
+        "x" : 0,
+        "y" : 0
       } ],
       "externalSoftwareSystemBoundariesVisible" : false,
       "key" : "Containers",
@@ -442,17 +438,13 @@
       }, {
         "id" : "25"
       }, {
-        "id" : "26",
-        "vertices" : [ {
-          "x" : 2399,
-          "y" : 1812
-        } ]
+        "id" : "26"
       } ],
       "softwareSystemId" : "2"
     } ],
     "dynamicViews" : [ {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -461,35 +453,31 @@
         "vertices" : false
       },
       "description" : "Illustrates the book ingestion process from selection to Qdrant upload",
-      "dimensions" : {
-        "height" : 2020,
-        "width" : 2390
-      },
       "elementId" : "2",
       "elements" : [ {
         "id" : "1",
-        "x" : 995,
-        "y" : 1363
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "3",
-        "x" : 220,
-        "y" : 763
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "4",
-        "x" : 970,
-        "y" : 763
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "14",
-        "x" : 1720,
-        "y" : 763
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "15",
-        "x" : 1720,
-        "y" : 163
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "16",
-        "x" : 1720,
-        "y" : 1363
+        "x" : 0,
+        "y" : 0
       } ],
       "externalBoundariesVisible" : false,
       "key" : "BookIngestionFlow",
@@ -499,20 +487,12 @@
         "description" : "Selects books from Calibre library",
         "id" : "21",
         "order" : "1",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 918,
-          "y" : 1124
-        } ]
+        "response" : false
       }, {
         "description" : "Calls calibre_db.get_all_books()",
         "id" : "22",
         "order" : "2",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 820,
-          "y" : 1063
-        } ]
+        "response" : false
       }, {
         "description" : "Queries book metadata",
         "id" : "24",
@@ -522,20 +502,12 @@
         "description" : "Triggers ingest_books.py with domain",
         "id" : "22",
         "order" : "4",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 820,
-          "y" : 763
-        } ]
+        "response" : false
       }, {
         "description" : "Reads book file (EPUB/PDF/TXT)",
         "id" : "23",
         "order" : "5",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 1570,
-          "y" : 1063
-        } ]
+        "response" : false
       }, {
         "description" : "Uploads chunks with embeddings",
         "id" : "25",
@@ -545,24 +517,16 @@
         "description" : "Writes manifest JSON/CSV",
         "id" : "23",
         "order" : "7",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 1570,
-          "y" : 763
-        } ]
+        "response" : false
       }, {
         "description" : "Displays ingestion success",
         "id" : "21",
         "order" : "8",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 721,
-          "y" : 1351
-        } ]
+        "response" : true
       } ]
     }, {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -571,31 +535,27 @@
         "vertices" : false
       },
       "description" : "Illustrates the RAG query process from question to answer",
-      "dimensions" : {
-        "height" : 1700,
-        "width" : 2370
-      },
       "elementId" : "2",
       "elements" : [ {
         "id" : "1",
-        "x" : 994,
-        "y" : 1042
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "3",
-        "x" : 219,
-        "y" : 442
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "4",
-        "x" : 969,
-        "y" : 442
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "16",
-        "x" : 1719,
-        "y" : 142
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "17",
-        "x" : 1719,
-        "y" : 742
+        "x" : 0,
+        "y" : 0
       } ],
       "externalBoundariesVisible" : false,
       "key" : "RAGQueryFlow",
@@ -605,20 +565,12 @@
         "description" : "Enters query + parameters",
         "id" : "21",
         "order" : "1",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 917,
-          "y" : 803
-        } ]
+        "response" : false
       }, {
         "description" : "Calls perform_rag_query()",
         "id" : "22",
         "order" : "2",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 819,
-          "y" : 742
-        } ]
+        "response" : false
       }, {
         "description" : "Semantic search with fetch multiplier",
         "id" : "25",
@@ -628,42 +580,26 @@
         "description" : "Sends context + query for answer",
         "id" : "26",
         "order" : "4",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 1513,
-          "y" : 881
-        } ]
+        "response" : false
       }, {
         "description" : "Returns generated answer",
         "id" : "26",
         "order" : "5",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 1624,
-          "y" : 602
-        } ]
+        "response" : true
       }, {
         "description" : "Returns RAGResult (answer + sources)",
         "id" : "22",
         "order" : "6",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 819,
-          "y" : 442
-        } ]
+        "response" : true
       }, {
         "description" : "Displays answer with source citations",
         "id" : "21",
         "order" : "7",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 720,
-          "y" : 1030
-        } ]
+        "response" : true
       } ]
     }, {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -672,27 +608,23 @@
         "vertices" : false
       },
       "description" : "Detailed component interactions during book ingestion",
-      "dimensions" : {
-        "height" : 1538,
-        "width" : 2430
-      },
       "elementId" : "4",
       "elements" : [ {
         "id" : "5",
-        "x" : 990,
-        "y" : 782
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "6",
-        "x" : 1740,
-        "y" : 782
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "8",
-        "x" : 1740,
-        "y" : 182
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "9",
-        "x" : 240,
-        "y" : 782
+        "x" : 0,
+        "y" : 0
       } ],
       "externalBoundariesVisible" : false,
       "key" : "ComponentIngestionFlow",
@@ -707,20 +639,12 @@
         "description" : "Applies domain-specific chunking",
         "id" : "10",
         "order" : "2",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 1590,
-          "y" : 1082
-        } ]
+        "response" : false
       }, {
         "description" : "Returns chunks",
         "id" : "10",
         "order" : "3",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 1590,
-          "y" : 782
-        } ]
+        "response" : true
       }, {
         "description" : "Logs to manifest",
         "id" : "11",
@@ -729,7 +653,7 @@
       } ]
     }, {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -738,19 +662,15 @@
         "vertices" : false
       },
       "description" : "Detailed component interactions during RAG query",
-      "dimensions" : {
-        "height" : 938,
-        "width" : 1680
-      },
       "elementId" : "4",
       "elements" : [ {
         "id" : "7",
-        "x" : 240,
-        "y" : 182
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "8",
-        "x" : 990,
-        "y" : 182
+        "x" : 0,
+        "y" : 0
       } ],
       "externalBoundariesVisible" : false,
       "key" : "ComponentQueryFlow",
@@ -760,25 +680,17 @@
         "description" : "Verifies collection exists",
         "id" : "12",
         "order" : "1",
-        "response" : false,
-        "vertices" : [ {
-          "x" : 840,
-          "y" : 482
-        } ]
+        "response" : false
       }, {
         "description" : "Returns collection status",
         "id" : "12",
         "order" : "2",
-        "response" : true,
-        "vertices" : [ {
-          "x" : 840,
-          "y" : 182
-        } ]
+        "response" : true
       } ]
     } ],
     "systemContextViews" : [ {
       "automaticLayout" : {
-        "applied" : true,
+        "applied" : false,
         "edgeSeparation" : 0,
         "implementation" : "Graphviz",
         "nodeSeparation" : 300,
@@ -787,26 +699,22 @@
         "vertices" : false
       },
       "description" : "System context diagram showing Alexandria RAG System and external dependencies",
-      "dimensions" : {
-        "height" : 1300,
-        "width" : 2300
-      },
       "elements" : [ {
         "id" : "1",
-        "x" : 199,
-        "y" : 393
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "2",
-        "x" : 899,
-        "y" : 443
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "16",
-        "x" : 1649,
-        "y" : 143
+        "x" : 0,
+        "y" : 0
       }, {
         "id" : "17",
-        "x" : 1649,
-        "y" : 743
+        "x" : 0,
+        "y" : 0
       } ],
       "enterpriseBoundaryVisible" : true,
       "key" : "SystemContext",

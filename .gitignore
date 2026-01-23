@@ -38,6 +38,7 @@ nul
 
 # Streamlit
 .streamlit/secrets.toml
+.streamlit/gui_settings.json
 
 # Generated outputs
 docs/book-inventory.txt

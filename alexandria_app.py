@@ -19,10 +19,46 @@ from generate_book_inventory import scan_calibre_library, write_inventory
 from count_file_types import count_file_types
 from collection_manifest import CollectionManifest
 from ingest_books import generate_embeddings, ingest_book
+from qdrant_utils import delete_collection_and_artifacts
 from rag_query import perform_rag_query
 from calibre_db import CalibreDB
 import json
+import time
 import pandas as pd
+
+
+def render_ingestion_diagnostics(result: dict, context_label: str) -> None:
+    """Render ingestion diagnostics in an expander if present."""
+    diagnostics = result.get("diagnostics") if isinstance(result, dict) else None
+    if diagnostics:
+        st.session_state["last_ingestion_diagnostics"] = {
+            "context": context_label,
+            "captured_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "diagnostics": diagnostics
+        }
+        with st.expander(f"🔍 Diagnostics ({context_label})"):
+            st.json(diagnostics)
+
+
+def load_gui_settings() -> dict:
+    """Load persisted GUI settings (non-sensitive)."""
+    settings_path = Path(__file__).parent / '.streamlit' / 'gui_settings.json'
+    if not settings_path.exists():
+        return {}
+
+    try:
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_gui_settings(settings: dict) -> None:
+    """Persist GUI settings to disk."""
+    settings_path = Path(__file__).parent / '.streamlit' / 'gui_settings.json'
+    settings_path.parent.mkdir(exist_ok=True)
+    with open(settings_path, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
 
 # Constants
 MANIFEST_GLOB_PATTERN = '*_manifest.json'
@@ -227,115 +263,49 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
         try:
             st.write(f"📖 Processing: {Path(file_path).name}")
 
-            # Extract text based on format
-            ext = Path(file_path).suffix.lower()
-
-            if ext == EPUB_EXT:
-                chapters, metadata = extract_text_from_epub(file_path)
-                book_title = metadata.get('title', Path(file_path).stem)
-                author = metadata.get('author', 'Unknown')
-            elif ext == PDF_EXT:
-                pages, metadata = extract_text_from_pdf(file_path)
-                chapters = pages
-                book_title = metadata.get('title', Path(file_path).stem)
-                author = metadata.get('author', 'Unknown')
-            elif ext in [TXT_EXT, MD_EXT]:
-                text, metadata = extract_text_from_txt(file_path)
-                # extract_text_from_txt returns a list of text sections
-                if isinstance(text, list):
-                    # Join all sections into one text block (simpler for small MD files)
-                    combined_text = '\n\n'.join(str(section) for section in text if section)
-                    chapters = [{'text': combined_text, 'name': Path(file_path).stem}]
-                else:
-                    # Fallback: single text string
-                    chapters = [{'text': str(text), 'name': Path(file_path).stem}]
-                book_title = Path(file_path).stem
-                author = 'Unknown'
-            else:
-                raise ValueError(f"Unsupported format: {ext}")
-
-            st.write(f"Book: {book_title} by {author}, Sections: {len(chapters)}")
-
-            # Check if any content was extracted
-            def has_content(text_value):
-                """Check if text value (string or list) has content"""
-                if isinstance(text_value, str):
-                    return bool(text_value.strip())
-                elif isinstance(text_value, list):
-                    return any(has_content(item) for item in text_value)
-                return False
-
-            if not chapters or all(not has_content(ch.get('text', '')) for ch in chapters):
-                st.error(f"❌ No content extracted from {Path(file_path).name}")
-                st.error("   The file may be encrypted, corrupted, or in an unsupported format")
-                results['failed'] += 1
-                results['errors'].append(f"{Path(file_path).name}: No content extracted")
-                continue
-
-            # Calculate optimal chunking parameters
-            optimal_params = calculate_optimal_chunk_params(chapters, domain=domain)
-            st.write(f"📊 Analysis: {optimal_params['estimated_tokens']:,} tokens → target ~{optimal_params['target_chunks']} chunks")
-
-            # Chunk text
-            # For PDFs, merge all pages before chunking (better chunk sizes)
-            # For EPUBs, keep chapters separate (preserve structure)
-            file_format = metadata.get('format', '')
-            merge_sections = (file_format == 'PDF')
-
-            # Use optimal parameters instead of GUI settings for better results
-            all_chunks = create_chunks_from_sections(
-                sections=chapters,
-                metadata=metadata,
-                domain=domain,
-                max_tokens=optimal_params['max_tokens'],
-                overlap=optimal_params['overlap'],
-                merge_sections=merge_sections
-            )
-
-            actual_chunks = len(all_chunks)
-            target_chunks = optimal_params['target_chunks']
-            efficiency = (target_chunks / actual_chunks * 100) if actual_chunks > 0 else 0
-
-            st.write(f"✅ Created {actual_chunks} chunks (efficiency: {efficiency:.0f}%)")
-
-            # Generate embeddings
-            st.write("Generating embeddings...")
-            embeddings = generate_embeddings([c['text'] for c in all_chunks])
-
-            # Upload to Qdrant
-            st.write("Uploading to Qdrant...")
-            upload_to_qdrant(
-                chunks=all_chunks,
-                embeddings=embeddings,
+            # Use unified ingest_book function
+            # This ensures consistency with CLI and respects domain-specific strategies
+            result = ingest_book(
+                filepath=file_path,
                 domain=domain,
                 collection_name=collection_name,
                 qdrant_host=host,
                 qdrant_port=port
             )
 
-            # Update manifest
-            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
-            manifest.add_book(
-                collection_name=collection_name,
-                book_path=file_path,
-                book_title=book_title,
-                author=author,
-                domain=domain,
-                chunks_count=len(all_chunks),
-                file_size_mb=file_size_mb
-            )
+            if result and result.get('success'):
+                # Update manifest
+                manifest.add_book(
+                    collection_name=collection_name,
+                    book_path=file_path,
+                    book_title=result['title'],
+                    author=result['author'],
+                    domain=domain,
+                    chunks_count=result['chunks'],
+                    file_size_mb=result['file_size_mb']
+                )
 
-            # Move file if requested and show combined success message
-            if move_files:
-                import shutil
-                ingested_dir = Path(ingest_dir).parent / 'ingested'
-                ingested_dir.mkdir(exist_ok=True)
-                shutil.move(file_path, ingested_dir / Path(file_path).name)
-                st.success(f"✅ {Path(file_path).name} - {len(all_chunks)} chunks uploaded  \n📦 Moved to: {ingested_dir / Path(file_path).name}")
+                # Move file if requested and show combined success message
+                if move_files:
+                    import shutil
+                    # Ensure we are moving relative to original ingest dir if needed
+                    # But ingest_book uses absolute path, so we use that
+                    ingested_dir = Path(ingest_dir).parent / 'ingested'
+                    ingested_dir.mkdir(exist_ok=True)
+                    
+                    target_path = ingested_dir / Path(file_path).name
+                    shutil.move(file_path, target_path)
+                    
+                    st.success(f"✅ {Path(file_path).name} - {result['chunks']} chunks uploaded  \n📦 Moved to: {target_path}")
+                    render_ingestion_diagnostics(result, Path(file_path).name)
+                else:
+                    st.success(f"✅ {Path(file_path).name} - {result['chunks']} chunks uploaded")
+                    render_ingestion_diagnostics(result, Path(file_path).name)
+
+                results['completed'] += 1
             else:
-                st.success(f"✅ {Path(file_path).name} - {len(all_chunks)} chunks uploaded")
-
-            results['completed'] += 1
+                error_msg = result.get('error', 'Unknown error')
+                raise Exception(error_msg)
 
         except Exception as e:
             st.error(f"❌ Failed: {Path(file_path).name}")
@@ -349,19 +319,73 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     return results
 
 
+def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, str]:
+    """
+    Check if Qdrant server is reachable and responsive.
+
+    Args:
+        host: Qdrant host (IP or hostname)
+        port: Qdrant port
+        timeout: Connection timeout in seconds (default: 5)
+
+    Returns:
+        Tuple of (is_healthy, message)
+        - is_healthy: True if Qdrant is reachable, False otherwise
+        - message: Status message ("Connected" or error description)
+    """
+    try:
+        from qdrant_client import QdrantClient
+        client = QdrantClient(host=host, port=port, timeout=timeout)
+        # Test connection by fetching collections
+        client.get_collections()
+        return True, "Connected"
+    except Exception as e:
+        error_msg = str(e)
+        # Simplify common error messages
+        if "Connection refused" in error_msg or "Failed to connect" in error_msg:
+            return False, f"Cannot reach {host}:{port}"
+        elif "timeout" in error_msg.lower():
+            return False, f"Timeout connecting to {host}:{port}"
+        else:
+            return False, f"Error: {error_msg[:50]}"
+
+
 # Header - monospace for both light and dark themes
 st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
+
+# Initialize session state for Qdrant health (will be set by sidebar)
+if 'qdrant_healthy' not in st.session_state:
+    st.session_state.qdrant_healthy = None
+
+# Show warning banner if Qdrant is offline (set by sidebar health check)
+if st.session_state.qdrant_healthy is False:
+    st.error("⚠️ **Qdrant Vector Database is offline!** Ingestion and queries will not work. Check Qdrant server status and configuration in sidebar.")
 
 # Sidebar
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
 
+    gui_settings = load_gui_settings()
+    default_library_dir = gui_settings.get("library_dir", "G:\\My Drive\\alexandria")
+
+    if "library_dir" not in st.session_state:
+        st.session_state.library_dir = default_library_dir
+
     library_dir = st.text_input(
         "Library Directory",
-        value="G:\\My Drive\\alexandria",
+        value=st.session_state.library_dir,
         help="Path to Calibre library"
     )
+
+    if library_dir != st.session_state.library_dir:
+        st.session_state.library_dir = library_dir
+        gui_settings["library_dir"] = library_dir
+        try:
+            save_gui_settings(gui_settings)
+            st.caption("💾 Library directory saved")
+        except Exception as e:
+            st.warning(f"⚠️ Could not save library directory: {e}")
 
     qdrant_host = st.text_input(
         "Qdrant Host",
@@ -374,6 +398,26 @@ with st.sidebar:
         value=6333,
         help="Qdrant server port"
     )
+
+    # Qdrant Health Check
+    is_healthy, health_message = check_qdrant_health(qdrant_host, qdrant_port)
+
+    # Store health status in session state for banner display
+    st.session_state.qdrant_healthy = is_healthy
+
+    if is_healthy:
+        st.success(f"✅ Qdrant: {health_message}")
+    else:
+        st.error(f"❌ Qdrant: {health_message}")
+        st.warning("⚠️ Ingestion and queries will not work until Qdrant is available")
+
+    last_diagnostics = st.session_state.get("last_ingestion_diagnostics")
+    if last_diagnostics:
+        st.markdown("---")
+        st.markdown("### 🔍 Latest Ingestion Diagnostics")
+        st.caption(f"{last_diagnostics['context']} • {last_diagnostics['captured_at']}")
+        with st.expander("Show diagnostics"):
+            st.json(last_diagnostics.get("diagnostics", {}))
 
     st.markdown("---")
     st.markdown("### 🔑 OpenRouter")
@@ -488,25 +532,42 @@ with st.sidebar:
         selected_model_name = None
         selected_model = None
 
+# Check for archives to conditionally show the Restore tab
+archive_dir = Path(__file__).parent / 'logs' / 'archive'
+archived_manifests_exist = archive_dir.exists() and any(archive_dir.glob('*_manifest_*.json'))
+
 # Main content
-tab0, tab1, tab2, tab3 = st.tabs([
+tabs_to_show = [
     "📚 Calibre Library",
     "📖 Ingested Books",
     "🔄 Ingestion",
-    "🔍 Query"
-])
+]
+if archived_manifests_exist:
+    tabs_to_show.append("🗄️ Restore from Archive")
+tabs_to_show.append("🔍 Query")
+
+tabs = st.tabs(tabs_to_show)
+
+tab_calibre = tabs[0]
+tab_ingested = tabs[1]
+tab_ingestion = tabs[2]
+tab_restore = tabs[3] if archived_manifests_exist else None
+tab_query = tabs[-1]
+
 
 # ============================================
 # TAB 0: Calibre Library Browser
 # ============================================
-with tab0:
+with tab_calibre:
     st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
 
-    # Initialize Calibre DB
+    # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
-        if 'calibre_db' not in st.session_state:
+        if 'calibre_db' not in st.session_state or str(st.session_state.calibre_db.library_path) != str(Path(library_dir)):
             with st.spinner("Connecting to Calibre database..."):
                 st.session_state.calibre_db = CalibreDB(library_dir)
+                if 'calibre_books' in st.session_state:
+                    del st.session_state.calibre_books
 
         calibre_db = st.session_state.calibre_db
 
@@ -808,17 +869,23 @@ with tab0:
                                     continue
 
                                 # Construct absolute file path
-                                book_dir = calibre_db.library_path / book.path
+                                # Strategy: Use the actual 'library_dir' variable from the sidebar
+                                # to ensure we are looking relative to the user's current choice.
+                                active_library_path = Path(library_dir)
+                                book_dir = active_library_path / book.path
 
                                 # Find the actual file
                                 matching_files = list(book_dir.glob(f"*.{format_to_use}"))
 
                                 if not matching_files:
-                                    errors.append(f"{book.title}: File not found for format {format_to_use}")
+                                    # Try one more fallback: if the database thinks it's on G: but sidebar says C:
+                                    # calibre_db.library_path might be different from the sidebar 'library_dir'
+                                    errors.append(f"{book.title}: File not found at {book_dir}")
                                     error_count += 1
                                     continue
 
                                 file_path = matching_files[0]
+                                st.write(f"📂 Accessing: {file_path}")
 
                                 # Ingest the book
                                 result = ingest_book(
@@ -839,13 +906,16 @@ with tab0:
                                         'chunks': result['chunks'],
                                         'file_size_mb': result['file_size_mb']
                                     })
+                                    render_ingestion_diagnostics(result, book.title)
                                 else:
                                     error_msg = result.get('error', 'Failed to extract content or ingest') if result else 'Unknown error'
                                     errors.append(f"{book.title}: {error_msg}")
                                     error_count += 1
+                                    if result:
+                                        render_ingestion_diagnostics(result, book.title)
 
                             except Exception as e:
-                                errors.append(f"{book.title}: {str(e)}")
+                                errors.append(f"{book.title}: {str(e)} \n   (Path: {str(file_path)})")
                                 error_count += 1
 
                         # Final status
@@ -899,7 +969,7 @@ with tab0:
 # ============================================
 # TAB 1: Ingested Books
 # ============================================
-with tab1:
+with tab_ingested:
     st.markdown('<div class="section-header">📖 Ingested Books</div>', unsafe_allow_html=True)
 
     # Collection selector
@@ -1045,19 +1115,58 @@ with tab1:
                 else:
                     st.warning("No books match the filters.")
 
-                # Export button
+                # Export button and Management Section
                 st.markdown("---")
-                csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
-                if csv_file.exists():
-                    with open(csv_file, 'r', encoding='utf-8') as f:
-                        csv_data = f.read()
-                    st.download_button(
-                        label="📥 Download CSV",
-                        data=csv_data,
-                        file_name=f"{selected_collection}_manifest.csv",
-                        mime="text/csv",
-                        use_container_width=False
-                    )
+                manage_col1, manage_col2 = st.columns([1, 3])
+
+                with manage_col1:
+                    csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
+                    if csv_file.exists():
+                        with open(csv_file, 'r', encoding='utf-8') as f:
+                            csv_data = f.read()
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv_data,
+                            file_name=f"{selected_collection}_manifest.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+
+                with st.expander("⚙️ Collection Management"):
+                    st.warning(f"**DANGER ZONE:** Actions performed here are permanent and cannot be undone.")
+                    st.markdown(f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant, along with its manifest files.")
+
+                    # Confirmation state management
+                    if 'confirm_delete' not in st.session_state:
+                        st.session_state.confirm_delete = None
+
+                    if st.session_state.confirm_delete != selected_collection:
+                        if st.button(f"🗑️ Delete '{selected_collection}' Collection", use_container_width=True):
+                            st.session_state.confirm_delete = selected_collection
+                            st.rerun()
+                    else:
+                        st.error(f"**Are you sure?** This will permanently delete the Qdrant collection and all associated manifest files. This action cannot be undone.")
+                        confirm_col1, confirm_col2 = st.columns(2)
+                        with confirm_col1:
+                            if st.button("🚨 YES, DELETE PERMANENTLY", use_container_width=True, type="primary"):
+                                with st.spinner(f"Deleting collection '{selected_collection}' and all its data..."):
+                                    delete_results = delete_collection_and_artifacts(collection_name=selected_collection, host=qdrant_host, port=qdrant_port)
+
+                                if not delete_results['errors']:
+                                    st.success(f"✅ Collection '{selected_collection}' and its artifacts have been deleted.")
+                                    st.session_state.confirm_delete = None
+                                    st.info("Refreshing app...")
+                                    time.sleep(2)
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to completely delete collection '{selected_collection}'.")
+                                    for error in delete_results['errors']:
+                                        st.error(f"- {error}")
+                                    st.session_state.confirm_delete = None
+                        with confirm_col2:
+                            if st.button("Cancel", use_container_width=True):
+                                st.session_state.confirm_delete = None
+                                st.rerun()
             else:
                 st.info(f"Collection '{selected_collection}' has no ingested books yet.")
 
@@ -1069,7 +1178,7 @@ with tab1:
 # ============================================
 # TAB 2: Ingestion
 # ============================================
-with tab2:
+with tab_ingestion:
     st.markdown('<div class="section-header">🔄 Ingestion Pipeline</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([2, 1])
@@ -1376,9 +1485,198 @@ with tab2:
             st.info("No ingestion in progress.")
 
 # ============================================
-# TAB 3: Query
+# TAB 3: Restore from Archive
 # ============================================
-with tab3:
+if tab_restore:
+    with tab_restore:
+        st.markdown('<div class="section-header">🗄️ Restore from Archive</div>', unsafe_allow_html=True)
+        st.info("Restore books from a deleted collection's manifest back into a new or existing collection.")
+
+        archive_files = list(archive_dir.glob('*_manifest_*.json'))
+        if not archive_files:
+            st.warning("No archived manifests found.")
+        else:
+            # Create a mapping from a user-friendly name to the file path
+            archive_options = {}
+            for f in sorted(archive_files, reverse=True):
+                try:
+                    # e.g., alexandria_test_manifest_20260123_123000.json -> alexandria_test (2026-01-23 12:30:00)
+                    parts = f.stem.split('_manifest_')
+                    collection_name = parts[0]
+                    timestamp_str = parts[1]
+                    # Prettier timestamp for display
+                    from datetime import datetime
+                    dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                    display_name = f"{collection_name} ({dt_obj.strftime('%Y-%m-%d %H:%M:%S')})"
+                    archive_options[display_name] = f
+                except (IndexError, ValueError):
+                    # Fallback for weirdly named files
+                    archive_options[f.name] = f
+
+            selected_archive_display_name = st.selectbox(
+                "Select an archived manifest to restore from",
+                options=list(archive_options.keys())
+            )
+
+            if selected_archive_display_name:
+                selected_archive_path = archive_options[selected_archive_display_name]
+                
+                try:
+                    with open(selected_archive_path, 'r', encoding='utf-8') as f:
+                        archived_manifest_data = json.load(f)
+
+                    # The actual book data is nested inside the collection name
+                    original_collection_name = selected_archive_path.stem.split('_manifest_')[0]
+                    books_to_display = []
+                    if original_collection_name in archived_manifest_data.get('collections', {}):
+                        books_to_display = archived_manifest_data['collections'][original_collection_name].get('books', [])
+                    
+                    st.markdown("---")
+                    if not books_to_display:
+                        st.warning("This archived manifest contains no book records.")
+                    else:
+                        st.success(f"Found {len(books_to_display)} book records in **{selected_archive_display_name}**.")
+                        
+                        df_data = []
+                        for book in books_to_display:
+                            df_data.append({
+                                'Select': False,
+                                'Title': book.get('book_title', 'N/A'),
+                                'Author': book.get('author', 'N/A'),
+                                'Domain': book.get('domain', 'N/A'),
+                                'File Path': book.get('file_path', 'N/A'),
+                                'Chunks': book.get('chunks_count', 0),
+                            })
+                        
+                        df = pd.DataFrame(df_data)
+                        
+                        st.markdown("##### 1. Select books to restore")
+                        edited_df = st.data_editor(
+                            df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Select": st.column_config.CheckboxColumn(required=True),
+                                "File Path": None # Hide file path from user
+                            },
+                            disabled=df.columns.drop("Select")
+                        )
+                        
+                        selected_rows = edited_df[edited_df['Select']]
+
+                        if not selected_rows.empty:
+                            st.markdown("---")
+                            st.markdown("##### 2. Configure target collection")
+                            
+                            ingest_col1, ingest_col2 = st.columns(2)
+                            with ingest_col1:
+                                restore_collection_name = st.text_input(
+                                    "Restore to collection",
+                                    value=f"{original_collection_name}_restored",
+                                    help="Name of the new or existing collection to ingest books into."
+                                )
+                            with ingest_col2:
+                                restore_domain = st.selectbox(
+                                    "Set new domain for all",
+                                    options=load_domains(),
+                                    index=load_domains().index(selected_rows.iloc[0]['Domain']) if selected_rows.iloc[0]['Domain'] in load_domains() else 0,
+                                    help="Select a new domain for all selected books for the restored collection."
+                                )
+                            
+                            st.info(f"You are about to ingest **{len(selected_rows)}** book(s) into the **`{restore_collection_name}`** collection.")
+
+                            if st.button("🚀 Restore Selected Books", type="primary", use_container_width=True):
+                                progress_bar = st.progress(0)
+                                status_text = st.empty()
+                                success_count = 0
+                                error_count = 0
+                                errors = []
+                                successfully_restored_paths = []
+
+                                for idx, row in selected_rows.iterrows():
+                                    progress = (idx + 1) / len(selected_rows)
+                                    progress_bar.progress(progress)
+                                    status_text.text(f"Restoring {idx + 1}/{len(selected_rows)}: {row['Title']}")
+                                    
+                                    file_path_to_ingest = row['File Path']
+                                    
+                                    # Check if the file still exists
+                                    if not Path(file_path_to_ingest).exists():
+                                        errors.append(f"{row['Title']}: File not found at {file_path_to_ingest}")
+                                        error_count += 1
+                                        continue
+
+                                    try:
+                                        result = ingest_book(
+                                            filepath=file_path_to_ingest,
+                                            domain=restore_domain,
+                                            collection_name=restore_collection_name,
+                                            qdrant_host=qdrant_host,
+                                            qdrant_port=qdrant_port
+                                        )
+
+                                        if result and result.get('success'):
+                                            success_count += 1
+                                            successfully_restored_paths.append(file_path_to_ingest)
+                                        else:
+                                            error_msg = result.get('error', 'Failed to ingest') if result else 'Unknown error'
+                                            errors.append(f"{row['Title']}: {error_msg}")
+                                            error_count += 1
+                                    except Exception as e:
+                                        errors.append(f"{row['Title']}: {str(e)}")
+                                        error_count += 1
+                                
+                                # After loop, update the archive manifest file
+                                if successfully_restored_paths:
+                                    try:
+                                        with open(selected_archive_path, 'r', encoding='utf-8') as f:
+                                            archive_data = json.load(f)
+                                        
+                                        original_collection_name = selected_archive_path.stem.split('_manifest_')[0]
+                                        
+                                        if original_collection_name in archive_data.get('collections', {}):
+                                            original_books = archive_data['collections'][original_collection_name].get('books', [])
+                                            
+                                            books_to_keep = [
+                                                book for book in original_books 
+                                                if book.get('file_path') not in successfully_restored_paths
+                                            ]
+                                            
+                                            archive_data['collections'][original_collection_name]['books'] = books_to_keep
+                                            
+                                            # If no books are left, we could consider deleting the archive file, but for now we'll leave it
+                                            
+                                            with open(selected_archive_path, 'w', encoding='utf-8') as f:
+                                                json.dump(archive_data, f, indent=2, ensure_ascii=False)
+                                            
+                                            st.info(f"✅ Removed {len(successfully_restored_paths)} restored book(s) from the archive manifest.")
+
+                                    except Exception as e:
+                                        st.error(f"⚠️ Failed to update the archive manifest file after restore: {e}")
+
+                                progress_bar.progress(1.0)
+                                status_text.text("✅ Restore operation complete!")
+                                st.markdown("---")
+
+                                if success_count > 0:
+                                    st.success(f"✅ Successfully restored {success_count} book(s) to '{restore_collection_name}'.")
+                                if error_count > 0:
+                                    st.error(f"❌ Failed to restore {error_count} book(s).")
+                                    with st.expander("Show Errors"):
+                                        for error in errors:
+                                            st.write(f"- {error}")
+                        else:
+                            st.info("👆 Select books using the checkboxes above to begin the restore process.")
+
+
+                except Exception as e:
+                    st.error(f"Failed to read or parse the archive file: {selected_archive_path.name}")
+                    st.error(str(e))
+
+# ============================================
+# TAB 4: Query
+# ============================================
+with tab_query:
     st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
 
     # Get API key and model from sidebar

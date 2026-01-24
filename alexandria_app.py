@@ -569,7 +569,7 @@ tabs_to_show = [
 ]
 if archived_manifests_exist:
     tabs_to_show.append("🗄️ Restore deleted")
-tabs_to_show.append("🔍 Query")
+tabs_to_show.append("🔍 Speaker's corner")
 
 tabs = st.tabs(tabs_to_show)
 
@@ -1116,7 +1116,7 @@ with tab_ingested:
                 # Display as DataFrame
                 if filtered_books:
                     df_data = []
-                    for book in filtered_books:
+                    for idx, book in enumerate(filtered_books, start=1):
                         # Get file type
                         file_type = book.get('file_type')
                         if not file_type:
@@ -1129,6 +1129,7 @@ with tab_ingested:
                         language = book.get('language', 'unknown').upper()
 
                         df_data.append({
+                            '#': idx,
                             '': icon,
                             'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],
                             'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],
@@ -1141,7 +1142,7 @@ with tab_ingested:
                         })
 
                     df = pd.DataFrame(df_data)
-                    st.dataframe(df, use_container_width=True, height=600)
+                    st.dataframe(df, use_container_width=True, height=600, hide_index=True)
                 else:
                     st.warning("No books match the filters.")
 
@@ -1609,11 +1610,18 @@ if tab_restore:
                         
                         df_data = []
                         for book in books_to_display:
+                            file_type = book.get('file_type')
+                            if not file_type:
+                                file_name = book.get('file_name') or book.get('file_path', '')
+                                file_type = Path(file_name).suffix.upper().replace('.', '')
+                            icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝', 'MOBI': '📱'}.get(file_type, '📄')
                             df_data.append({
                                 'Select': False,
+                                '': icon,
                                 'Title': book.get('book_title', 'N/A'),
                                 'Author': book.get('author', 'N/A'),
                                 'Domain': book.get('domain', 'N/A'),
+                                'Type': file_type or 'N/A',
                                 'File Path': book.get('file_path', 'N/A'),
                                 'Chunks': book.get('chunks_count', 0),
                             })
@@ -1669,7 +1677,7 @@ if tab_restore:
                             hide_index=True,
                             column_config={
                                 "Select": st.column_config.CheckboxColumn(required=True),
-                                "File Path": None # Hide file path from user
+                                "File Path": None  # Hide file path from user
                             },
                             disabled=df.columns.drop("Select")
                         )

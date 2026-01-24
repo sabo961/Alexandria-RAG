@@ -12,16 +12,21 @@ import sys
 import os
 from pathlib import Path
 
-# Add scripts to path
-sys.path.append(str(Path(__file__).parent / 'scripts'))
+# Add project root to path so the scripts package resolves for Pylance/runtime
+project_root = Path(__file__).parent
+scripts_root = project_root / "scripts"
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+if str(scripts_root) not in sys.path:
+    sys.path.append(str(scripts_root))
 
-from generate_book_inventory import scan_calibre_library, write_inventory
-from count_file_types import count_file_types
-from collection_manifest import CollectionManifest
-from ingest_books import generate_embeddings, ingest_book
-from qdrant_utils import delete_collection_and_artifacts
-from rag_query import perform_rag_query
-from calibre_db import CalibreDB
+from scripts.generate_book_inventory import scan_calibre_library, write_inventory
+from scripts.count_file_types import count_file_types
+from scripts.collection_manifest import CollectionManifest
+from scripts.ingest_books import generate_embeddings, ingest_book
+from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
+from scripts.rag_query import perform_rag_query
+from scripts.calibre_db import CalibreDB
 import json
 import time
 import pandas as pd
@@ -36,8 +41,9 @@ def render_ingestion_diagnostics(result: dict, context_label: str) -> None:
             "captured_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "diagnostics": diagnostics
         }
-        with st.expander(f"🔍 Diagnostics ({context_label})"):
-            st.json(diagnostics)
+        if st.session_state.get("show_ingestion_diagnostics", True):
+            with st.expander(f"🔍 Diagnostics ({context_label})"):
+                st.json(diagnostics)
 
 
 def load_gui_settings() -> dict:
@@ -225,7 +231,7 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     # Import from scripts
     scripts_path = Path(__file__).parent / 'scripts'
     sys.path.insert(0, str(scripts_path))
-    from ingest_books import (
+    from scripts.ingest_books import (
         extract_text_from_epub,
         extract_text_from_pdf,
         extract_text_from_txt,
@@ -244,7 +250,7 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     original_cwd = os.getcwd()
     os.chdir(scripts_path)
 
-    from collection_manifest import CollectionManifest
+    from scripts.collection_manifest import CollectionManifest
 
     results = {
         'total': len(selected_files),
@@ -379,7 +385,7 @@ with st.sidebar:
         "Library Directory",
         value=st.session_state.library_dir,
         help="Path to Calibre library"
-    )
+    ) or st.session_state.library_dir
 
     settings_changed = False
 
@@ -552,24 +558,24 @@ with st.sidebar:
         selected_model = None
 
 # Check for archives to conditionally show the Restore tab
-archive_dir = Path(__file__).parent / 'logs' / 'archive'
+archive_dir = Path(__file__).parent / 'logs' / 'deleted'
 archived_manifests_exist = archive_dir.exists() and any(archive_dir.glob('*_manifest_*.json'))
 
 # Main content
 tabs_to_show = [
-    "📚 Calibre Library",
-    "📖 Ingested Books",
-    "🔄 Ingestion",
+    "📚 Calibre ingestion",
+    "🔄 Folder ingestion",
+    "📖 Qdrant collections",
 ]
 if archived_manifests_exist:
-    tabs_to_show.append("🗄️ Restore from Archive")
+    tabs_to_show.append("🗄️ Restore deleted")
 tabs_to_show.append("🔍 Query")
 
 tabs = st.tabs(tabs_to_show)
 
 tab_calibre = tabs[0]
-tab_ingested = tabs[1]
-tab_ingestion = tabs[2]
+tab_ingested = tabs[2]
+tab_ingestion = tabs[1]
 tab_restore = tabs[3] if archived_manifests_exist else None
 tab_query = tabs[-1]
 
@@ -683,6 +689,9 @@ with tab_calibre:
 
         # Display as DataFrame with pagination
         if filtered_books:
+            if "calibre_selected_books" not in st.session_state:
+                st.session_state.calibre_selected_books = set()
+
             # Pagination controls at top
             pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
 
@@ -700,15 +709,17 @@ with tab_calibre:
 
             # Calculate total pages
             total_books = len(filtered_books)
-            total_pages = (total_books + rows_per_page - 1) // rows_per_page  # Ceiling division
+            total_pages: int = (total_books + rows_per_page - 1) // rows_per_page  # Ceiling division
 
-            # Ensure current page is within bounds
-            if st.session_state.calibre_current_page > total_pages:
-                st.session_state.calibre_current_page = total_pages
-            if st.session_state.calibre_current_page < 1:
-                st.session_state.calibre_current_page = 1
+            # Ensure current page is always an int within bounds (avoid None comparisons)
+            raw_page = st.session_state.get('calibre_current_page')
+            try:
+                current_page: int = int(raw_page) if raw_page is not None else 1
+            except (TypeError, ValueError):
+                current_page = 1
 
-            current_page = st.session_state.calibre_current_page
+            current_page = max(1, min(current_page, total_pages))
+            st.session_state.calibre_current_page = current_page
 
             with pagination_col2:
                 st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
@@ -719,6 +730,7 @@ with tab_calibre:
 
             # Build DataFrame for current page with global row numbers
             df_data = []
+            selected_ids = st.session_state.calibre_selected_books
             for idx, book in enumerate(filtered_books[start_idx:end_idx]):
                 # Format icons
                 format_icons = []
@@ -738,6 +750,8 @@ with tab_calibre:
                 global_row_num = start_idx + idx + 1
 
                 df_data.append({
+                    'Select': book.id in selected_ids,
+                    'Id': book.id,
                     '#': global_row_num,
                     '': ' '.join(format_icons) if format_icons else '📄',
                     'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
@@ -749,8 +763,38 @@ with tab_calibre:
                 })
 
             df = pd.DataFrame(df_data)
-            # Hide default index since we have our own "#" column
-            st.dataframe(df, use_container_width=True, height=500, hide_index=True)
+            table_reset_token = st.session_state.get("calibre_table_reset", 0)
+            with st.form(key=f"calibre_table_form_{current_page}_{table_reset_token}"):
+                # Hide default index since we have our own "#" column
+                row_height_px = 35
+                header_height_px = 38
+                table_padding_px = 12
+                max_table_height = 500
+                dynamic_table_height = min(
+                    max_table_height,
+                    header_height_px + (row_height_px * max(len(df), 1)) + table_padding_px
+                )
+                edited_df = st.data_editor(
+                    df,
+                    use_container_width=True,
+                    height=dynamic_table_height,
+                    hide_index=True,
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn(required=True),
+                        "Id": None
+                    },
+                    disabled=df.columns.drop(["Select"]),
+                    key=f"calibre_table_editor_{current_page}_{table_reset_token}"
+                )
+                apply_selection = st.form_submit_button("✅ Update Selection")
+
+            if apply_selection:
+                page_ids = set(edited_df["Id"].tolist())
+                page_selected_ids = set(edited_df.loc[edited_df["Select"], "Id"].tolist())
+                updated_selected_ids = set(st.session_state.calibre_selected_books)
+                updated_selected_ids.difference_update(page_ids)
+                updated_selected_ids.update(page_selected_ids)
+                st.session_state.calibre_selected_books = updated_selected_ids
 
             # Pagination controls - minimal with arrow buttons
             st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
@@ -779,9 +823,7 @@ with tab_calibre:
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Direct Ingestion Section (collapsible)
-            st.markdown("---")
-            with st.expander("🚀 Direct Ingestion from Calibre", expanded=False):
-                st.info("💡 Browse the table above, then select books here to ingest directly into Alexandria.")
+            with st.expander("🚀 Calibre > Qdrant", expanded=False):
 
                 # Ingestion configuration
                 config_col1, config_col2, config_col3 = st.columns(3)
@@ -810,44 +852,10 @@ with tab_calibre:
                         key="calibre_preferred_format"
                     )
 
-                st.markdown("---")
-
-                # Selection scope toggle
-                selection_scope = st.radio(
-                    "Selection scope",
-                    options=["Current page only", "All filtered books (up to 500)"],
-                    index=0,
-                    horizontal=True,
-                    help="Choose whether to select from current page or all filtered results"
-                )
-
-                # Create book selection multiselect
-                if selection_scope == "Current page only":
-                    # Show only books from current page
-                    books_to_show = filtered_books[start_idx:end_idx]
-                    scope_text = f"current page ({len(books_to_show)} books)"
-                else:
-                    # Show all filtered books (up to 500 for performance)
-                    books_to_show = filtered_books[:500]
-                    scope_text = f"all filtered results ({min(len(filtered_books), 500)} books)"
-
-                book_options = {}
-                for book in books_to_show:
-                    # Format icons
-                    icon = '📕' if 'epub' in book.formats else '📄' if 'pdf' in book.formats else '📝'
-                    label = f"{icon} {book.title} — {book.author} ({', '.join(book.formats[:2])})"
-                    book_options[label] = book
-
-                selected_labels = st.multiselect(
-                    f"Select books to ingest (from {scope_text})",
-                    options=list(book_options.keys()),
-                    help="Type to search, or scroll to select books. Use filters above to narrow down the list."
-                )
-
-                selected_books = [book_options[label] for label in selected_labels]
+                selected_ids = st.session_state.get("calibre_selected_books", set())
+                selected_books = [book for book in all_books if book.id in selected_ids]
 
                 # Display selection summary and ingest button
-                st.markdown("---")
                 if selected_books:
                     st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
 
@@ -966,6 +974,9 @@ with tab_calibre:
 
                         if success_count > 0:
                             st.success(f"✅ Successfully ingested {success_count} books!")
+                            st.session_state.calibre_selected_books = set()
+                            st.session_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
+                            st.rerun()
 
                         if error_count > 0:
                             st.error(f"❌ Failed to ingest {error_count} books")
@@ -973,7 +984,7 @@ with tab_calibre:
                                 for error in errors:
                                     st.text(f"• {error}")
                 else:
-                    st.info("👆 Select books from the multiselect above to begin")
+                    st.info("👆 Select books using the checkboxes in the table above to begin")
 
             if len(filtered_books) > 500:
                 st.warning(f"⚠️ Showing first 500 books. {len(filtered_books) - 500} more books match your filters. Refine filters to see more.")
@@ -1153,7 +1164,20 @@ with tab_ingested:
 
                 with st.expander("⚙️ Collection Management"):
                     st.warning(f"**DANGER ZONE:** Actions performed here are permanent and cannot be undone.")
-                    st.markdown(f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant, along with its manifest files.")
+                    st.markdown(
+                        f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant. "
+                        "Choose whether to preserve artifacts or permanently remove them."
+                    )
+
+                    delete_mode = st.radio(
+                        "Delete mode",
+                        options=[
+                            "Preserve artifacts (move to logs/deleted)",
+                            "Hard delete (remove artifacts permanently)"
+                        ],
+                        index=0,
+                        help="Preserve keeps manifests for restore; hard delete removes them permanently."
+                    )
 
                     # Confirmation state management
                     if 'confirm_delete' not in st.session_state:
@@ -1164,15 +1188,39 @@ with tab_ingested:
                             st.session_state.confirm_delete = selected_collection
                             st.rerun()
                     else:
-                        st.error(f"**Are you sure?** This will permanently delete the Qdrant collection and all associated manifest files. This action cannot be undone.")
+                        confirmation_label = (
+                            "**Are you sure?** This will permanently delete the Qdrant collection. "
+                            "Artifacts will be preserved in logs/deleted."
+                            if delete_mode.startswith("Preserve")
+                            else "**Are you sure?** This will permanently delete the Qdrant collection and all associated artifacts. This action cannot be undone."
+                        )
+                        st.error(confirmation_label)
                         confirm_col1, confirm_col2 = st.columns(2)
                         with confirm_col1:
                             if st.button("🚨 YES, DELETE PERMANENTLY", use_container_width=True, type="primary"):
-                                with st.spinner(f"Deleting collection '{selected_collection}' and all its data..."):
-                                    delete_results = delete_collection_and_artifacts(collection_name=selected_collection, host=qdrant_host, port=qdrant_port)
+                                if delete_mode.startswith("Preserve"):
+                                    spinner_label = f"Deleting collection '{selected_collection}' and preserving artifacts..."
+                                    delete_action = delete_collection_preserve_artifacts
+                                else:
+                                    spinner_label = f"Deleting collection '{selected_collection}' and removing artifacts..."
+                                    delete_action = delete_collection_and_artifacts
+
+                                with st.spinner(spinner_label):
+                                    delete_results = delete_action(
+                                        collection_name=selected_collection,
+                                        host=qdrant_host,
+                                        port=qdrant_port
+                                    )
 
                                 if not delete_results['errors']:
-                                    st.success(f"✅ Collection '{selected_collection}' and its artifacts have been deleted.")
+                                    if delete_mode.startswith("Preserve"):
+                                        st.success(
+                                            f"✅ Collection '{selected_collection}' deleted. Artifacts preserved in logs/deleted."
+                                        )
+                                    else:
+                                        st.success(
+                                            f"✅ Collection '{selected_collection}' deleted and artifacts removed permanently."
+                                        )
                                     st.session_state.confirm_delete = None
                                     st.info("Refreshing app...")
                                     time.sleep(2)
@@ -1249,7 +1297,7 @@ with tab_ingestion:
                 # Try to get collection info
                 try:
                     collection_info = client.get_collection(collection_name)
-                    points_count = collection_info.points_count
+                    points_count = collection_info.points_count or 0
                     if points_count > 0:
                         collection_is_empty = False
                         collection_model_locked = True
@@ -1504,16 +1552,16 @@ with tab_ingestion:
             st.info("No ingestion in progress.")
 
 # ============================================
-# TAB 3: Restore from Archive
+# TAB 3: Restore deleted
 # ============================================
 if tab_restore:
     with tab_restore:
-        st.markdown('<div class="section-header">🗄️ Restore from Archive</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">🗄️ Restore deleted</div>', unsafe_allow_html=True)
         st.info("Restore books from a deleted collection's manifest back into a new or existing collection.")
 
         archive_files = list(archive_dir.glob('*_manifest_*.json'))
         if not archive_files:
-            st.warning("No archived manifests found.")
+            st.warning("No deleted manifests found.")
         else:
             # Create a mapping from a user-friendly name to the file path
             archive_options = {}
@@ -1533,12 +1581,15 @@ if tab_restore:
                     archive_options[f.name] = f
 
             selected_archive_display_name = st.selectbox(
-                "Select an archived manifest to restore from",
+                "Select a deleted manifest to restore from",
                 options=list(archive_options.keys())
             )
 
             if selected_archive_display_name:
                 selected_archive_path = archive_options[selected_archive_display_name]
+                delete_archive_key = f"confirm_delete_archive_{selected_archive_path.name}"
+                if delete_archive_key not in st.session_state:
+                    st.session_state[delete_archive_key] = False
                 
                 try:
                     with open(selected_archive_path, 'r', encoding='utf-8') as f:
@@ -1568,6 +1619,48 @@ if tab_restore:
                             })
                         
                         df = pd.DataFrame(df_data)
+
+                        delete_archive_col1, delete_archive_col2 = st.columns([2, 3])
+                        with delete_archive_col1:
+                            if st.session_state[delete_archive_key]:
+                                st.error(
+                                    "**Confirm delete:** This will permanently remove the archived manifest file."
+                                )
+                                confirm_delete_col1, confirm_delete_col2 = st.columns(2)
+                                with confirm_delete_col1:
+                                    if st.button(
+                                        "🗑️ Delete archive file",
+                                        type="primary",
+                                        use_container_width=True,
+                                        key=f"delete_archive_{selected_archive_path.name}"
+                                    ):
+                                        try:
+                                            selected_archive_path.unlink()
+                                            st.success("✅ Archive file deleted.")
+                                            st.session_state[delete_archive_key] = False
+                                            st.info("Refreshing view...")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"⚠️ Failed to delete archive file: {e}")
+                                with confirm_delete_col2:
+                                    if st.button(
+                                        "Cancel",
+                                        use_container_width=True,
+                                        key=f"cancel_delete_archive_{selected_archive_path.name}"
+                                    ):
+                                        st.session_state[delete_archive_key] = False
+                                        st.rerun()
+                            else:
+                                if st.button(
+                                    "🗑️ Delete archive file",
+                                    use_container_width=True,
+                                    key=f"request_delete_archive_{selected_archive_path.name}"
+                                ):
+                                    st.session_state[delete_archive_key] = True
+                                    st.rerun()
+                        with delete_archive_col2:
+                            st.caption("Delete the entire archived manifest file if you no longer need it.")
                         
                         st.markdown("##### 1. Select books to restore")
                         edited_df = st.data_editor(
@@ -1583,7 +1676,50 @@ if tab_restore:
                         
                         selected_rows = edited_df[edited_df['Select']]
 
-                        if not selected_rows.empty:
+                        remove_col1, remove_col2 = st.columns([2, 3])
+                        with remove_col1:
+                            if st.button(
+                                "🧹 Remove selected from archive",
+                                use_container_width=True,
+                                disabled=selected_rows.empty
+                            ):
+                                try:
+                                    with open(selected_archive_path, 'r', encoding='utf-8') as f:
+                                        archive_data = json.load(f)
+
+                                    original_collection_name = selected_archive_path.stem.split('_manifest_')[0]
+                                    selected_paths = set(selected_rows["File Path"].tolist())
+
+                                    if original_collection_name in archive_data.get('collections', {}):
+                                        original_books = archive_data['collections'][original_collection_name].get('books', [])
+                                        updated_books = [
+                                            book for book in original_books
+                                            if book.get('file_path') not in selected_paths
+                                        ]
+                                        removed_count = len(original_books) - len(updated_books)
+                                        archive_data['collections'][original_collection_name]['books'] = updated_books
+
+                                        with open(selected_archive_path, 'w', encoding='utf-8') as f:
+                                            json.dump(archive_data, f, indent=2, ensure_ascii=False)
+
+                                        st.success(f"✅ Removed {removed_count} book(s) from the archive manifest.")
+                                        st.info("Refreshing view...")
+                                        time.sleep(1)
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"⚠️ Failed to update archive manifest: {e}")
+                        with remove_col2:
+                            st.caption("Remove selected rows if you no longer want to restore them.")
+
+                        restore_all = st.checkbox(
+                            "Restore ALL books from this manifest",
+                            value=False,
+                            help="Ignores manual selection and restores every book in the deleted manifest."
+                        )
+
+                        if selected_rows.empty and not restore_all:
+                            st.info("👆 Select books using the checkboxes above to begin the restore process, or enable Restore ALL.")
+                        else:
                             st.markdown("---")
                             st.markdown("##### 2. Configure target collection")
                             
@@ -1595,14 +1731,16 @@ if tab_restore:
                                     help="Name of the new or existing collection to ingest books into."
                                 )
                             with ingest_col2:
+                                default_domain = selected_rows.iloc[0]['Domain'] if not selected_rows.empty else df.iloc[0]['Domain']
                                 restore_domain = st.selectbox(
                                     "Set new domain for all",
                                     options=load_domains(),
-                                    index=load_domains().index(selected_rows.iloc[0]['Domain']) if selected_rows.iloc[0]['Domain'] in load_domains() else 0,
+                                    index=load_domains().index(default_domain) if default_domain in load_domains() else 0,
                                     help="Select a new domain for all selected books for the restored collection."
                                 )
                             
-                            st.info(f"You are about to ingest **{len(selected_rows)}** book(s) into the **`{restore_collection_name}`** collection.")
+                            target_count = len(df) if restore_all else len(selected_rows)
+                            st.info(f"You are about to ingest **{target_count}** book(s) into the **`{restore_collection_name}`** collection.")
 
                             if st.button("🚀 Restore Selected Books", type="primary", use_container_width=True):
                                 progress_bar = st.progress(0)
@@ -1612,15 +1750,24 @@ if tab_restore:
                                 errors = []
                                 successfully_restored_paths = []
 
-                                for idx, row in selected_rows.iterrows():
-                                    progress = (idx + 1) / len(selected_rows)
+                                if restore_all:
+                                    rows_to_restore = df
+                                else:
+                                    rows_to_restore = selected_rows
+
+                                missing_paths = []
+                                total_rows = len(rows_to_restore)
+
+                                for idx, (_, row) in enumerate(rows_to_restore.iterrows(), start=1):
+                                    progress = idx / max(total_rows, 1)
                                     progress_bar.progress(progress)
-                                    status_text.text(f"Restoring {idx + 1}/{len(selected_rows)}: {row['Title']}")
+                                    status_text.text(f"Restoring {idx}/{total_rows}: {row['Title']}")
                                     
-                                    file_path_to_ingest = row['File Path']
+                                    file_path_to_ingest = row["File Path"]
                                     
                                     # Check if the file still exists
                                     if not Path(file_path_to_ingest).exists():
+                                        missing_paths.append(file_path_to_ingest)
                                         errors.append(f"{row['Title']}: File not found at {file_path_to_ingest}")
                                         error_count += 1
                                         continue
@@ -1645,6 +1792,14 @@ if tab_restore:
                                         errors.append(f"{row['Title']}: {str(e)}")
                                         error_count += 1
                                 
+                                if missing_paths:
+                                    st.warning(
+                                        f"⚠️ {len(missing_paths)} book file(s) were missing on disk and were skipped."
+                                    )
+                                    with st.expander("Missing file paths"):
+                                        for missing in missing_paths:
+                                            st.write(f"- {missing}")
+
                                 # After loop, update the archive manifest file
                                 if successfully_restored_paths:
                                     try:
@@ -1684,8 +1839,7 @@ if tab_restore:
                                     with st.expander("Show Errors"):
                                         for error in errors:
                                             st.write(f"- {error}")
-                        else:
-                            st.info("👆 Select books using the checkboxes above to begin the restore process.")
+                        
 
 
                 except Exception as e:

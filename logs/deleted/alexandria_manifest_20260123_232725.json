@@ -1,0 +1,86 @@
+{
+  "created_at": "2026-01-23T01:23:33.371414",
+  "last_updated": "2026-01-23T22:25:07.194923",
+  "collections": {
+    "alexandria": {
+      "created_at": "2026-01-23T01:23:44.224945",
+      "domain": "technical",
+      "books": [
+        {
+          "file_path": "G:\\My Drive\\alexandria\\Osamu Dazai\\Blue Bamboo_ Tales by Dazai Osamu (11007)\\Blue Bamboo_ Tales by Dazai Osamu - Osamu Dazai.epub",
+          "file_name": "Blue Bamboo_ Tales by Dazai Osamu - Osamu Dazai.epub",
+          "book_title": "Blue Bamboo: Tales by Dazai Osamu",
+          "author": "Osamu Dazai",
+          "domain": "technical",
+          "file_type": "EPUB",
+          "language": "unknown",
+          "chunks_count": 84,
+          "file_size_mb": 0.44,
+          "ingested_at": "2026-01-23T20:46:07.302432"
+        },
+        {
+          "file_path": "C:\\Users\\goran\\source\\repos\\Temenos\\Akademija\\Alexandria\\ingest\\Pablo Neruda - Adam Feinstein.epub",
+          "file_name": "Pablo Neruda - Adam Feinstein.epub",
+          "book_title": "Pablo Neruda",
+          "author": "Adam Feinstein",
+          "domain": "technical",
+          "file_type": "EPUB",
+          "language": "unknown",
+          "chunks_count": 179,
+          "file_size_mb": 8.73,
+          "ingested_at": "2026-01-23T20:46:57.465703"
+        },
+        {
+          "file_path": "G:\\My Drive\\alexandria\\Mosab Hassan Yousef\\From Hamas to America (10983)\\From Hamas to America - Mosab Hassan Yousef.epub",
+          "file_name": "From Hamas to America - Mosab Hassan Yousef.epub",
+          "book_title": "From Hamas to America",
+          "author": "Mosab Hassan Yousef",
+          "domain": "technical",
+          "file_type": "EPUB",
+          "language": "unknown",
+          "chunks_count": 91,
+          "file_size_mb": 0.94,
+          "ingested_at": "2026-01-23T21:41:48.514617"
+        },
+        {
+          "file_path": "G:\\My Drive\\alexandria\\Osamu Dazai\\The Setting Sun (11008)\\The Setting Sun - Osamu Dazai.pdf",
+          "file_name": "The Setting Sun - Osamu Dazai.pdf",
+          "book_title": "The Setting Sun",
+          "author": "Osamu Dazai",
+          "domain": "technical",
+          "file_type": "PDF",
+          "language": "unknown",
+          "chunks_count": 78,
+          "file_size_mb": 5.85,
+          "ingested_at": "2026-01-23T21:58:59.891099"
+        },
+        {
+          "file_path": "G:\\My Drive\\alexandria\\Osamu Dazai\\The Flowers of Buffoonery (11006)\\The Flowers of Buffoonery - Osamu Dazai.pdf",
+          "file_name": "The Flowers of Buffoonery - Osamu Dazai.pdf",
+          "book_title": "The Flowers of Buffoonery",
+          "author": "Osamu Dazai",
+          "domain": "technical",
+          "file_type": "PDF",
+          "language": "unknown",
+          "chunks_count": 34,
+          "file_size_mb": 0.63,
+          "ingested_at": "2026-01-23T21:59:27.533617"
+        },
+        {
+          "file_path": "G:\\My Drive\\alexandria\\Rod Dreher\\The Benedict Option_ A Strategy for Christians in a Post-Christian Nation (10964)\\The Benedict Option_ A Strategy for Christ - Rod Dreher.epub",
+          "file_name": "The Benedict Option_ A Strategy for Christ - Rod Dreher.epub",
+          "book_title": "The Benedict Option: A Strategy for Christians in a Post-Christian Nation",
+          "author": "Rod Dreher",
+          "domain": "technical",
+          "file_type": "EPUB",
+          "language": "unknown",
+          "chunks_count": 90,
+          "file_size_mb": 0.82,
+          "ingested_at": "2026-01-23T22:25:07.194913"
+        }
+      ],
+      "total_chunks": 1028,
+      "total_size_mb": 38.06474208831787
+    }
+  }
+}

@@ -188,7 +188,7 @@ def copy_collection(
 
 def delete_collection_and_artifacts(collection_name: str, host: str, port: int) -> dict:
     """
-    Deletes a Qdrant collection and its associated manifest and progress files.
+    Deletes a Qdrant collection and permanently removes its manifest and progress files.
     This function is non-interactive and designed for programmatic use.
 
     Args:
@@ -214,11 +214,59 @@ def delete_collection_and_artifacts(collection_name: str, host: str, port: int) 
         else:
             results['errors'].append(f"Qdrant deletion failed: {e}")
 
-    # 2. Archive manifest, progress, and CSV files
+    # 2. Permanently delete manifest, progress, and CSV files
     scripts_dir = Path(__file__).parent
     app_root = scripts_dir.parent
-    archive_dir = app_root / 'logs' / 'archive'
-    archive_dir.mkdir(exist_ok=True)  # Ensure archive directory exists
+
+    files_to_delete = [
+        app_root / 'logs' / f'{collection_name}_manifest.json',
+        app_root / 'logs' / f'{collection_name}_manifest.csv',
+        scripts_dir / f'batch_ingest_progress_{collection_name}.json'
+    ]
+
+    for file_path in files_to_delete:
+        try:
+            if file_path.exists():
+                file_path.unlink()
+                logger.info(f"Deleted {file_path.name}")
+
+            if 'manifest.json' in str(file_path):
+                results['manifest'] = True
+            if 'manifest.csv' in str(file_path):
+                results['csv'] = True
+            if 'progress' in str(file_path):
+                results['progress'] = True
+        except Exception as e:
+            results['errors'].append(f"Failed to delete {file_path.name}: {e}")
+
+    return results
+
+
+def delete_collection_preserve_artifacts(collection_name: str, host: str, port: int) -> dict:
+    """
+    Deletes a Qdrant collection and preserves its manifest and progress files by moving
+    them into logs/deleted with a timestamp suffix.
+    """
+    results = {'qdrant': False, 'manifest': False, 'csv': False, 'progress': False, 'errors': []}
+    client = QdrantClient(host=host, port=port)
+
+    # 1. Delete Qdrant collection
+    try:
+        collections = [c.name for c in client.get_collections().collections]
+        if collection_name in collections:
+            client.delete_collection(collection_name=collection_name)
+        results['qdrant'] = True
+    except Exception as e:
+        if "Not found" in str(e) or "doesn't exist" in str(e):
+            results['qdrant'] = True
+        else:
+            results['errors'].append(f"Qdrant deletion failed: {e}")
+
+    # 2. Move manifest, progress, and CSV files to deleted folder
+    scripts_dir = Path(__file__).parent
+    app_root = scripts_dir.parent
+    deleted_dir = app_root / 'logs' / 'deleted'
+    deleted_dir.mkdir(exist_ok=True)
 
     files_to_archive = [
         app_root / 'logs' / f'{collection_name}_manifest.json',
@@ -232,14 +280,16 @@ def delete_collection_and_artifacts(collection_name: str, host: str, port: int) 
         try:
             if file_path.exists():
                 archive_name = f"{file_path.stem}_{timestamp}{file_path.suffix}"
-                archive_path = archive_dir / archive_name
+                archive_path = deleted_dir / archive_name
                 file_path.rename(archive_path)
-                logger.info(f"Archived {file_path.name} to {archive_path.name}")
+                logger.info(f"Moved {file_path.name} to deleted/{archive_path.name}")
 
-            # Set success status regardless of whether it existed or was just archived
-            if 'manifest.json' in str(file_path): results['manifest'] = True
-            if 'manifest.csv' in str(file_path): results['csv'] = True
-            if 'progress' in str(file_path): results['progress'] = True
+            if 'manifest.json' in str(file_path):
+                results['manifest'] = True
+            if 'manifest.csv' in str(file_path):
+                results['csv'] = True
+            if 'progress' in str(file_path):
+                results['progress'] = True
         except Exception as e:
             results['errors'].append(f"Failed to archive {file_path.name}: {e}")
 
@@ -266,18 +316,19 @@ def delete_collection(
     if with_artifacts:
         results = delete_collection_and_artifacts(collection_name, host, port)
         if not results['errors']:
-            logger.info(f"✅ Successfully deleted collection '{collection_name}' and all its artifacts.")
+            logger.info(f"✅ Deleted collection '{collection_name}' and permanently removed all artifacts.")
         else:
             logger.error(f"❌ Encountered errors during deletion for '{collection_name}':")
             for error in results['errors']:
                 logger.error(f"  - {error}")
     else:
-        client = QdrantClient(host=host, port=port)
-        try:
-            client.delete_collection(collection_name=collection_name)
-            logger.info(f"✅ Deleted collection: {collection_name}")
-        except Exception as e:
-            logger.error(f"Failed to delete collection: {e}")
+        results = delete_collection_preserve_artifacts(collection_name, host, port)
+        if not results['errors']:
+            logger.info(f"✅ Deleted collection '{collection_name}' and preserved artifacts in logs/deleted.")
+        else:
+            logger.error(f"❌ Encountered errors during deletion for '{collection_name}':")
+            for error in results['errors']:
+                logger.error(f"  - {error}")
 
 
 def create_alias(

@@ -495,6 +495,7 @@ with st.sidebar:
     # Model selection - Fetch from OpenRouter API
     if openrouter_api_key:
         if st.button("🔄 Fetch Models", use_container_width=True):
+            st.session_state["force_speaker_tab"] = True
             with st.spinner("Fetching..."):
                 try:
                     import requests
@@ -571,6 +572,7 @@ archive_dir = Path(__file__).parent / 'logs' / 'deleted'
 archived_manifests_exist = archive_dir.exists() and any(archive_dir.glob('*_manifest_*.json'))
 
 # Main content
+speaker_tab_label = "🔍 Speaker's corner"
 tabs_to_show = [
     "📚 Calibre ingestion",
     "🔄 Folder ingestion",
@@ -578,15 +580,20 @@ tabs_to_show = [
 ]
 if archived_manifests_exist:
     tabs_to_show.append("🗄️ Restore deleted")
-tabs_to_show.append("🔍 Speaker's corner")
+tabs_to_show.append(speaker_tab_label)
+
+if st.session_state.get("force_speaker_tab"):
+    tabs_to_show = [speaker_tab_label] + [tab for tab in tabs_to_show if tab != speaker_tab_label]
+    st.session_state["force_speaker_tab"] = False
 
 tabs = st.tabs(tabs_to_show)
+tabs_by_label = dict(zip(tabs_to_show, tabs))
 
-tab_calibre = tabs[0]
-tab_ingested = tabs[2]
-tab_ingestion = tabs[1]
-tab_restore = tabs[3] if archived_manifests_exist else None
-tab_query = tabs[-1]
+tab_calibre = tabs_by_label["📚 Calibre ingestion"]
+tab_ingestion = tabs_by_label["🔄 Folder ingestion"]
+tab_ingested = tabs_by_label["📖 Qdrant collections"]
+tab_restore = tabs_by_label.get("🗄️ Restore deleted")
+tab_query = tabs_by_label[speaker_tab_label]
 
 
 # ============================================

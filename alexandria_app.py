@@ -288,7 +288,8 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
                     author=result['author'],
                     domain=domain,
                     chunks_count=result['chunks'],
-                    file_size_mb=result['file_size_mb']
+                    file_size_mb=result['file_size_mb'],
+                    language=result.get('language')
                 )
 
                 # Move file if requested and show combined success message
@@ -356,8 +357,16 @@ def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, s
             return False, f"Error: {error_msg[:50]}"
 
 
-# Header - monospace for both light and dark themes
-st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
+# Header - logo + title
+logo_path = Path(__file__).parent / "assets" / "logo.png"
+if logo_path.exists():
+    logo_col, title_col, _ = st.columns([1, 5, 1])
+    with logo_col:
+        st.image(str(logo_path), width=120)
+    with title_col:
+        st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
+else:
+    st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
 
 # Initialize session state for Qdrant health (will be set by sidebar)
@@ -920,7 +929,8 @@ with tab_calibre:
                                     domain=calibre_domain,
                                     collection_name=calibre_collection,
                                     qdrant_host=qdrant_host,
-                                    qdrant_port=qdrant_port
+                                    qdrant_port=qdrant_port,
+                                    language_override=book.language
                                 )
 
                                 if result and result.get('success'):
@@ -931,7 +941,8 @@ with tab_calibre:
                                         'author': result['author'],
                                         'domain': calibre_domain,
                                         'chunks': result['chunks'],
-                                        'file_size_mb': result['file_size_mb']
+                                        'file_size_mb': result['file_size_mb'],
+                                        'language': result.get('language')
                                     })
                                     render_ingestion_diagnostics(result, book.title)
                                 else:
@@ -959,7 +970,8 @@ with tab_calibre:
                                     author=book_info['author'],
                                     domain=book_info['domain'],
                                     chunks_count=book_info['chunks'],
-                                    file_size_mb=book_info['file_size_mb']
+                                    file_size_mb=book_info['file_size_mb'],
+                                    language=book_info.get('language')
                                 )
                             st.success(f"📝 Updated manifest with {len(ingested_books)} book(s)")
 
@@ -1623,6 +1635,7 @@ if tab_restore:
                                 'Domain': book.get('domain', 'N/A'),
                                 'Type': file_type or 'N/A',
                                 'File Path': book.get('file_path', 'N/A'),
+                                'Language': book.get('language', 'unknown'),
                                 'Chunks': book.get('chunks_count', 0),
                             })
                         
@@ -1677,7 +1690,8 @@ if tab_restore:
                             hide_index=True,
                             column_config={
                                 "Select": st.column_config.CheckboxColumn(required=True),
-                                "File Path": None  # Hide file path from user
+                                "File Path": None,  # Hide file path from user
+                                "Language": None
                             },
                             disabled=df.columns.drop("Select")
                         )
@@ -1786,7 +1800,8 @@ if tab_restore:
                                             domain=restore_domain,
                                             collection_name=restore_collection_name,
                                             qdrant_host=qdrant_host,
-                                            qdrant_port=qdrant_port
+                                            qdrant_port=qdrant_port,
+                                            language_override=row.get('Language')
                                         )
 
                                         if result and result.get('success'):

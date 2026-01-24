@@ -181,6 +181,7 @@ def ingest_book(
     logger.info(f"   Sections: {len(chapters)}")
 
     # Chunk all chapters
+    language = metadata.get('language', 'unknown') or 'unknown'
     all_chunks = []
     for chapter in chapters:
         chunks = chunk_text(
@@ -188,7 +189,8 @@ def ingest_book(
             domain=domain,
             section_name=chapter['name'],
             book_title=book_title,
-            author=author
+            author=author,
+            language=language
         )
         all_chunks.extend(chunks)
 
@@ -209,8 +211,8 @@ def ingest_book(
         embeddings=embeddings,
         domain=domain,
         collection_name=collection_name,
-        host=host,
-        port=port
+        qdrant_host=host,
+        qdrant_port=port
     )
 
     logger.info(f"✅ {filepath.name} - {len(all_chunks)} chunks uploaded\n")
@@ -221,15 +223,17 @@ def ingest_book(
         file_type = filepath.suffix.upper().replace('.', '')
 
         # Try to get language from Calibre DB
-        language = 'unknown'
+        calibre_language = 'unknown'
         if calibre_db:
             try:
                 calibre_book = calibre_db.match_file_to_book(filepath.name)
                 if calibre_book:
-                    language = calibre_book.language
-                    logger.info(f"   📚 Matched to Calibre: language={language}")
+                    calibre_language = calibre_book.language
+                    logger.info(f"   📚 Matched to Calibre: language={calibre_language}")
             except Exception as e:
                 logger.warning(f"   ⚠️  Could not lookup Calibre metadata: {e}")
+
+        effective_language = calibre_language if calibre_language != 'unknown' else language
 
         manifest.add_book(
             collection_name=collection_name,
@@ -240,7 +244,7 @@ def ingest_book(
             chunks_count=len(all_chunks),
             file_size_mb=file_size_mb,
             file_type=file_type,
-            language=language
+            language=effective_language
         )
 
     return len(all_chunks)
@@ -286,7 +290,7 @@ def batch_ingest(
     manifest = CollectionManifest(collection_name=collection_name)
 
     # Verify collection exists in Qdrant (reset manifest if deleted)
-    manifest.verify_collection_exists(collection_name, host=host, port=port)
+    manifest.verify_collection_exists(collection_name, qdrant_host=host, qdrant_port=port)
 
     # Initialize Calibre DB for metadata lookup (optional)
     calibre_db = None

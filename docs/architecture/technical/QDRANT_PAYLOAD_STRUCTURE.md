@@ -39,6 +39,7 @@ Book File (EPUB/PDF/TXT)
     "book_title": "The Data Model Resource Book Vol 3: Universal Patterns...",
     "author": "Len Silverston",
     "domain": "technical",
+    "language": "eng",
 
     // Location Metadata
     "section_name": "9781118080832toc.xhtml",
@@ -54,7 +55,8 @@ Book File (EPUB/PDF/TXT)
     "metadata": {
       "source": "The Data Model Resource Book Vol 3: Universal Patterns...",
       "section": "9781118080832toc.xhtml",
-      "domain": "technical"
+      "domain": "technical",
+      "language": "eng"
     }
   }
 }
@@ -123,6 +125,11 @@ metadata['title'] = doc.metadata.get('title', Path(filepath).stem)
 **Purpose:** Categorize content and apply domain-specific chunking
 **Values:** `technical`, `psychology`, `philosophy`, `history`
 
+#### `language` (string)
+**Source:** Calibre metadata or EPUB/PDF metadata
+**Purpose:** Identify language for filtering and analysis
+**Example:** `"eng"`, `"hrv"`, `"jpn"`
+
 ---
 
 ### Location Metadata Fields
@@ -179,7 +186,8 @@ metadata['title'] = doc.metadata.get('title', Path(filepath).stem)
 {
   "source": "book_title",
   "section": "section_name",
-  "domain": "domain"
+  "domain": "domain",
+  "language": "language"
 }
 ```
 
@@ -218,6 +226,7 @@ def upload_to_qdrant(
                 "book_title": chunk['book_title'],
                 "author": chunk['book_author'],
                 "domain": domain,
+                "language": chunk.get('language', 'unknown'),
 
                 # Location metadata
                 "section_name": chunk['section_name'],
@@ -233,7 +242,8 @@ def upload_to_qdrant(
                 "metadata": {
                     "source": chunk['book_title'],
                     "section": chunk['section_name'],
-                    "domain": domain
+                    "domain": domain,
+                    "language": chunk.get('language', 'unknown')
                 }
             }
         )
@@ -257,7 +267,8 @@ chapters = [{
 
 metadata = {
     'title': 'The Data Model Resource Book Vol 3...',
-    'author': 'Len Silverston'
+    'author': 'Len Silverston',
+    'language': 'eng'
 }
 ```
 
@@ -271,7 +282,8 @@ chunk = {
     'section_order': 1,
     'chunk_id': 0,
     'book_title': 'The Data Model Resource Book Vol 3...',
-    'book_author': 'Len Silverston'
+    'book_author': 'Len Silverston',
+    'language': 'eng'
 }
 ```
 
@@ -293,6 +305,7 @@ point = PointStruct(
         "book_title": "The Data Model Resource Book Vol 3...",
         "author": "Len Silverston",
         "domain": "technical",
+        "language": "eng",
         "section_name": "9781118080832toc.xhtml",
         "section_order": 1,
         "chunk_id": 0,
@@ -302,7 +315,8 @@ point = PointStruct(
         "metadata": {
             "source": "The Data Model Resource Book Vol 3...",
             "section": "9781118080832toc.xhtml",
-            "domain": "technical"
+            "domain": "technical",
+            "language": "eng"
         }
     }
 )
@@ -441,7 +455,7 @@ payload={
 
 **Key Payload Components:**
 - **Content:** `text`, `text_length`
-- **Book Info:** `book_title`, `author`, `domain`
+- **Book Info:** `book_title`, `author`, `domain`, `language`
 - **Location:** `section_name`, `section_order`, `chunk_id`
 - **Tracking:** `ingested_at`, `chunk_strategy`, `embedding_model`
 - **Compatibility:** `metadata` (nested, for Open WebUI)

@@ -220,9 +220,11 @@ def extract_text_from_pdf(filepath: str) -> Tuple[List[Dict], Dict]:
             })
 
     # Extract metadata
+    doc_metadata = doc.metadata or {}
     metadata = {
-        'title': doc.metadata.get('title', 'Unknown'),
-        'author': doc.metadata.get('author', 'Unknown'),
+        'title': doc_metadata.get('title', 'Unknown'),
+        'author': doc_metadata.get('author', 'Unknown'),
+        'language': doc_metadata.get('language', 'unknown') or 'unknown',
         'page_count': len(doc),
         'format': 'PDF'
     }
@@ -255,6 +257,7 @@ def extract_text_from_txt(filepath: str) -> Tuple[List[Dict], Dict]:
     metadata = {
         'title': Path(filepath).stem,
         'author': 'Unknown',
+        'language': 'unknown',
         'format': 'TXT'
     }
 
@@ -375,7 +378,8 @@ def chunk_text(
     overlap: Optional[int] = None,
     section_name: str = '',
     book_title: str = '',
-    author: str = ''
+    author: str = '',
+    language: str = 'unknown'
 ) -> List[Dict]:
     """
     Chunk text according to domain-specific strategy.
@@ -390,6 +394,7 @@ def chunk_text(
         section_name: Section/chapter/page name for metadata
         book_title: Book title for metadata
         author: Author name for metadata
+        language: Language code for metadata (default: 'unknown')
 
     Returns:
         List of chunk dicts with 'text', 'chunk_id', 'token_count', metadata
@@ -425,7 +430,8 @@ def chunk_text(
                 'end_word': end_idx,
                 'section_name': section_name,
                 'book_title': book_title,
-                'author': author
+                'author': author,
+                'language': language
             })
             chunk_id += 1
 
@@ -473,6 +479,7 @@ def create_chunks_from_sections(
     all_chunks = []
     book_title = metadata.get('title', 'Unknown')
     author = metadata.get('author', 'Unknown')
+    language = metadata.get('language', 'unknown') or 'unknown'
 
     # Check if argument-based chunking should be used
     use_argument_chunking = should_use_argument_chunking(domain)
@@ -501,7 +508,8 @@ def create_chunks_from_sections(
                 overlap=overlap,
                 section_name='merged',
                 book_title=book_title,
-                author=author
+                author=author,
+                language=language
             )
             all_chunks.extend(chunks)
     else:
@@ -525,7 +533,8 @@ def create_chunks_from_sections(
                     overlap=overlap,
                     section_name=section_name,
                     book_title=book_title,
-                    author=author
+                    author=author,
+                    language=language
                 )
 
                 # Add section order to each chunk
@@ -661,6 +670,7 @@ def upload_to_qdrant(
                 "book_title": chunk.get('book_title', 'Unknown'),
                 "author": chunk.get('author', 'Unknown'),
                 "domain": domain,
+                "language": chunk.get('language', 'unknown'),
 
                 # Location metadata
                 "section_name": chunk.get('section_name', ''),
@@ -676,7 +686,8 @@ def upload_to_qdrant(
                 "metadata": {
                     "source": chunk.get('book_title', 'Unknown'),
                     "section": chunk.get('section_name', ''),
-                    "domain": domain
+                    "domain": domain,
+                    "language": chunk.get('language', 'unknown')
                 }
             }
         )
@@ -704,7 +715,8 @@ def ingest_book(
     domain: str = 'technical',
     collection_name: str = 'alexandria',
     qdrant_host: str = 'localhost',
-    qdrant_port: int = 6333
+    qdrant_port: int = 6333,
+    language_override: Optional[str] = None
 ):
     """
     Main ingestion pipeline: Extract → Chunk → Embed → Upload
@@ -734,6 +746,9 @@ def ingest_book(
     # Step 1: Extract text
     sections, metadata = extract_text(normalized_path)
     logger.info(f"Book: {metadata['title']} by {metadata['author']}")
+
+    if language_override:
+        metadata['language'] = language_override
 
     # Check if any content was extracted
     if not sections or all(not section.get('text', '').strip() for section in sections):
@@ -787,6 +802,7 @@ def ingest_book(
         'success': True,
         'title': metadata.get('title', 'Unknown'),
         'author': metadata.get('author', 'Unknown'),
+        'language': metadata.get('language', 'unknown') or 'unknown',
         'chunks': len(chunks),
         'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
         'filepath': display_path,

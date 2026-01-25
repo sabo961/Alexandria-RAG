@@ -1422,6 +1422,9 @@ with tab_calibre:
 
                         st.success(f"✅ {results_msg}")
 
+                        # Clear ingestion progress flag
+                        st.session_state["ingest_in_progress"] = False
+
                         # Don't auto-clear selection or rerun - let user see results
                         # User can manually Update Selection to clear and start new ingestion
                         # if results['success_count'] > 0:

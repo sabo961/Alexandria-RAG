@@ -33,11 +33,16 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 # Universal Semantic Chunking
 from universal_chunking import UniversalChunker
 
-# Setup logging
+# Setup logging - configurable via ALEXANDRIA_LOG_LEVEL environment variable
+# Usage: export ALEXANDRIA_LOG_LEVEL=DEBUG or ALEXANDRIA_LOG_LEVEL=INFO
+log_level_str = os.getenv('ALEXANDRIA_LOG_LEVEL', 'INFO').upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
 logger = logging.getLogger(__name__)
 
 CALIBRE_LIBRARY_PATH = "G:\\My Drive\\alexandria" # Calibre library path
@@ -322,16 +327,22 @@ def ingest_book(
     title_override: Optional[str] = None,
     author_override: Optional[str] = None
 ):
+    logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
+
     normalized_path, display_path, _, _ = normalize_file_path(filepath)
-    
+
     ok, err = validate_file_access(normalized_path, display_path)
-    if not ok: return {'success': False, 'error': err}
+    if not ok:
+        logging.error(f"File access validation failed: {err}")
+        return {'success': False, 'error': err}
 
     # 1. Extract
     text, metadata = extract_text(normalized_path)
     if language_override: metadata['language'] = language_override
     if title_override: metadata['title'] = title_override
     if author_override: metadata['author'] = author_override
+
+    logging.debug(f"Text extracted. Title: '{metadata.get('title')}', Author: '{metadata.get('author')}'")
 
     # Enrich metadata from Calibre after initial extraction but before overrides
     metadata = _enrich_metadata_from_calibre(filepath, metadata)
@@ -352,15 +363,18 @@ def ingest_book(
     sentence_count = len(text.split('. '))
     
     chunks = chunker.chunk(text, metadata=metadata)
-    
+
     if not chunks:
+        logging.error(f"No chunks created for {metadata.get('title')}")
         return {'success': False, 'error': 'No chunks created'}
+
+    logging.debug(f"Chunks created: {len(chunks)} chunks from {len(text)} characters")
 
     # 3. Embed & Upload
     embeddings = generate_embeddings([c['text'] for c in chunks])
     upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
 
-    return {
+    result = {
         'success': True,
         'title': metadata.get('title', 'Unknown'),
         'author': metadata.get('author', 'Unknown'),
@@ -370,6 +384,10 @@ def ingest_book(
         'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
         'filepath': display_path
     }
+
+    logging.info(f"✅ Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {len(chunks)} chunks)")
+
+    return result
 
 def main():
     parser = argparse.ArgumentParser()

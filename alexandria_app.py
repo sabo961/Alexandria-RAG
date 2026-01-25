@@ -1226,6 +1226,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
                 if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
                     # Show configuration being used
+                    st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
                     st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
 
                     # Progress tracking

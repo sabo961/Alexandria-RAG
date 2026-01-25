@@ -425,6 +425,7 @@ def ingest_book(
         'success': True,
         'title': metadata.get('title', 'Unknown'),
         'author': metadata.get('author', 'Unknown'),
+        'language': metadata.get('language', 'unknown'),
         'chunks': len(chunks),
         'sentences': sentence_count,
         'strategy': 'Universal Semantic',

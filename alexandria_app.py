@@ -12,6 +12,7 @@ import sys
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
+from datetime import datetime
 
 # Add project root to path so the scripts package resolves for Pylance/runtime
 project_root = Path(__file__).parent
@@ -336,7 +337,9 @@ def ingest_items_batch(
 
             # Debug: Show what we're passing to ingest_book
             filepath_str = str(filepath)
-            st.write(f"🔍 FRONTEND: Calling ingest_book() with author_override={repr(metadata_overrides.get('author'))}")
+            app_state = get_app_state()
+            if app_state.show_ingestion_diagnostics:
+                st.write(f"🔍 FRONTEND: Calling ingest_book() with author_override={repr(metadata_overrides.get('author'))}")
 
             # Ingest the item with metadata overrides
             try:
@@ -350,11 +353,13 @@ def ingest_items_batch(
                     author_override=metadata_overrides.get('author'),
                     language_override=metadata_overrides.get('language')
                 )
-                if result and 'debug_author' in result:
-                    st.write(f"🔍 BACKEND debug_author: {result['debug_author']}")
-                st.write(f"🔍 Final author in result: {result.get('author')}")
+                if app_state.show_ingestion_diagnostics:
+                    if result and 'debug_author' in result:
+                        st.write(f"🔍 BACKEND debug_author: {result['debug_author']}")
+                    st.write(f"🔍 Final author in result: {result.get('author')}")
             except Exception as ex:
-                st.error(f"🔍 FRONTEND: ingest_book() raised {ex.__class__.__name__}: {ex}")
+                if app_state.show_ingestion_diagnostics:
+                    st.error(f"🔍 FRONTEND: ingest_book() raised {ex.__class__.__name__}: {ex}")
                 import traceback
                 st.code(traceback.format_exc())
                 result = {'success': False, 'error': f"{ex.__class__.__name__}: {ex}"}
@@ -1019,9 +1024,18 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     try:
         manifest = CollectionManifest(collection_name=calibre_collection)
         if calibre_collection in manifest.manifest['collections']:
+            library_path = Path(library_dir)
             for book in manifest.manifest['collections'][calibre_collection]['books']:
-                # Store normalized file paths for comparison
-                ingested_file_paths.add(Path(book['file_path']).as_posix().lower())
+                # Convert absolute path to relative path (relative to library_dir)
+                # Manifest stores: C:\...\library\Author\book.epub
+                # We want: author/book.epub (normalized, lowercase)
+                absolute_path = Path(book['file_path'])
+                try:
+                    relative_path = absolute_path.relative_to(library_path)
+                    ingested_file_paths.add(relative_path.as_posix().lower())
+                except ValueError:
+                    # Path is not relative to library_dir, skip it
+                    pass
     except Exception:
         pass  # Manifest doesn't exist yet or collection not created
 
@@ -1156,7 +1170,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             global_row_num = start_idx + idx + 1
 
             # Check if this book is already ingested
-            book_path = (Path(library_dir) / book.path).as_posix().lower()
+            # Use relative path (book.path is already relative to library_dir)
+            book_path = Path(book.path).as_posix().lower()
             is_already_ingested = book_path in ingested_file_paths
 
             df_data.append({
@@ -1273,6 +1288,13 @@ tab_query = tabs_by_label[speaker_tab_label]
 # ============================================
 with tab_calibre:
     st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
+
+    # Display stored ingestion results if they exist (from previous rerun)
+    if "last_ingestion_results" in st.session_state:
+        results_data = st.session_state["last_ingestion_results"]
+        st.success(f"✅ {results_data['message']}")
+        # Clear the stored results after displaying
+        del st.session_state["last_ingestion_results"]
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
@@ -1413,14 +1435,16 @@ with tab_calibre:
                             active_library_path = Path(library_dir)
                             book_dir = active_library_path / book.path
 
-                            st.write(f"🔍 Book '{book.title}' has formats: {book.formats}")
-                            st.write(f"🔍 Looking for format: {format_to_use}")
-                            st.write(f"🔍 Searching in: {book_dir}")
+                            if app_state.show_ingestion_diagnostics:
+                                st.write(f"🔍 Book '{book.title}' has formats: {book.formats}")
+                                st.write(f"🔍 Looking for format: {format_to_use}")
+                                st.write(f"🔍 Searching in: {book_dir}")
 
                             # Find the actual file
                             matching_files = list(book_dir.glob(f"*.{format_to_use}"))
-                            st.write(f"🔍 Glob pattern: *.{format_to_use}")
-                            st.write(f"🔍 Found files: {matching_files}")
+                            if app_state.show_ingestion_diagnostics:
+                                st.write(f"🔍 Glob pattern: *.{format_to_use}")
+                                st.write(f"🔍 Found files: {matching_files}")
 
                             if not matching_files:
                                 raise FileNotFoundError(f"File not found at {book_dir} (looking for *.{format_to_use}, book has formats: {book.formats})")
@@ -1428,16 +1452,18 @@ with tab_calibre:
                             file_path = matching_files[0]
                             # Simply convert to string like the old working code did
                             # str(WindowsPath) gives backslashes on Windows, which is correct
-                            st.write(f"📂 Path object: {file_path}")
-                            st.write(f"📂 As string: {str(file_path)}")
+                            if app_state.show_ingestion_diagnostics:
+                                st.write(f"📂 Path object: {file_path}")
+                                st.write(f"📂 As string: {str(file_path)}")
 
                             metadata_dict = {
                                 'title': book.title,
                                 'author': book.author,
                                 'language': book.language
                             }
-                            st.write(f"📋 Metadata from Calibre book object: author='{book.author}'")
-                            st.write(f"📋 Calibre book ID: {book.id}, Title: {book.title}")
+                            if app_state.show_ingestion_diagnostics:
+                                st.write(f"📋 Metadata from Calibre book object: author='{book.author}'")
+                                st.write(f"📋 Calibre book ID: {book.id}, Title: {book.title}")
 
                             return (
                                 file_path,  # Return Path object, ingest_items_batch will convert to str
@@ -1476,7 +1502,12 @@ with tab_calibre:
                         if results['error_count'] > 0:
                             results_msg += f"\n\nErrors:\n" + "\n".join([f"• {e}" for e in results['errors']])
 
-                        st.success(f"✅ {results_msg}")
+                        # Store ingestion results in session state to display after rerun
+                        st.session_state["last_ingestion_results"] = {
+                            'message': results_msg,
+                            'success': results['success_count'] > 0,
+                            'timestamp': datetime.now().isoformat()
+                        }
 
                         # Clear ingestion progress flag
                         st.session_state["ingest_in_progress"] = False
@@ -1486,6 +1517,9 @@ with tab_calibre:
                             app_state.calibre_selected_books = set()
                             st.session_state.app_state.calibre_selected_books = set()  # Ensure persistence
                             st.rerun()  # Refresh UI to show cleared checkboxes and updated Qdrant tab
+                        else:
+                            # Show results immediately if no books were successfully ingested
+                            st.success(f"✅ {results_msg}")
 
                     except Exception as e:
                         import traceback

@@ -153,4 +153,20 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
             }
         }
     }
+
+    documentation alexandriaSystem {
+        section "Overview" {
+            !docs ARCHITECTURE_SUMMARY.md
+        }
+        section "C4 Model" {
+            !docs c4/01-context.md
+            !docs c4/02-container.md
+            !docs c4/03-component.md
+        }
+        section "Technical Details" {
+            !docs technical/UNIVERSAL_SEMANTIC_CHUNKING.md
+            !docs technical/QDRANT_PAYLOAD_STRUCTURE.md
+            !docs technical/PDF_vs_EPUB_COMPARISON.md
+        }
+    }
 }

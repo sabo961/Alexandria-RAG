@@ -1160,6 +1160,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             updated_selected_ids.difference_update(page_ids)
             updated_selected_ids.update(page_selected_ids)
             app_state.calibre_selected_books = updated_selected_ids
+            st.rerun()  # Refresh to show ingestion section with updated selection
 
         # Pagination controls
         st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)

@@ -1644,15 +1644,15 @@ with tab_ingestion:
                     progress_bar = st.progress(0)
                     status_text = st.empty()
 
-                    # Define extraction function for dataframe rows
+                    # Define extraction function for dataframe rows (namedtuple from itertuples)
                     def extract_row(row):
-                        """Extract filepath and metadata from dataframe row"""
+                        """Extract filepath and metadata from dataframe row (namedtuple)"""
                         return (
-                            row['Path'],  # filepath
+                            row.Path,  # filepath (namedtuple attribute)
                             {
-                                'title': row['Title'],
-                                'author': row['Author'],
-                                'language': row['Language']
+                                'title': row.Title,
+                                'author': row.Author,
+                                'language': row.Language
                             }
                         )
 

@@ -206,6 +206,7 @@ st.markdown("""
 # HELPER FUNCTIONS
 # ============================================
 
+@st.cache_data
 def load_domains():
     """Load domain list from domains.json"""
     domains_file = Path(__file__).parent / 'scripts' / 'domains.json'
@@ -318,6 +319,7 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     return results
 
 
+@st.cache_data(ttl=30)
 def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, str]:
     """
     Check if Qdrant server is reachable and responsive.
@@ -558,6 +560,180 @@ with st.sidebar:
         # No models fetched yet
         selected_model_name = None
         selected_model = None
+
+# ============================================
+# FRAGMENT: Query Tab
+# ============================================
+@st.fragment
+def render_query_tab():
+    """Isolated Query tab - prevents full app rerun on query interactions"""
+    st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
+
+    # Get API key and model from sidebar
+    openrouter_api_key = st.session_state.get('openrouter_api_key', '')
+    selected_model_name = st.session_state.get('last_selected_model', None)
+
+    # Get the actual model ID from session state
+    if 'openrouter_models' in st.session_state and selected_model_name:
+        openrouter_models = st.session_state['openrouter_models']
+        selected_model = openrouter_models.get(selected_model_name)
+    else:
+        selected_model = None
+
+    st.markdown("#### 💬 Query")
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        query_collection = st.selectbox("Collection", ["alexandria", "alexandria_test"])
+    with col2:
+        query_domain = st.selectbox("Domain Filter", ["all"] + load_domains())
+    with col3:
+        query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
+
+    # Advanced query settings
+    with st.expander("⚙️ Advanced Settings"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            similarity_threshold = st.slider(
+                "Similarity Threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.5,
+                step=0.05,
+                help="Filter out results below this similarity score (0.0 = all results, 1.0 = only perfect matches)"
+            )
+        with col2:
+            fetch_multiplier = st.number_input(
+                "Fetch Multiplier",
+                min_value=1,
+                max_value=10,
+                value=3,
+                help="Fetch limit × N results from Qdrant for better filtering/reranking. Higher = better quality, slower. (Min fetch: 20)"
+            )
+        with col3:
+            enable_reranking = st.checkbox(
+                "Enable LLM Reranking",
+                value=False,
+                help="Use LLM to rerank results by relevance (uses OpenRouter API, slower but more accurate)"
+            )
+
+        # Second row for Temperature
+        st.markdown("")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.7,
+                step=0.1,
+                help="Controls randomness. Lower = more focused, Higher = more creative"
+            )
+
+            if enable_reranking:
+                # Use fetched models if available, otherwise use small hardcoded set
+                if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
+                    rerank_models = st.session_state['openrouter_models']
+                else:
+                    rerank_models = {
+                        "⚠️ Fetch models first": None,
+                    }
+
+                # Find default index for reranking model
+                default_rerank_index = 0
+                if 'last_selected_rerank_model' in st.session_state and st.session_state['last_selected_rerank_model'] in rerank_models:
+                    try:
+                        default_rerank_index = list(rerank_models.keys()).index(st.session_state['last_selected_rerank_model'])
+                    except (ValueError, KeyError):
+                        default_rerank_index = 0
+
+                rerank_model_name = st.selectbox(
+                    "Reranking Model",
+                    list(rerank_models.keys()),
+                    index=default_rerank_index,
+                    help="Model used for relevance scoring (free models = slower but no cost)"
+                )
+
+                # Save last selected reranking model
+                st.session_state['last_selected_rerank_model'] = rerank_model_name
+                rerank_model = rerank_models[rerank_model_name]
+            else:
+                rerank_model = None
+
+    query = st.text_area(
+        "Enter your question",
+        placeholder="e.g., What does Silverston say about shipment patterns?",
+        height=100
+    )
+
+    if st.button("🔍 Search", use_container_width=True):
+        if not query:
+            st.warning("⚠️ Please enter a query.")
+        elif not openrouter_api_key:
+            st.error("❌ Please enter your OpenRouter API key first.")
+        elif not selected_model:
+            st.error("❌ Please fetch available models first.")
+        elif enable_reranking and not rerank_model:
+            st.error("❌ Please fetch available models for reranking.")
+        else:
+            try:
+                # Call unified RAG query function from scripts/rag_query.py
+                result = perform_rag_query(
+                    query=query,
+                    collection_name=query_collection,
+                    limit=query_limit,
+                    domain_filter=query_domain if query_domain != "all" else None,
+                    threshold=similarity_threshold,
+                    enable_reranking=enable_reranking,
+                    rerank_model=rerank_model if enable_reranking else None,
+                    generate_llm_answer=True,
+                    answer_model=selected_model,
+                    openrouter_api_key=openrouter_api_key,
+                    host=qdrant_host,
+                    port=qdrant_port,
+                    fetch_multiplier=fetch_multiplier,
+                    temperature=temperature
+                )
+
+                # Check if search was successful
+                if result.error:
+                    st.error(f"❌ Error: {result.error}")
+                    st.info("💡 **Tip:** Make sure your OpenRouter API key is valid. Get one at https://openrouter.ai/keys")
+                    st.info("🔑 Your API key should start with 'sk-or-v1-...'")
+                elif not result.sources:
+                    st.warning(f"⚠️ No results above similarity threshold {similarity_threshold:.2f}. Try lowering the threshold.")
+                else:
+                    # Display search info
+                    st.info(f"🔍 Retrieved {result.initial_count} initial results from Qdrant")
+                    if result.filtered_count < result.initial_count:
+                        st.info(f"🎯 Filtered to {result.filtered_count} results above threshold ({similarity_threshold:.2f})")
+                    if enable_reranking:
+                        st.success(f"✅ Reranked to top {len(result.sources)} most relevant chunks")
+                    else:
+                        st.success(f"✅ Using top {len(result.sources)} filtered chunks")
+
+                    # Display answer
+                    if result.answer:
+                        st.markdown("---")
+                        st.markdown("### 💡 Answer")
+                        st.markdown(result.answer)
+
+                    # Display sources
+                    st.markdown("---")
+                    st.markdown("### 📚 Sources")
+                    for idx, source in enumerate(result.sources, 1):
+                        with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
+                            st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
+                            st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
+                            st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
+                            st.markdown("**Content:**")
+                            text = source.get('text', '')
+                            st.text(text[:500] + "..." if len(text) > 500 else text)
+
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
 
 # Check for archives to conditionally show the Restore tab
 archive_dir = Path(__file__).parent / 'logs' / 'deleted'
@@ -1967,173 +2143,7 @@ if tab_restore:
 # TAB 4: Query
 # ============================================
 with tab_query:
-    st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
-
-    # Get API key and model from sidebar
-    openrouter_api_key = st.session_state.get('openrouter_api_key', '')
-    selected_model_name = st.session_state.get('last_selected_model', None)
-
-    # Get the actual model ID from session state
-    if 'openrouter_models' in st.session_state and selected_model_name:
-        openrouter_models = st.session_state['openrouter_models']
-        selected_model = openrouter_models.get(selected_model_name)
-    else:
-        selected_model = None
-
-    st.markdown("#### 💬 Query")
-
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        query_collection = st.selectbox("Collection", ["alexandria", "alexandria_test"])
-    with col2:
-        query_domain = st.selectbox("Domain Filter", ["all"] + load_domains())
-    with col3:
-        query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
-
-    # Advanced query settings
-    with st.expander("⚙️ Advanced Settings"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            similarity_threshold = st.slider(
-                "Similarity Threshold",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.5,
-                step=0.05,
-                help="Filter out results below this similarity score (0.0 = all results, 1.0 = only perfect matches)"
-            )
-        with col2:
-            fetch_multiplier = st.number_input(
-                "Fetch Multiplier",
-                min_value=1,
-                max_value=10,
-                value=3,
-                help="Fetch limit × N results from Qdrant for better filtering/reranking. Higher = better quality, slower. (Min fetch: 20)"
-            )
-        with col3:
-            enable_reranking = st.checkbox(
-                "Enable LLM Reranking",
-                value=False,
-                help="Use LLM to rerank results by relevance (uses OpenRouter API, slower but more accurate)"
-            )
-
-        # Second row for Temperature
-        st.markdown("")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            temperature = st.slider(
-                "Temperature",
-                min_value=0.0,
-                max_value=2.0,
-                value=0.7,
-                step=0.1,
-                help="Controls randomness. Lower = more focused, Higher = more creative"
-            )
-
-            if enable_reranking:
-                # Use fetched models if available, otherwise use small hardcoded set
-                if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
-                    rerank_models = st.session_state['openrouter_models']
-                else:
-                    rerank_models = {
-                        "⚠️ Fetch models first": None,
-                    }
-
-                # Find default index for reranking model
-                default_rerank_index = 0
-                if 'last_selected_rerank_model' in st.session_state and st.session_state['last_selected_rerank_model'] in rerank_models:
-                    try:
-                        default_rerank_index = list(rerank_models.keys()).index(st.session_state['last_selected_rerank_model'])
-                    except (ValueError, KeyError):
-                        default_rerank_index = 0
-
-                rerank_model_name = st.selectbox(
-                    "Reranking Model",
-                    list(rerank_models.keys()),
-                    index=default_rerank_index,
-                    help="Model used for relevance scoring (free models = slower but no cost)"
-                )
-
-                # Save last selected reranking model
-                st.session_state['last_selected_rerank_model'] = rerank_model_name
-                rerank_model = rerank_models[rerank_model_name]
-            else:
-                rerank_model = None
-
-    query = st.text_area(
-        "Enter your question",
-        placeholder="e.g., What does Silverston say about shipment patterns?",
-        height=100
-    )
-
-    if st.button("🔍 Search", use_container_width=True):
-        if not query:
-            st.warning("⚠️ Please enter a query.")
-        elif not openrouter_api_key:
-            st.error("❌ Please enter your OpenRouter API key first.")
-        elif not selected_model:
-            st.error("❌ Please fetch available models first.")
-        elif enable_reranking and not rerank_model:
-            st.error("❌ Please fetch available models for reranking.")
-        else:
-            try:
-                # Call unified RAG query function from scripts/rag_query.py
-                result = perform_rag_query(
-                    query=query,
-                    collection_name=query_collection,
-                    limit=query_limit,
-                    domain_filter=query_domain if query_domain != "all" else None,
-                    threshold=similarity_threshold,
-                    enable_reranking=enable_reranking,
-                    rerank_model=rerank_model if enable_reranking else None,
-                    generate_llm_answer=True,
-                    answer_model=selected_model,
-                    openrouter_api_key=openrouter_api_key,
-                    host=qdrant_host,
-                    port=qdrant_port,
-                    fetch_multiplier=fetch_multiplier,
-                    temperature=temperature
-                )
-
-                # Check if search was successful
-                if result.error:
-                    st.error(f"❌ Error: {result.error}")
-                    st.info("💡 **Tip:** Make sure your OpenRouter API key is valid. Get one at https://openrouter.ai/keys")
-                    st.info("🔑 Your API key should start with 'sk-or-v1-...'")
-                elif not result.sources:
-                    st.warning(f"⚠️ No results above similarity threshold {similarity_threshold:.2f}. Try lowering the threshold.")
-                else:
-                    # Display search info
-                    st.info(f"🔍 Retrieved {result.initial_count} initial results from Qdrant")
-                    if result.filtered_count < result.initial_count:
-                        st.info(f"🎯 Filtered to {result.filtered_count} results above threshold ({similarity_threshold:.2f})")
-                    if enable_reranking:
-                        st.success(f"✅ Reranked to top {len(result.sources)} most relevant chunks")
-                    else:
-                        st.success(f"✅ Using top {len(result.sources)} filtered chunks")
-
-                    # Display answer
-                    if result.answer:
-                        st.markdown("---")
-                        st.markdown("### 💡 Answer")
-                        st.markdown(result.answer)
-
-                    # Display sources
-                    st.markdown("---")
-                    st.markdown("### 📚 Sources")
-                    for idx, source in enumerate(result.sources, 1):
-                        with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
-                            st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
-                            st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
-                            st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
-                            st.markdown("**Content:**")
-                            text = source.get('text', '')
-                            st.text(text[:500] + "..." if len(text) > 500 else text)
-
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+    render_query_tab()
 
 # Footer
 st.markdown("---")

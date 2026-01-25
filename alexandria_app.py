@@ -23,7 +23,7 @@ if str(scripts_root) not in sys.path:
 from scripts.generate_book_inventory import scan_calibre_library, write_inventory
 from scripts.count_file_types import count_file_types
 from scripts.collection_manifest import CollectionManifest
-from scripts.ingest_books import generate_embeddings, ingest_book
+
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
 from scripts.rag_query import perform_rag_query
 from scripts.calibre_db import CalibreDB
@@ -231,15 +231,7 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     # Import from scripts
     scripts_path = Path(__file__).parent / 'scripts'
     sys.path.insert(0, str(scripts_path))
-    from scripts.ingest_books import (
-        extract_text_from_epub,
-        extract_text_from_pdf,
-        extract_text_from_txt,
-        calculate_optimal_chunk_params,
-        create_chunks_from_sections,
-        generate_embeddings,
-        upload_to_qdrant
-    )
+    from scripts.ingest_books import ingest_book, extract_metadata_only
 
     # Resolve all file paths to absolute paths BEFORE changing directory
     selected_files = [str(Path(f).resolve()) for f in selected_files]
@@ -303,10 +295,10 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
                     target_path = ingested_dir / Path(file_path).name
                     shutil.move(file_path, target_path)
                     
-                    st.success(f"✅ {Path(file_path).name} - {result['chunks']} chunks uploaded  \n📦 Moved to: {target_path}")
+                    st.success(f"✅ **{Path(file_path).name}**\n\n📊 **{result['chunks']} chunks** | {result.get('sentences', '?')} sentences\n🧠 Strategy: {result.get('strategy', 'Standard')}\n📦 Moved to: `{target_path}`")
                     render_ingestion_diagnostics(result, Path(file_path).name)
                 else:
-                    st.success(f"✅ {Path(file_path).name} - {result['chunks']} chunks uploaded")
+                    st.success(f"✅ **{Path(file_path).name}**\n\n📊 **{result['chunks']} chunks** | {result.get('sentences', '?')} sentences\n🧠 Strategy: {result.get('strategy', 'Standard')}")
                     render_ingestion_diagnostics(result, Path(file_path).name)
 
                 results['completed'] += 1
@@ -1367,6 +1359,7 @@ with tab_ingestion:
         with col_b:
             resume_ingest = st.button("▶️ Resume", use_container_width=True)
         with col_c:
+            review_metadata = st.checkbox("Review Metadata", value=False, help="Check and edit book details before ingestion")
             move_files = st.checkbox("Move completed files", value=True)
 
         if start_ingest:
@@ -1388,45 +1381,173 @@ with tab_ingestion:
             if selected_count == 0:
                 st.error("❌ No books selected for ingestion!")
             else:
-                # Display ingestion parameters
-                st.info(f"""
-                **Ingestion Parameters:**
-                - Domain: {domain}
-                - Collection: {collection_name}
-                - Chunking: **Auto-optimized** (analyzes content for optimal size)
-                - Embedding Model: {st.session_state.get('embedding_model', 'all-MiniLM-L6-v2')}
-                - Move completed files: {move_files}
-                - Files to process: {selected_count}
-                """)
+                # Resolve script path for imports
+                import sys
+                scripts_path = Path(__file__).parent / 'scripts'
+                if str(scripts_path) not in sys.path:
+                    sys.path.insert(0, str(scripts_path))
+                
+                if review_metadata:
+                    # PREVIEW MODE
+                    from scripts.ingest_books import extract_metadata_only
+                    
+                    st.info("🔍 Scanning files for metadata...")
+                    metadata_list = []
+                    
+                    progress_bar = st.progress(0)
+                    for idx, file_path in enumerate(selected_files):
+                        meta = extract_metadata_only(file_path)
+                        if 'error' not in meta:
+                            metadata_list.append({
+                                "File": Path(file_path).name,
+                                "Title": meta.get('title', 'Unknown'),
+                                "Author": meta.get('author', 'Unknown'),
+                                "Language": meta.get('language', 'unknown'),
+                                "Path": file_path # Hidden key
+                            })
+                        progress_bar.progress((idx + 1) / len(selected_files))
+                    
+                    if metadata_list:
+                        st.session_state['ingest_metadata_preview'] = metadata_list
+                        st.session_state['ingest_ready_to_confirm'] = True
+                        st.rerun() # Rerun to show editor
+                    else:
+                        st.error("❌ Failed to extract metadata from selected files.")
 
-                # Run ingestion with dynamic optimization
-                with st.spinner(f"Ingesting {selected_count} book(s)..."):
-                    try:
-                        results = run_batch_ingestion(
-                            selected_files=selected_files,
-                            ingest_dir=ingest_dir,
-                            domain=domain,
-                            collection_name=collection_name,
-                            host=qdrant_host,
-                            port=qdrant_port,
-                            move_files=move_files
-                        )
+                else:
+                    # DIRECT EXECUTION (Legacy Mode)
+                    st.info(f"""
+                    **Ingestion Parameters:**
+                    - Domain: {domain}
+                    - Collection: {collection_name}
+                    - Chunking: **Universal Semantic** (AI-driven segmentation)
+                    - Move completed files: {move_files}
+                    - Files to process: {selected_count}
+                    """)
 
-                        # Display results with visual separation
-                        st.markdown("---")
-                        st.success("✅ Ingestion complete!")
-                        st.markdown("### Results:")
-                        st.write(f"- **Total:** {results['total']}")
-                        st.write(f"- **Completed:** {results['completed']}")
-                        st.write(f"- **Failed:** {results['failed']}")
+                    with st.spinner(f"Ingesting {selected_count} book(s)..."):
+                        try:
+                            results = run_batch_ingestion(
+                                selected_files=selected_files,
+                                ingest_dir=ingest_dir,
+                                domain=domain,
+                                collection_name=collection_name,
+                                host=qdrant_host,
+                                port=qdrant_port,
+                                move_files=move_files
+                            )
+                            st.markdown("---")
+                            st.success("✅ Ingestion complete!")
+                            st.markdown("### Results:")
+                            st.write(f"- **Total:** {results['total']}")
+                            st.write(f"- **Completed:** {results['completed']}")
+                            st.write(f"- **Failed:** {results['failed']}")
+                        except Exception as e:
+                            st.error(f"❌ Ingestion failed: {str(e)}")
 
-                        if results['errors']:
-                            st.markdown("### Errors:")
-                            for error in results['errors']:
-                                st.error(f"❌ {error['file']}: {error['error']}")
+        # REVIEW CONFIRMATION UI (Outside the button logic)
+        if st.session_state.get('ingest_ready_to_confirm', False):
+            st.markdown("### 📝 Review & Edit Metadata")
+            st.info("Edit the Title and Author fields below. What you see is what will be ingested.")
+            
+            preview_data = st.session_state['ingest_metadata_preview']
+            df = pd.DataFrame(preview_data)
+            
+            edited_df = st.data_editor(
+                df,
+                use_container_width=True,
+                disabled=["File", "Path"],
+                column_config={
+                    "Path": None # Hide full path
+                },
+                key="metadata_editor"
+            )
+            
+            col_confirm, col_cancel = st.columns([1, 1])
+            with col_confirm:
+                if st.button("✅ Confirm & Ingest All", type="primary"):
+                    # Process edited dataframe
+                    st.info(f"🚀 Starting ingestion for {len(edited_df)} books with corrected metadata...")
+                    
+                    # Need to adapt run_batch_ingestion to accept overrides, OR just loop here manually
+                    # Looping manually is safer as run_batch_ingestion is a bit rigid
+                    
+                    from scripts.ingest_books import ingest_book
+                    from scripts.collection_manifest import CollectionManifest
+                    import shutil
+                    
+                    manifest = CollectionManifest(collection_name=collection_name)
+                    manifest.verify_collection_exists(collection_name, qdrant_host=qdrant_host, qdrant_port=qdrant_port)
+                    
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    success_count = 0
+                    
+                    # Resolve ingest_dir for moving
+                    app_root = Path(__file__).parent
+                    ingest_path_base = Path(ingest_dir) if Path(ingest_dir).is_absolute() else app_root / ingest_dir
+                    ingested_dir = ingest_path_base.parent / 'ingested'
+                    ingested_dir.mkdir(exist_ok=True)
 
-                    except Exception as e:
-                        st.error(f"❌ Ingestion failed: {str(e)}")
+                    for idx, row in edited_df.iterrows():
+                        file_path = row['Path']
+                        status_text.text(f"Ingesting: {row['Title']}")
+                        
+                        try:
+                            # Call ingest with OVERRIDES
+                            result = ingest_book(
+                                filepath=file_path,
+                                domain=domain,
+                                collection_name=collection_name,
+                                qdrant_host=qdrant_host,
+                                qdrant_port=qdrant_port,
+                                title_override=row['Title'],
+                                author_override=row['Author'],
+                                language_override=row['Language']
+                            )
+                            
+                            if result and result['success']:
+                                # Add to manifest
+                                manifest.add_book(
+                                    collection_name=collection_name,
+                                    book_path=file_path,
+                                    book_title=result['title'],
+                                    author=result['author'],
+                                    domain=domain,
+                                    chunks_count=result['chunks'],
+                                    file_size_mb=result['file_size_mb'],
+                                    language=result.get('language')
+                                )
+                                
+                                # Move file
+                                if move_files:
+                                    target_path = ingested_dir / Path(file_path).name
+                                    shutil.move(file_path, target_path)
+                                    st.toast(f"✅ {row['Title']} ingested & moved")
+                                else:
+                                    st.toast(f"✅ {row['Title']} ingested")
+                                    
+                                success_count += 1
+                            else:
+                                st.error(f"❌ Failed: {row['Title']} - {result.get('error')}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Error processing {row['Title']}: {e}")
+                        
+                        progress_bar.progress((idx + 1) / len(edited_df))
+                    
+                    st.success(f"🎉 Batch complete! Successfully ingested {success_count} books.")
+                    
+                    # Cleanup session state
+                    del st.session_state['ingest_metadata_preview']
+                    del st.session_state['ingest_ready_to_confirm']
+                    st.button("🔄 Start New Batch") # Button to trigger rerun effectively
+
+            with col_cancel:
+                if st.button("❌ Cancel"):
+                    del st.session_state['ingest_metadata_preview']
+                    del st.session_state['ingest_ready_to_confirm']
+                    st.rerun()
 
         if resume_ingest:
             st.warning("🚧 Resume functionality coming soon!")

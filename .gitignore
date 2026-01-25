@@ -15,6 +15,7 @@ env/
 logs/*.json
 logs/*.log
 *.log
+scripts/Gemini failed session-bitni dio.txt
 
 # Progress tracking (runtime files)
 scripts/batch_ingest_progress.json

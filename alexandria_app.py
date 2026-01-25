@@ -739,6 +739,203 @@ def render_query_tab():
                 st.code(traceback.format_exc())
 
 # ============================================
+# FRAGMENT: Ingested Books Filters and Table
+# ============================================
+@st.fragment
+def render_ingested_books_filters_and_table(books, collection_data, selected_collection):
+    """Isolated Ingested Books filters and table - prevents full app rerun on filter interactions"""
+    # Filters
+    st.markdown("#### 🔍 Filters")
+    ing_filter_col1, ing_filter_col2, ing_filter_col3, ing_filter_col4 = st.columns(4)
+
+    with ing_filter_col1:
+        ing_author_search = st.text_input("Author", placeholder="e.g., Mishima", key="ingested_author_search")
+
+    with ing_filter_col2:
+        ing_title_search = st.text_input("Title", placeholder="e.g., Steel", key="ingested_title_search")
+
+    with ing_filter_col3:
+        available_langs = sorted(set(b.get('language', 'unknown') for b in books))
+        ing_language_filter = st.multiselect("Language", options=available_langs, key="ingested_language_filter")
+
+    with ing_filter_col4:
+        available_domains = sorted(set(b['domain'] for b in books))
+        ing_domain_filter = st.multiselect("Domain", options=available_domains, key="ingested_domain_filter")
+
+    # Format filter (separate row)
+    ing_format_filter = st.multiselect("Format", options=['EPUB', 'PDF', 'TXT', 'MD', 'MOBI'], key="ingested_format_filter")
+
+    # Apply filters
+    filtered_books = books
+
+    if ing_author_search:
+        filtered_books = [b for b in filtered_books if ing_author_search.lower() in b['author'].lower()]
+
+    if ing_title_search:
+        filtered_books = [b for b in filtered_books if ing_title_search.lower() in b['book_title'].lower()]
+
+    if ing_language_filter:
+        filtered_books = [b for b in filtered_books if b.get('language', 'unknown') in ing_language_filter]
+
+    if ing_domain_filter:
+        filtered_books = [b for b in filtered_books if b['domain'] in ing_domain_filter]
+
+    if ing_format_filter:
+        filtered_books = [b for b in filtered_books if b.get('file_type', PathLib(b['file_name']).suffix.upper().replace('.', '')) in ing_format_filter]
+
+    # Sort options
+    ing_sort_col1, ing_sort_col2 = st.columns([3, 1])
+    with ing_sort_col1:
+        st.info(f"📚 Showing {len(filtered_books)} of {len(books)} books")
+
+    with ing_sort_col2:
+        ing_sort_by = st.selectbox("Sort by", [
+            "Ingested (newest)",
+            "Ingested (oldest)",
+            "Title (A-Z)",
+            "Author (A-Z)",
+            "Chunks (most)",
+            "Size (largest)"
+        ], key="ingested_sort")
+
+    # Apply sorting
+    if "newest" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'], reverse=True)
+    elif "oldest" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'])
+    elif "Title" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['book_title'].lower())
+    elif "Author" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['author'].lower())
+    elif "Chunks" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['chunks_count'], reverse=True)
+    elif "Size" in ing_sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x['file_size_mb'], reverse=True)
+
+    # Display as DataFrame
+    if filtered_books:
+        df_data = []
+        for idx, book in enumerate(filtered_books, start=1):
+            # Get file type
+            file_type = book.get('file_type')
+            if not file_type:
+                file_type = PathLib(book['file_name']).suffix.upper().replace('.', '')
+
+            # Icon
+            icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝', 'MOBI': '📱'}.get(file_type, '📄')
+
+            # Language with fallback
+            language = book.get('language', 'unknown').upper()
+
+            df_data.append({
+                '#': idx,
+                '': icon,
+                'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],
+                'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],
+                'Lang': language,
+                'Domain': book['domain'],
+                'Type': file_type,
+                'Chunks': book['chunks_count'],
+                'Size (MB)': f"{book['file_size_mb']:.2f}",
+                'Ingested': book['ingested_at'][:10]
+            })
+
+        df = pd.DataFrame(df_data)
+        st.dataframe(df, use_container_width=True, height=600, hide_index=True)
+    else:
+        st.warning("No books match the filters.")
+
+    # Export button and Management Section
+    st.markdown("---")
+    manage_col1, manage_col2 = st.columns([1, 3])
+
+    with manage_col1:
+        csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
+        if csv_file.exists():
+            with open(csv_file, 'r', encoding='utf-8') as f:
+                csv_data = f.read()
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_data,
+                file_name=f"{selected_collection}_manifest.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+    with st.expander("⚙️ Collection Management"):
+        st.warning(f"**DANGER ZONE:** Actions performed here are permanent and cannot be undone.")
+        st.markdown(
+            f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant. "
+            "Choose whether to preserve artifacts or permanently remove them."
+        )
+
+        delete_mode = st.radio(
+            "Delete mode",
+            options=[
+                "Preserve artifacts (move to logs/deleted)",
+                "Hard delete (remove artifacts permanently)"
+            ],
+            index=0,
+            help="Preserve keeps manifests for restore; hard delete removes them permanently."
+        )
+
+        # Confirmation state management
+        if 'confirm_delete' not in st.session_state:
+            st.session_state.confirm_delete = None
+
+        if st.session_state.confirm_delete != selected_collection:
+            if st.button(f"🗑️ Delete '{selected_collection}' Collection", use_container_width=True):
+                st.session_state.confirm_delete = selected_collection
+                st.rerun()
+        else:
+            confirmation_label = (
+                "**Are you sure?** This will permanently delete the Qdrant collection. "
+                "Artifacts will be preserved in logs/deleted."
+                if delete_mode.startswith("Preserve")
+                else "**Are you sure?** This will permanently delete the Qdrant collection and all associated artifacts. This action cannot be undone."
+            )
+            st.error(confirmation_label)
+            confirm_col1, confirm_col2 = st.columns(2)
+            with confirm_col1:
+                if st.button("🚨 YES, DELETE PERMANENTLY", use_container_width=True, type="primary"):
+                    if delete_mode.startswith("Preserve"):
+                        spinner_label = f"Deleting collection '{selected_collection}' and preserving artifacts..."
+                        delete_action = delete_collection_preserve_artifacts
+                    else:
+                        spinner_label = f"Deleting collection '{selected_collection}' and removing artifacts..."
+                        delete_action = delete_collection_and_artifacts
+
+                    with st.spinner(spinner_label):
+                        delete_results = delete_action(
+                            collection_name=selected_collection,
+                            host=qdrant_host,
+                            port=qdrant_port
+                        )
+
+                    if not delete_results['errors']:
+                        if delete_mode.startswith("Preserve"):
+                            st.success(
+                                f"✅ Collection '{selected_collection}' deleted. Artifacts preserved in logs/deleted."
+                            )
+                        else:
+                            st.success(
+                                f"✅ Collection '{selected_collection}' deleted and artifacts removed permanently."
+                            )
+                        st.session_state.confirm_delete = None
+                        st.info("Refreshing app...")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed to completely delete collection '{selected_collection}'.")
+                        for error in delete_results['errors']:
+                            st.error(f"- {error}")
+                        st.session_state.confirm_delete = None
+            with confirm_col2:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.confirm_delete = None
+                    st.rerun()
+
+# ============================================
 # FRAGMENT: Calibre Filters and Table
 # ============================================
 @st.fragment
@@ -1242,198 +1439,8 @@ with tab_ingested:
 
                 st.markdown("---")
 
-                # Filters
-                st.markdown("#### 🔍 Filters")
-                ing_filter_col1, ing_filter_col2, ing_filter_col3, ing_filter_col4 = st.columns(4)
-
-                with ing_filter_col1:
-                    ing_author_search = st.text_input("Author", placeholder="e.g., Mishima", key="ingested_author_search")
-
-                with ing_filter_col2:
-                    ing_title_search = st.text_input("Title", placeholder="e.g., Steel", key="ingested_title_search")
-
-                with ing_filter_col3:
-                    # Get available languages (with fallback for old manifests)
-                    available_langs = sorted(set(b.get('language', 'unknown') for b in books))
-                    ing_language_filter = st.multiselect("Language", options=available_langs, key="ingested_language_filter")
-
-                with ing_filter_col4:
-                    # Get available domains
-                    available_domains = sorted(set(b['domain'] for b in books))
-                    ing_domain_filter = st.multiselect("Domain", options=available_domains, key="ingested_domain_filter")
-
-                # Format filter (separate row)
-                ing_format_filter = st.multiselect("Format", options=['EPUB', 'PDF', 'TXT', 'MD', 'MOBI'], key="ingested_format_filter")
-
-                # Apply filters
-                filtered_books = books
-
-                if ing_author_search:
-                    filtered_books = [b for b in filtered_books if ing_author_search.lower() in b['author'].lower()]
-
-                if ing_title_search:
-                    filtered_books = [b for b in filtered_books if ing_title_search.lower() in b['book_title'].lower()]
-
-                if ing_language_filter:
-                    filtered_books = [b for b in filtered_books if b.get('language', 'unknown') in ing_language_filter]
-
-                if ing_domain_filter:
-                    filtered_books = [b for b in filtered_books if b['domain'] in ing_domain_filter]
-
-                if ing_format_filter:
-                    filtered_books = [b for b in filtered_books if b.get('file_type', PathLib(b['file_name']).suffix.upper().replace('.', '')) in ing_format_filter]
-
-                # Sort options
-                ing_sort_col1, ing_sort_col2 = st.columns([3, 1])
-                with ing_sort_col1:
-                    st.info(f"📚 Showing {len(filtered_books)} of {len(books)} books")
-
-                with ing_sort_col2:
-                    ing_sort_by = st.selectbox("Sort by", [
-                        "Ingested (newest)",
-                        "Ingested (oldest)",
-                        "Title (A-Z)",
-                        "Author (A-Z)",
-                        "Chunks (most)",
-                        "Size (largest)"
-                    ], key="ingested_sort")
-
-                # Apply sorting
-                if "newest" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'], reverse=True)
-                elif "oldest" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'])
-                elif "Title" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['book_title'].lower())
-                elif "Author" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['author'].lower())
-                elif "Chunks" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['chunks_count'], reverse=True)
-                elif "Size" in ing_sort_by:
-                    filtered_books = sorted(filtered_books, key=lambda x: x['file_size_mb'], reverse=True)
-
-                # Display as DataFrame
-                if filtered_books:
-                    df_data = []
-                    for idx, book in enumerate(filtered_books, start=1):
-                        # Get file type
-                        file_type = book.get('file_type')
-                        if not file_type:
-                            file_type = PathLib(book['file_name']).suffix.upper().replace('.', '')
-
-                        # Icon
-                        icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝', 'MOBI': '📱'}.get(file_type, '📄')
-
-                        # Language with fallback
-                        language = book.get('language', 'unknown').upper()
-
-                        df_data.append({
-                            '#': idx,
-                            '': icon,
-                            'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],
-                            'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],
-                            'Lang': language,
-                            'Domain': book['domain'],
-                            'Type': file_type,
-                            'Chunks': book['chunks_count'],
-                            'Size (MB)': f"{book['file_size_mb']:.2f}",
-                            'Ingested': book['ingested_at'][:10]
-                        })
-
-                    df = pd.DataFrame(df_data)
-                    st.dataframe(df, use_container_width=True, height=600, hide_index=True)
-                else:
-                    st.warning("No books match the filters.")
-
-                # Export button and Management Section
-                st.markdown("---")
-                manage_col1, manage_col2 = st.columns([1, 3])
-
-                with manage_col1:
-                    csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
-                    if csv_file.exists():
-                        with open(csv_file, 'r', encoding='utf-8') as f:
-                            csv_data = f.read()
-                        st.download_button(
-                            label="📥 Download CSV",
-                            data=csv_data,
-                            file_name=f"{selected_collection}_manifest.csv",
-                            mime="text/csv",
-                            use_container_width=True
-                        )
-
-                with st.expander("⚙️ Collection Management"):
-                    st.warning(f"**DANGER ZONE:** Actions performed here are permanent and cannot be undone.")
-                    st.markdown(
-                        f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant. "
-                        "Choose whether to preserve artifacts or permanently remove them."
-                    )
-
-                    delete_mode = st.radio(
-                        "Delete mode",
-                        options=[
-                            "Preserve artifacts (move to logs/deleted)",
-                            "Hard delete (remove artifacts permanently)"
-                        ],
-                        index=0,
-                        help="Preserve keeps manifests for restore; hard delete removes them permanently."
-                    )
-
-                    # Confirmation state management
-                    if 'confirm_delete' not in st.session_state:
-                        st.session_state.confirm_delete = None
-
-                    if st.session_state.confirm_delete != selected_collection:
-                        if st.button(f"🗑️ Delete '{selected_collection}' Collection", use_container_width=True):
-                            st.session_state.confirm_delete = selected_collection
-                            st.rerun()
-                    else:
-                        confirmation_label = (
-                            "**Are you sure?** This will permanently delete the Qdrant collection. "
-                            "Artifacts will be preserved in logs/deleted."
-                            if delete_mode.startswith("Preserve")
-                            else "**Are you sure?** This will permanently delete the Qdrant collection and all associated artifacts. This action cannot be undone."
-                        )
-                        st.error(confirmation_label)
-                        confirm_col1, confirm_col2 = st.columns(2)
-                        with confirm_col1:
-                            if st.button("🚨 YES, DELETE PERMANENTLY", use_container_width=True, type="primary"):
-                                if delete_mode.startswith("Preserve"):
-                                    spinner_label = f"Deleting collection '{selected_collection}' and preserving artifacts..."
-                                    delete_action = delete_collection_preserve_artifacts
-                                else:
-                                    spinner_label = f"Deleting collection '{selected_collection}' and removing artifacts..."
-                                    delete_action = delete_collection_and_artifacts
-
-                                with st.spinner(spinner_label):
-                                    delete_results = delete_action(
-                                        collection_name=selected_collection,
-                                        host=qdrant_host,
-                                        port=qdrant_port
-                                    )
-
-                                if not delete_results['errors']:
-                                    if delete_mode.startswith("Preserve"):
-                                        st.success(
-                                            f"✅ Collection '{selected_collection}' deleted. Artifacts preserved in logs/deleted."
-                                        )
-                                    else:
-                                        st.success(
-                                            f"✅ Collection '{selected_collection}' deleted and artifacts removed permanently."
-                                        )
-                                    st.session_state.confirm_delete = None
-                                    st.info("Refreshing app...")
-                                    time.sleep(2)
-                                    st.rerun()
-                                else:
-                                    st.error(f"❌ Failed to completely delete collection '{selected_collection}'.")
-                                    for error in delete_results['errors']:
-                                        st.error(f"- {error}")
-                                    st.session_state.confirm_delete = None
-                        with confirm_col2:
-                            if st.button("Cancel", use_container_width=True):
-                                st.session_state.confirm_delete = None
-                                st.rerun()
+                # Call isolated fragment for filters and table
+                render_ingested_books_filters_and_table(books, collection_data, selected_collection)
             else:
                 st.info(f"Collection '{selected_collection}' has no ingested books yet.")
 

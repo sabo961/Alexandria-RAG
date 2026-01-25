@@ -114,10 +114,10 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         dynamic scripts "DetailedIngestionFlow" "The lifecycle of a book from file to vector" {
             calibreIntegration -> textExtractor "1. Get file path"
             textExtractor -> universalChunker "2. Pass raw text"
-            universalChunker -> embedder "3. Generate sentence embeddings for semantic chunking"
-            universalChunker -> universalChunker "4. Split by semantic similarity (threshold-based)"
+            universalChunker -> embedder "3. Generate sentence embeddings"
+            embedder -> universalChunker "4. Return embeddings for similarity analysis"
             universalChunker -> embedder "5. Generate final chunk embeddings"
-            embedder -> qdrantUploader "6. Prepare Batch"
+            embedder -> qdrantUploader "6. Prepare embedding batch"
             qdrantUploader -> collectionManagement "7. Log to Manifest"
             autolayout lr
         }

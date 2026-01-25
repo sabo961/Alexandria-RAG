@@ -1266,7 +1266,9 @@ with tab_calibre:
         # INGESTION SECTION (OUTSIDE FRAGMENT)
         # ============================================
         st.markdown("---")
-        st.markdown('<div class="section-header">🚀 Ingestion Control</div>', unsafe_allow_html=True)
+
+        selected_ids = app_state.calibre_selected_books
+        selected_books = [book for book in all_books if book.id in selected_ids]
 
         # Get ingestion configuration from session state
         calibre_domain = st.session_state.get("calibre_ingest_domain", "technical")
@@ -1276,136 +1278,135 @@ with tab_calibre:
         qdrant_port = st.session_state.get("qdrant_port", 6333)
         library_dir = st.session_state.get("calibre_library", "")
 
-        # Configuration section
-        config_col1, config_col2, config_col3 = st.columns(3)
+        # Only show ingestion section if books are selected
+        with st.expander(f"🚀 Calibre > Qdrant ({len(selected_books)} selected)", expanded=False):
+            # Configuration section
+            config_col1, config_col2, config_col3 = st.columns(3)
 
-        with config_col1:
-            calibre_domain = st.selectbox(
-                "Domain",
-                load_domains(),
-                help="Content domain for chunking strategy",
-                key="calibre_ingest_domain"
-            )
+            with config_col1:
+                calibre_domain = st.selectbox(
+                    "Domain",
+                    load_domains(),
+                    help="Content domain for chunking strategy",
+                    key="calibre_ingest_domain"
+                )
 
-        with config_col2:
-            calibre_collection = st.text_input(
-                "Collection Name",
-                value="alexandria",
-                help="Qdrant collection name",
-                key="calibre_ingest_collection"
-            )
+            with config_col2:
+                calibre_collection = st.text_input(
+                    "Collection Name",
+                    value="alexandria",
+                    help="Qdrant collection name",
+                    key="calibre_ingest_collection"
+                )
 
-        with config_col3:
-            preferred_format = st.selectbox(
-                "Preferred Format",
-                ["epub", "pdf", "txt", "md"],
-                help="Which format to use when multiple available",
-                key="calibre_preferred_format"
-            )
+            with config_col3:
+                preferred_format = st.selectbox(
+                    "Preferred Format",
+                    ["epub", "pdf", "txt", "md"],
+                    help="Which format to use when multiple available",
+                    key="calibre_preferred_format"
+                )
 
-        selected_ids = app_state.calibre_selected_books
-        selected_books = [book for book in all_books if book.id in selected_ids]
+            # Display selection summary and ingest button
+            if selected_books:
+                st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
 
-        # Display selection summary and ingest button
-        if selected_books:
-            st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
+                if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
+                    st.session_state["ingest_in_progress"] = True
+                    # Show configuration being used
+                    st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
+                    st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
 
-            if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
-                st.session_state["ingest_in_progress"] = True
-                # Show configuration being used
-                st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
-                st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
+                    # Progress tracking
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
 
-                # Progress tracking
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                    try:
+                        # Define extraction function for Calibre books with format selection and file discovery
+                        def extract_calibre_book(book):
+                            """Extract filepath and metadata from Calibre book object."""
+                            # Determine which format to use
+                            format_to_use = None
+                            if preferred_format in book.formats:
+                                format_to_use = preferred_format
+                            else:
+                                # Fallback to first available format
+                                format_to_use = book.formats[0] if book.formats else None
 
-                try:
-                    # Define extraction function for Calibre books with format selection and file discovery
-                    def extract_calibre_book(book):
-                        """Extract filepath and metadata from Calibre book object."""
-                        # Determine which format to use
-                        format_to_use = None
-                        if preferred_format in book.formats:
-                            format_to_use = preferred_format
-                        else:
-                            # Fallback to first available format
-                            format_to_use = book.formats[0] if book.formats else None
+                            if not format_to_use:
+                                raise ValueError(f"No supported format available for {book.title}")
 
-                        if not format_to_use:
-                            raise ValueError(f"No supported format available for {book.title}")
+                            # Construct absolute file path
+                            active_library_path = Path(library_dir)
+                            book_dir = active_library_path / book.path
 
-                        # Construct absolute file path
-                        active_library_path = Path(library_dir)
-                        book_dir = active_library_path / book.path
+                            # Find the actual file
+                            matching_files = list(book_dir.glob(f"*.{format_to_use}"))
 
-                        # Find the actual file
-                        matching_files = list(book_dir.glob(f"*.{format_to_use}"))
+                            if not matching_files:
+                                raise FileNotFoundError(f"File not found at {book_dir}")
 
-                        if not matching_files:
-                            raise FileNotFoundError(f"File not found at {book_dir}")
+                            file_path = matching_files[0]
+                            st.write(f"📂 Accessing: {file_path}")
 
-                        file_path = matching_files[0]
-                        st.write(f"📂 Accessing: {file_path}")
+                            return (
+                                file_path,
+                                {
+                                    'title': book.title,
+                                    'author': book.author,
+                                    'language': book.language
+                                }
+                            )
 
-                        return (
-                            file_path,
-                            {
-                                'title': book.title,
-                                'author': book.author,
-                                'language': book.language
-                            }
+                        # Use DRY helper function for batch ingestion
+                        results = ingest_items_batch(
+                            items=selected_books,
+                            extract_item_fn=extract_calibre_book,
+                            domain=calibre_domain,
+                            collection_name=calibre_collection,
+                            qdrant_host=qdrant_host,
+                            qdrant_port=qdrant_port,
+                            move_files=False,  # Calibre doesn't move files
+                            progress_callback=lambda p: progress_bar.progress(p),
+                            status_callback=lambda s: status_text.text(s)
                         )
 
-                    # Use DRY helper function for batch ingestion
-                    results = ingest_items_batch(
-                        items=selected_books,
-                        extract_item_fn=extract_calibre_book,
-                        domain=calibre_domain,
-                        collection_name=calibre_collection,
-                        qdrant_host=qdrant_host,
-                        qdrant_port=qdrant_port,
-                        move_files=False,  # Calibre doesn't move files
-                        progress_callback=lambda p: progress_bar.progress(p),
-                        status_callback=lambda s: status_text.text(s)
-                    )
+                        # Final status
+                        progress_bar.progress(1.0)
+                        status_text.text("✅ Ingestion complete!")
 
-                    # Final status
-                    progress_bar.progress(1.0)
-                    status_text.text("✅ Ingestion complete!")
+                        # Verify ingestion by checking collection
+                        try:
+                            from qdrant_client import QdrantClient
+                            client = QdrantClient(host=qdrant_host, port=qdrant_port)
+                            collection_info = client.get_collection(calibre_collection)
+                            st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not verify collection: {e}")
 
-                    # Verify ingestion by checking collection
-                    try:
-                        from qdrant_client import QdrantClient
-                        client = QdrantClient(host=qdrant_host, port=qdrant_port)
-                        collection_info = client.get_collection(calibre_collection)
-                        st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                        # Build results message
+                        results_msg = f"Ingestion complete: {results['success_count']} successful, {results['error_count']} failed out of {results['total']} total"
+
+                        if results['error_count'] > 0:
+                            results_msg += f"\n\nErrors:\n" + "\n".join([f"• {e}" for e in results['errors']])
+
+                        st.success(f"✅ {results_msg}")
+
+                        if results['success_count'] > 0:
+                            app_state.calibre_selected_books = set()
+                            app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
+                            st.rerun()
+
                     except Exception as e:
-                        st.warning(f"⚠️ Could not verify collection: {e}")
+                        import traceback
+                        error_trace = traceback.format_exc()
+                        st.error(f"❌ Ingestion failed: {str(e)}")
+                        with st.expander("Show error details"):
+                            st.code(error_trace)
+                        st.session_state["ingest_in_progress"] = False
 
-                    # Build results message
-                    results_msg = f"Ingestion complete: {results['success_count']} successful, {results['error_count']} failed out of {results['total']} total"
-
-                    if results['error_count'] > 0:
-                        results_msg += f"\n\nErrors:\n" + "\n".join([f"• {e}" for e in results['errors']])
-
-                    st.success(f"✅ {results_msg}")
-
-                    if results['success_count'] > 0:
-                        app_state.calibre_selected_books = set()
-                        app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
-                        st.rerun()
-
-                except Exception as e:
-                    import traceback
-                    error_trace = traceback.format_exc()
-                    st.error(f"❌ Ingestion failed: {str(e)}")
-                    with st.expander("Show error details"):
-                        st.code(error_trace)
-                    st.session_state["ingest_in_progress"] = False
-
-        else:
-            st.info("👆 Select books using the filters above, then use the checkboxes to select specific titles for ingestion")
+            else:
+                st.info("👆 Select books using the filters above, then use the checkboxes to select specific titles for ingestion")
 
         # Show ingestion status if in progress (displayed OUTSIDE fragment so it persists)
         if st.session_state.get("ingest_in_progress"):

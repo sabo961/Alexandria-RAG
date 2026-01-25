@@ -1025,18 +1025,43 @@ def render_calibre_filters_and_table(all_books, calibre_db):
         manifest = CollectionManifest(collection_name=calibre_collection)
         if calibre_collection in manifest.manifest['collections']:
             library_path = Path(library_dir)
-            for book in manifest.manifest['collections'][calibre_collection]['books']:
+            manifest_books = manifest.manifest['collections'][calibre_collection]['books']
+
+            # Debug output if diagnostics enabled
+            if app_state.show_ingestion_diagnostics:
+                st.write(f"🔍 MANIFEST DEBUG: Collection '{calibre_collection}' has {len(manifest_books)} books")
+                st.write(f"🔍 Library path: {library_path}")
+
+            for idx, book in enumerate(manifest_books):
                 # Convert absolute path to relative path (relative to library_dir)
                 # Manifest stores: C:\...\library\Author\book.epub
                 # We want: author/book.epub (normalized, lowercase)
                 absolute_path = Path(book['file_path'])
                 try:
                     relative_path = absolute_path.relative_to(library_path)
-                    ingested_file_paths.add(relative_path.as_posix().lower())
-                except ValueError:
+                    normalized = relative_path.as_posix().lower()
+                    ingested_file_paths.add(normalized)
+
+                    # Debug: Show first 3 conversions
+                    if app_state.show_ingestion_diagnostics and idx < 3:
+                        st.write(f"🔍 Manifest book {idx+1}:")
+                        st.write(f"   Absolute: {absolute_path}")
+                        st.write(f"   Relative: {relative_path}")
+                        st.write(f"   Normalized: {normalized}")
+                except ValueError as e:
                     # Path is not relative to library_dir, skip it
+                    if app_state.show_ingestion_diagnostics:
+                        st.warning(f"⚠️ Could not make relative: {absolute_path} (not relative to {library_path})")
                     pass
-    except Exception:
+
+            if app_state.show_ingestion_diagnostics:
+                st.write(f"🔍 Total ingested paths loaded: {len(ingested_file_paths)}")
+                if ingested_file_paths:
+                    sample_paths = list(ingested_file_paths)[:3]
+                    st.write(f"🔍 Sample ingested paths: {sample_paths}")
+    except Exception as e:
+        if app_state.show_ingestion_diagnostics:
+            st.error(f"🔍 Manifest loading error: {e}")
         pass  # Manifest doesn't exist yet or collection not created
 
     # Get all formats
@@ -1174,6 +1199,15 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             book_path = Path(book.path).as_posix().lower()
             is_already_ingested = book_path in ingested_file_paths
 
+            # Debug: Show first 3 checks
+            if app_state.show_ingestion_diagnostics and idx < 3:
+                st.write(f"🔍 Calibre book {idx+1} check:")
+                st.write(f"   Raw path: {book.path}")
+                st.write(f"   Normalized: {book_path}")
+                st.write(f"   In manifest? {is_already_ingested}")
+                if is_already_ingested:
+                    st.success(f"   ✓ MATCH FOUND")
+
             df_data.append({
                 'Select': book.id in selected_ids,
                 'Id': book.id,
@@ -1292,9 +1326,13 @@ with tab_calibre:
     # Display stored ingestion results if they exist (from previous rerun)
     if "last_ingestion_results" in st.session_state:
         results_data = st.session_state["last_ingestion_results"]
-        st.success(f"✅ {results_data['message']}")
-        # Clear the stored results after displaying
-        del st.session_state["last_ingestion_results"]
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.success(f"✅ {results_data['message']}")
+        with col2:
+            if st.button("✕ Dismiss", key="dismiss_ingestion_results"):
+                del st.session_state["last_ingestion_results"]
+                st.rerun()
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
@@ -1408,6 +1446,9 @@ with tab_calibre:
 
                 if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
                     st.session_state["ingest_in_progress"] = True
+                    # Clear any previous ingestion results
+                    if "last_ingestion_results" in st.session_state:
+                        del st.session_state["last_ingestion_results"]
                     # Show configuration being used
                     st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
                     st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")

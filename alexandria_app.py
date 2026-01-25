@@ -338,8 +338,12 @@ def ingest_items_batch(
             # Debug: Show what we're passing to ingest_book
             filepath_str = str(filepath)
             app_state = get_app_state()
+
+            # Initialize diagnostic log in session state if diagnostics enabled
             if app_state.show_ingestion_diagnostics:
-                st.write(f"🔍 FRONTEND: Calling ingest_book() with author_override={repr(metadata_overrides.get('author'))}")
+                if "diagnostic_log" not in st.session_state:
+                    st.session_state["diagnostic_log"] = []
+                st.session_state["diagnostic_log"].append(f"📤 Book {idx+1}/{len(items)}: Calling ingest_book() with author_override={repr(metadata_overrides.get('author'))}")
 
             # Ingest the item with metadata overrides
             try:
@@ -355,13 +359,15 @@ def ingest_items_batch(
                 )
                 if app_state.show_ingestion_diagnostics:
                     if result and 'debug_author' in result:
-                        st.write(f"🔍 BACKEND debug_author: {result['debug_author']}")
-                    st.write(f"🔍 Final author in result: {result.get('author')}")
+                        st.session_state["diagnostic_log"].append(f"  ↳ Backend debug_author: {result['debug_author']}")
+                    st.session_state["diagnostic_log"].append(f"  ↳ Final author in result: {result.get('author')}")
             except Exception as ex:
                 if app_state.show_ingestion_diagnostics:
-                    st.error(f"🔍 FRONTEND: ingest_book() raised {ex.__class__.__name__}: {ex}")
+                    st.session_state["diagnostic_log"].append(f"  ❌ ingest_book() raised {ex.__class__.__name__}: {ex}")
                 import traceback
-                st.code(traceback.format_exc())
+                error_trace = traceback.format_exc()
+                if app_state.show_ingestion_diagnostics:
+                    st.session_state["diagnostic_log"].append(f"  ```\n{error_trace}\n  ```")
                 result = {'success': False, 'error': f"{ex.__class__.__name__}: {ex}"}
 
             if result and result.get('success'):
@@ -1022,9 +1028,15 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     # Load manifest to check which books are already ingested
     ingested_file_paths = set()
 
-    # Debug output container if diagnostics enabled
-    if app_state.show_ingestion_diagnostics:
-        debug_container = st.expander("🔍 Manifest Loading Debug", expanded=False)
+    # Initialize diagnostic log for manifest loading if diagnostics enabled
+    # Only add manifest loading diagnostics if we haven't already loaded them for this session
+    diagnostic_key = f"manifest_diagnostics_loaded_{calibre_collection}"
+    should_log_diagnostics = app_state.show_ingestion_diagnostics and diagnostic_key not in st.session_state
+
+    if should_log_diagnostics:
+        if "diagnostic_log" not in st.session_state:
+            st.session_state["diagnostic_log"] = []
+        st.session_state["diagnostic_log"].append(f"\n📂 **Manifest Loading (Collection: {calibre_collection})**")
 
     try:
         manifest = CollectionManifest(collection_name=calibre_collection)
@@ -1033,10 +1045,9 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             manifest_books = manifest.manifest['collections'][calibre_collection]['books']
 
             # Debug output if diagnostics enabled
-            if app_state.show_ingestion_diagnostics:
-                with debug_container:
-                    st.write(f"📊 Collection '{calibre_collection}' has {len(manifest_books)} books")
-                    st.write(f"📁 Library path: {library_path}")
+            if should_log_diagnostics:
+                st.session_state["diagnostic_log"].append(f"  📊 Collection has {len(manifest_books)} books")
+                st.session_state["diagnostic_log"].append(f"  📁 Library path: {library_path}")
 
             for idx, book in enumerate(manifest_books):
                 # Convert absolute path to relative path (relative to library_dir)
@@ -1052,30 +1063,27 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                     ingested_file_paths.add(normalized)
 
                     # Debug: Show first 3 conversions
-                    if app_state.show_ingestion_diagnostics and idx < 3:
-                        with debug_container:
-                            st.write(f"**Manifest book {idx+1}:**")
-                            st.write(f"  • Absolute file: `{absolute_path}`")
-                            st.write(f"  • Relative file: `{relative_path}`")
-                            st.write(f"  • Book directory: `{book_directory}`")
-                            st.write(f"  • Normalized: `{normalized}`")
+                    if should_log_diagnostics and idx < 3:
+                        st.session_state["diagnostic_log"].append(f"  • Manifest book {idx+1}: {absolute_path.name}")
+                        st.session_state["diagnostic_log"].append(f"    → Book directory: {book_directory}")
+                        st.session_state["diagnostic_log"].append(f"    → Normalized: {normalized}")
                 except ValueError as e:
                     # Path is not relative to library_dir, skip it
-                    if app_state.show_ingestion_diagnostics:
-                        with debug_container:
-                            st.warning(f"⚠️ Could not make relative: {absolute_path}")
+                    if should_log_diagnostics:
+                        st.session_state["diagnostic_log"].append(f"  ⚠️ Could not make relative: {absolute_path.name}")
                     pass
 
-            if app_state.show_ingestion_diagnostics:
-                with debug_container:
-                    st.write(f"✅ Total ingested paths loaded: {len(ingested_file_paths)}")
-                    if ingested_file_paths:
-                        sample_paths = list(ingested_file_paths)[:3]
-                        st.write(f"📋 Sample paths: {sample_paths}")
+            if should_log_diagnostics:
+                st.session_state["diagnostic_log"].append(f"  ✅ Total ingested paths loaded: {len(ingested_file_paths)}")
+                if ingested_file_paths:
+                    sample_paths = list(ingested_file_paths)[:3]
+                    st.session_state["diagnostic_log"].append(f"  📋 Sample paths: {', '.join(sample_paths)}")
+                # Set flag to prevent re-logging on subsequent fragment reruns
+                st.session_state[diagnostic_key] = True
     except Exception as e:
-        if app_state.show_ingestion_diagnostics:
-            with debug_container:
-                st.error(f"❌ Manifest loading error: {e}")
+        if should_log_diagnostics:
+            st.session_state["diagnostic_log"].append(f"  ❌ Manifest loading error: {e}")
+            st.session_state[diagnostic_key] = True  # Set flag even on error
         pass  # Manifest doesn't exist yet or collection not created
 
     # Get all formats
@@ -1214,15 +1222,16 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             book_path = Path(book.path).as_posix().lower()
             is_already_ingested = book_path in ingested_file_paths
 
-            # Debug: Show first 3 checks
-            if app_state.show_ingestion_diagnostics and idx < 3:
-                with debug_container:
-                    st.write(f"**Calibre book {idx+1} check:**")
-                    st.write(f"  • Raw path: `{book.path}`")
-                    st.write(f"  • Normalized: `{book_path}`")
-                    st.write(f"  • In manifest? {is_already_ingested}")
-                    if is_already_ingested:
-                        st.success(f"  ✓ MATCH FOUND")
+            # Debug: Show first 3 checks (only if we logged manifest diagnostics this render)
+            if should_log_diagnostics and idx < 3:
+                if idx == 0:  # Add header before first check
+                    st.session_state["diagnostic_log"].append(f"\n📖 **Calibre Book Matching:**")
+                st.session_state["diagnostic_log"].append(f"  • Book {idx+1}: {book.title[:40]}")
+                st.session_state["diagnostic_log"].append(f"    → Raw path: {book.path}")
+                st.session_state["diagnostic_log"].append(f"    → Normalized: {book_path}")
+                st.session_state["diagnostic_log"].append(f"    → In manifest? {is_already_ingested}")
+                if is_already_ingested:
+                    st.session_state["diagnostic_log"].append(f"    ✓ MATCH FOUND")
 
             df_data.append({
                 'Select': book.id in selected_ids,
@@ -1426,7 +1435,23 @@ with tab_calibre:
                 # Put dismiss button right below the message for better visibility
                 if st.button("🗑️ Dismiss notification", key="dismiss_ingestion_results", type="secondary"):
                     del st.session_state["last_ingestion_results"]
+                    # Also clear diagnostic log and flags when dismissing
+                    if "diagnostic_log" in st.session_state:
+                        del st.session_state["diagnostic_log"]
+                    # Clear all diagnostic flags
+                    keys_to_delete = [k for k in st.session_state.keys() if k.startswith("manifest_diagnostics_loaded_")]
+                    for key in keys_to_delete:
+                        del st.session_state[key]
                     st.rerun()
+                st.markdown("---")
+
+            # Display diagnostic log if it exists (from previous ingestion with diagnostics enabled)
+            if "diagnostic_log" in st.session_state and st.session_state["diagnostic_log"]:
+                with st.expander("🔍 Ingestion Diagnostics", expanded=True):
+                    st.markdown("**Diagnostic log from last operation:**")
+                    # Display all log entries
+                    log_text = "\n".join(st.session_state["diagnostic_log"])
+                    st.text(log_text)
                 st.markdown("---")
 
             # Configuration section
@@ -1462,9 +1487,15 @@ with tab_calibre:
 
                 if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
                     st.session_state["ingest_in_progress"] = True
-                    # Clear any previous ingestion results
+                    # Clear any previous ingestion results and diagnostic log
                     if "last_ingestion_results" in st.session_state:
                         del st.session_state["last_ingestion_results"]
+                    if "diagnostic_log" in st.session_state:
+                        del st.session_state["diagnostic_log"]
+                    # Clear all diagnostic flags to allow fresh manifest loading diagnostics
+                    keys_to_delete = [k for k in st.session_state.keys() if k.startswith("manifest_diagnostics_loaded_")]
+                    for key in keys_to_delete:
+                        del st.session_state[key]
                     # Show configuration being used
                     st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
                     st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")

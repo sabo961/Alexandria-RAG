@@ -1299,12 +1299,12 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
                     if results['success_count'] > 0:
                         st.success(f"✅ Successfully ingested {results['success_count']} books!")
-                        # Show success for 2 seconds before rerunning
-                        import time
-                        time.sleep(2)
                         app_state.calibre_selected_books = set()
                         app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
                         st.rerun()
+
+                    # Always show results summary even if there were no successes
+                    st.info(f"Ingestion complete: {results['success_count']} successful, {results['error_count']} failed out of {results['total']} total")
 
                     if results['error_count'] > 0:
                         st.error(f"❌ Failed to ingest {results['error_count']} books")

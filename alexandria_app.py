@@ -1279,7 +1279,7 @@ with tab_calibre:
         preferred_format = st.session_state.get("calibre_preferred_format", "epub")
         qdrant_host = st.session_state.get("qdrant_host", "192.168.0.151")
         qdrant_port = st.session_state.get("qdrant_port", 6333)
-        library_dir = st.session_state.get("calibre_library", "")
+        library_dir = app_state.library_dir  # Use library_dir from app_state (set in sidebar)
 
         # Only show ingestion section if books are selected
         with st.expander(f"🚀 Calibre > Qdrant ({len(selected_books)} selected)", expanded=False):
@@ -1343,11 +1343,17 @@ with tab_calibre:
                             active_library_path = Path(library_dir)
                             book_dir = active_library_path / book.path
 
+                            st.write(f"🔍 Book '{book.title}' has formats: {book.formats}")
+                            st.write(f"🔍 Looking for format: {format_to_use}")
+                            st.write(f"🔍 Searching in: {book_dir}")
+
                             # Find the actual file
                             matching_files = list(book_dir.glob(f"*.{format_to_use}"))
+                            st.write(f"🔍 Glob pattern: *.{format_to_use}")
+                            st.write(f"🔍 Found files: {matching_files}")
 
                             if not matching_files:
-                                raise FileNotFoundError(f"File not found at {book_dir}")
+                                raise FileNotFoundError(f"File not found at {book_dir} (looking for *.{format_to_use}, book has formats: {book.formats})")
 
                             file_path = matching_files[0]
                             st.write(f"📂 Accessing: {file_path}")

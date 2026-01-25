@@ -1217,7 +1217,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                     key="calibre_preferred_format"
                 )
 
-            selected_ids = st.session_state.get("calibre_selected_books", set())
+            selected_ids = app_state.calibre_selected_books
             selected_books = [book for book in all_books if book.id in selected_ids]
 
             # Display selection summary and ingest button

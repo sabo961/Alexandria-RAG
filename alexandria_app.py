@@ -27,7 +27,13 @@ from scripts.collection_manifest import CollectionManifest
 
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
 from scripts.rag_query import perform_rag_query
+
+# Force reload of calibre_db to pick up DISTINCT changes
+import importlib
+if 'scripts.calibre_db' in sys.modules:
+    importlib.reload(sys.modules['scripts.calibre_db'])
 from scripts.calibre_db import CalibreDB
+
 import json
 import time
 import pandas as pd

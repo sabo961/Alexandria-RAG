@@ -81,28 +81,22 @@ def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
 
 def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
     """Validate file exists and is readable."""
-    import sys
-    print(f"BACKEND validate_file_access: path_for_open={repr(path_for_open)}", file=sys.stderr)
+    # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logger.debug(f"validate_file_access checking: {repr(path_for_open)}")
 
     if not os.path.exists(path_for_open):
-        print(f"BACKEND File does NOT exist!", file=sys.stderr)
         logger.debug(f"File does not exist: {path_for_open}")
         return False, f"File not found: {display_path}"
 
-    print(f"BACKEND File exists, attempting to open...", file=sys.stderr)
     try:
         logger.debug(f"Calling os.stat()...")
         os.stat(path_for_open)
         logger.debug(f"os.stat() succeeded, attempting to open file...")
-        print(f"BACKEND About to call open('{path_for_open}', 'rb')...", file=sys.stderr)
         with open(path_for_open, 'rb') as f:
             f.read(1)
-        print(f"BACKEND File opened successfully!", file=sys.stderr)
         logger.debug(f"File opened and read successfully")
         return True, None
     except OSError as e:
-        print(f"BACKEND OSError: {e.__class__.__name__}: {e}", file=sys.stderr)
         logger.error(f"OSError during file access: {e.__class__.__name__}: {e}", exc_info=True)
         return False, f"{e.__class__.__name__}: {e}"
 
@@ -356,16 +350,14 @@ def ingest_book(
     title_override: Optional[str] = None,
     author_override: Optional[str] = None
 ):
-    import sys
-    print(f"BACKEND ingest_book START: filepath={repr(filepath)}", file=sys.stderr)
+    # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
 
-    print(f"BACKEND calling normalize_file_path({repr(filepath)})", file=sys.stderr)
     try:
         normalized_path, display_path, _, _ = normalize_file_path(filepath)
-        print(f"BACKEND normalize_file_path returned: normalized_path={repr(normalized_path)}", file=sys.stderr)
+        logging.debug(f"normalize_file_path returned: normalized_path={repr(normalized_path)}")
     except Exception as e:
-        print(f"BACKEND normalize_file_path FAILED: {e.__class__.__name__}: {e}", file=sys.stderr)
+        logging.error(f"normalize_file_path FAILED: {e.__class__.__name__}: {e}")
         return {'success': False, 'error': f"Path normalization failed: {e}"}
 
     ok, err = validate_file_access(normalized_path, display_path)

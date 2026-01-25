@@ -198,7 +198,9 @@ class EmbeddingGenerator:
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         model = self.get_model()
-        embeddings = model.encode(texts, show_progress_bar=True)
+        # Disable progress bar to avoid sys.stderr issues in Streamlit environment
+        # tqdm progress bar causes [Errno 22] when sys.stderr is not available
+        embeddings = model.encode(texts, show_progress_bar=False)
         return embeddings.tolist()
 
 def generate_embeddings(texts: List[str]) -> List[List[float]]:

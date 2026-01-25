@@ -1034,19 +1034,23 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
             for idx, book in enumerate(manifest_books):
                 # Convert absolute path to relative path (relative to library_dir)
-                # Manifest stores: C:\...\library\Author\book.epub
-                # We want: author/book.epub (normalized, lowercase)
+                # Manifest stores: C:\...\library\Author\Book (ID)\filename.epub
+                # We want: author/book (id) (DIRECTORY ONLY, normalized, lowercase)
+                # Calibre book.path is also just the directory: Author/Book (ID)
                 absolute_path = Path(book['file_path'])
                 try:
                     relative_path = absolute_path.relative_to(library_path)
-                    normalized = relative_path.as_posix().lower()
+                    # Extract parent directory (book directory, not file path)
+                    book_directory = relative_path.parent
+                    normalized = book_directory.as_posix().lower()
                     ingested_file_paths.add(normalized)
 
                     # Debug: Show first 3 conversions
                     if app_state.show_ingestion_diagnostics and idx < 3:
                         st.write(f"🔍 Manifest book {idx+1}:")
-                        st.write(f"   Absolute: {absolute_path}")
-                        st.write(f"   Relative: {relative_path}")
+                        st.write(f"   Absolute file: {absolute_path}")
+                        st.write(f"   Relative file: {relative_path}")
+                        st.write(f"   Book directory: {book_directory}")
                         st.write(f"   Normalized: {normalized}")
                 except ValueError as e:
                     # Path is not relative to library_dir, skip it
@@ -1195,7 +1199,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             global_row_num = start_idx + idx + 1
 
             # Check if this book is already ingested
-            # Use relative path (book.path is already relative to library_dir)
+            # book.path from Calibre is the book directory: Author/Book (ID)
+            # ingested_file_paths contains directories extracted from manifest file paths
             book_path = Path(book.path).as_posix().lower()
             is_already_ingested = book_path in ingested_file_paths
 
@@ -1326,13 +1331,12 @@ with tab_calibre:
     # Display stored ingestion results if they exist (from previous rerun)
     if "last_ingestion_results" in st.session_state:
         results_data = st.session_state["last_ingestion_results"]
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            st.success(f"✅ {results_data['message']}")
-        with col2:
-            if st.button("✕ Dismiss", key="dismiss_ingestion_results"):
-                del st.session_state["last_ingestion_results"]
-                st.rerun()
+        # Show success message and dismiss button
+        st.success(f"✅ {results_data['message']}")
+        # Put dismiss button right below the message for better visibility
+        if st.button("🗑️ Dismiss notification", key="dismiss_ingestion_results", type="secondary"):
+            del st.session_state["last_ingestion_results"]
+            st.rerun()
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:

@@ -34,9 +34,9 @@ GROUP BY b.id
 for row in cursor.fetchall():
     print(f"{row[0]:7} | {row[1][:40]:40} | {row[2]}")
 
-print("\n\nWith DISTINCT:")
+print("\n\nWith DISTINCT (no separator - SQLite limitation):")
 cursor.execute("""
-SELECT b.id, b.title, GROUP_CONCAT(DISTINCT a.name, ' & ') as authors
+SELECT b.id, b.title, GROUP_CONCAT(DISTINCT a.name) as authors
 FROM books b
 LEFT JOIN books_authors_link bal ON b.id = bal.book
 LEFT JOIN authors a ON bal.author = a.id
@@ -45,5 +45,6 @@ GROUP BY b.id
 """)
 for row in cursor.fetchall():
     print(f"{row[0]:7} | {row[1][:40]:40} | {row[2]}")
+    print("Note: DISTINCT removes duplicates but separator is comma, not ' & '")
 
 conn.close()

@@ -91,6 +91,7 @@ class CalibreDB:
         cursor = conn.cursor()
 
         # Main query with joins for authors, languages, tags, series
+        # Note: SQLite GROUP_CONCAT(DISTINCT col, sep) not supported - using default separator
         query = """
         SELECT
             b.id,
@@ -100,9 +101,9 @@ class CalibreDB:
             b.pubdate,
             b.isbn,
             b.series_index,
-            GROUP_CONCAT(DISTINCT a.name, ' & ') as authors,
-            GROUP_CONCAT(DISTINCT l.lang_code, ', ') as languages,
-            GROUP_CONCAT(DISTINCT t.name, ', ') as tags,
+            GROUP_CONCAT(DISTINCT a.name) as authors,
+            GROUP_CONCAT(DISTINCT l.lang_code) as languages,
+            GROUP_CONCAT(DISTINCT t.name) as tags,
             s.name as series_name,
             p.name as publisher,
             r.rating
@@ -135,13 +136,23 @@ class CalibreDB:
             formats = self._get_book_formats(cursor, row['id'])
 
             # Parse data
+            # Replace comma separator with ' & ' for authors (DISTINCT uses default comma)
+            authors_str = row['authors'] or 'Unknown'
+            if authors_str != 'Unknown':
+                authors_str = authors_str.replace(',', ' &')
+
+            # Parse tags (DISTINCT uses default comma separator)
+            tags_list = []
+            if row['tags']:
+                tags_list = [t.strip() for t in row['tags'].split(',')]
+
             books.append(CalibreBook(
                 id=row['id'],
                 title=row['title'] or 'Unknown',
-                author=row['authors'] or 'Unknown',
+                author=authors_str,
                 path=row['path'] or '',
                 language=row['languages'].split(',')[0].strip() if row['languages'] else 'unknown',
-                tags=row['tags'].split(', ') if row['tags'] else [],
+                tags=tags_list,
                 series=row['series_name'],
                 series_index=row['series_index'],
                 isbn=row['isbn'],

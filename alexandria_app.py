@@ -1422,10 +1422,12 @@ with tab_calibre:
 
                         st.success(f"✅ {results_msg}")
 
-                        if results['success_count'] > 0:
-                            app_state.calibre_selected_books = set()
-                            app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
-                            st.rerun()
+                        # Don't auto-clear selection or rerun - let user see results
+                        # User can manually Update Selection to clear and start new ingestion
+                        # if results['success_count'] > 0:
+                        #     app_state.calibre_selected_books = set()
+                        #     app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
+                        #     st.rerun()
 
                     except Exception as e:
                         import traceback

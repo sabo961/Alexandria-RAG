@@ -1010,6 +1010,21 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     # Get consolidated app state for Calibre tab
     app_state = get_app_state()
 
+    # Get ingestion collection from session state and library_dir
+    calibre_collection = st.session_state.get("calibre_ingest_collection", "alexandria")
+    library_dir = app_state.library_dir
+
+    # Load manifest to check which books are already ingested
+    ingested_file_paths = set()
+    try:
+        manifest = CollectionManifest(collection_name=calibre_collection)
+        if calibre_collection in manifest.manifest['collections']:
+            for book in manifest.manifest['collections'][calibre_collection]['books']:
+                # Store normalized file paths for comparison
+                ingested_file_paths.add(Path(book['file_path']).as_posix().lower())
+    except Exception:
+        pass  # Manifest doesn't exist yet or collection not created
+
     # Get all formats
     all_formats = set()
     for book in all_books:
@@ -1140,11 +1155,16 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             # Global row number (1-based)
             global_row_num = start_idx + idx + 1
 
+            # Check if this book is already ingested
+            book_path = (Path(library_dir) / book.path).as_posix().lower()
+            is_already_ingested = book_path in ingested_file_paths
+
             df_data.append({
                 'Select': book.id in selected_ids,
                 'Id': book.id,
                 '#': global_row_num,
                 '': ' '.join(format_icons) if format_icons else '📄',
+                'Status': '✓ Ingested' if is_already_ingested else '',
                 'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
                 'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,
                 'Language': book.language.upper(),
@@ -1171,7 +1191,12 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                 hide_index=True,
                 column_config={
                     "Select": st.column_config.CheckboxColumn(required=True),
-                    "Id": None
+                    "Id": None,
+                    "Status": st.column_config.TextColumn(
+                        "Status",
+                        width="small",
+                        help="Shows if book is already ingested to Qdrant"
+                    )
                 },
                 disabled=df.columns.drop(["Select"]),
                 key=f"calibre_table_editor_{current_page}_{table_reset_token}"
@@ -1460,7 +1485,7 @@ with tab_calibre:
                         if results['success_count'] > 0:
                             app_state.calibre_selected_books = set()
                             st.session_state.app_state.calibre_selected_books = set()  # Ensure persistence
-                            # Don't rerun - let user see results, table will update on next interaction
+                            st.rerun()  # Refresh UI to show cleared checkboxes and updated Qdrant tab
 
                     except Exception as e:
                         import traceback

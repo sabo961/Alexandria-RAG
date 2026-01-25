@@ -321,6 +321,10 @@ def ingest_items_batch(
             if status_callback:
                 status_callback(f"Ingesting {idx + 1}/{len(items)}: {item_title}")
 
+            # Debug: Show what we're passing to ingest_book
+            import sys
+            print(f"DEBUG ingest_book: filepath type={type(filepath)}, value={repr(filepath)}", file=sys.stderr)
+
             # Ingest the item with metadata overrides
             result = ingest_book(
                 filepath=str(filepath),
@@ -1356,10 +1360,12 @@ with tab_calibre:
                                 raise FileNotFoundError(f"File not found at {book_dir} (looking for *.{format_to_use}, book has formats: {book.formats})")
 
                             file_path = matching_files[0]
-                            st.write(f"📂 Accessing: {file_path}")
+                            # Normalize path to use correct OS separators (backslashes on Windows)
+                            normalized_path = os.path.normpath(str(file_path))
+                            st.write(f"📂 Accessing: {normalized_path}")
 
                             return (
-                                file_path,
+                                normalized_path,  # Return normalized path string
                                 {
                                     'title': book.title,
                                     'author': book.author,

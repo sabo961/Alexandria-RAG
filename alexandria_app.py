@@ -399,6 +399,13 @@ def ingest_items_batch(
             results['errors'].append(f"{item_title}: {str(e)}")
             results['error_count'] += 1
 
+    # Add completion summary to diagnostic log
+    app_state = get_app_state()
+    if app_state.show_ingestion_diagnostics and "diagnostic_log" in st.session_state:
+        st.session_state["diagnostic_log"].append("")
+        st.session_state["diagnostic_log"].append(f"✅ **INGESTION COMPLETED**")
+        st.session_state["diagnostic_log"].append(f"   Success: {results['success_count']}, Failed: {results['error_count']}, Total: {results['total']}")
+
     return results
 
 
@@ -1029,14 +1036,19 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     ingested_file_paths = set()
 
     # Initialize diagnostic log for manifest loading if diagnostics enabled
-    # Only add manifest loading diagnostics if we haven't already loaded them for this session
+    # ONLY log if: (1) diagnostics enabled, (2) no existing diagnostic_log (means no active ingestion),
+    #              (3) haven't logged yet, (4) not dismissed
     diagnostic_key = f"manifest_diagnostics_loaded_{calibre_collection}"
-    should_log_diagnostics = app_state.show_ingestion_diagnostics and diagnostic_key not in st.session_state
+    should_log_diagnostics = (
+        app_state.show_ingestion_diagnostics and
+        "diagnostic_log" not in st.session_state and  # Don't interfere with ingestion diagnostics
+        diagnostic_key not in st.session_state and
+        "diagnostics_dismissed" not in st.session_state  # Don't show after user dismissed
+    )
 
     if should_log_diagnostics:
-        if "diagnostic_log" not in st.session_state:
-            st.session_state["diagnostic_log"] = []
-        st.session_state["diagnostic_log"].append(f"\n📂 **Manifest Loading (Collection: {calibre_collection})**")
+        st.session_state["diagnostic_log"] = []
+        st.session_state["diagnostic_log"].append(f"📂 **Manifest Loading (Collection: {calibre_collection})**")
 
     try:
         manifest = CollectionManifest(collection_name=calibre_collection)
@@ -1435,23 +1447,26 @@ with tab_calibre:
                 # Put dismiss button right below the message for better visibility
                 if st.button("🗑️ Dismiss notification", key="dismiss_ingestion_results", type="secondary"):
                     del st.session_state["last_ingestion_results"]
-                    # Also clear diagnostic log and flags when dismissing
+                    # Clear diagnostic log when dismissing
                     if "diagnostic_log" in st.session_state:
                         del st.session_state["diagnostic_log"]
-                    # Clear all diagnostic flags
-                    keys_to_delete = [k for k in st.session_state.keys() if k.startswith("manifest_diagnostics_loaded_")]
-                    for key in keys_to_delete:
-                        del st.session_state[key]
+                    # Set flag to prevent manifest diagnostics from reappearing after dismiss
+                    # This flag will be cleared on next ingestion
+                    st.session_state["diagnostics_dismissed"] = True
                     st.rerun()
                 st.markdown("---")
 
             # Display diagnostic log if it exists (from previous ingestion with diagnostics enabled)
             if "diagnostic_log" in st.session_state and st.session_state["diagnostic_log"]:
-                with st.expander("🔍 Ingestion Diagnostics", expanded=True):
-                    st.markdown("**Diagnostic log from last operation:**")
+                # Check if this is ingestion diagnostics or manifest loading diagnostics
+                log_entries = st.session_state["diagnostic_log"]
+                is_ingestion_log = any("INGESTION STARTED" in entry for entry in log_entries)
+
+                expander_title = "🔍 Ingestion Diagnostics" if is_ingestion_log else "🔍 Manifest Loading Debug"
+                with st.expander(expander_title, expanded=is_ingestion_log):  # Auto-expand if ingestion log
                     # Display all log entries
-                    log_text = "\n".join(st.session_state["diagnostic_log"])
-                    st.text(log_text)
+                    log_text = "\n".join(log_entries)
+                    st.code(log_text, language=None)
                 st.markdown("---")
 
             # Configuration section
@@ -1492,10 +1507,23 @@ with tab_calibre:
                         del st.session_state["last_ingestion_results"]
                     if "diagnostic_log" in st.session_state:
                         del st.session_state["diagnostic_log"]
-                    # Clear all diagnostic flags to allow fresh manifest loading diagnostics
+                    # Clear all diagnostic flags to allow fresh diagnostics
                     keys_to_delete = [k for k in st.session_state.keys() if k.startswith("manifest_diagnostics_loaded_")]
                     for key in keys_to_delete:
                         del st.session_state[key]
+                    # Clear dismiss flag to allow new diagnostic output
+                    if "diagnostics_dismissed" in st.session_state:
+                        del st.session_state["diagnostics_dismissed"]
+
+                    # Initialize diagnostic log header for this ingestion
+                    if get_app_state().show_ingestion_diagnostics:
+                        st.session_state["diagnostic_log"] = [
+                            f"🚀 **INGESTION STARTED** ({len(selected_books)} books selected)",
+                            f"   Collection: {calibre_collection}",
+                            f"   Domain: {calibre_domain}",
+                            f"   Qdrant: {qdrant_host}:{qdrant_port}",
+                            ""
+                        ]
                     # Show configuration being used
                     st.write(f"🔄 Starting ingestion with {len(selected_books)} books...")
                     st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")

@@ -323,19 +323,27 @@ def ingest_items_batch(
 
             # Debug: Show what we're passing to ingest_book
             import sys
-            print(f"DEBUG ingest_book: filepath type={type(filepath)}, value={repr(filepath)}", file=sys.stderr)
+            filepath_str = str(filepath)
+            print(f"FRONTEND calling ingest_book: filepath type={type(filepath)}, str(filepath)={repr(filepath_str)}", file=sys.stderr)
 
             # Ingest the item with metadata overrides
-            result = ingest_book(
-                filepath=str(filepath),
-                domain=domain,
-                collection_name=collection_name,
-                qdrant_host=qdrant_host,
-                qdrant_port=qdrant_port,
-                title_override=metadata_overrides.get('title'),
-                author_override=metadata_overrides.get('author'),
-                language_override=metadata_overrides.get('language')
-            )
+            try:
+                result = ingest_book(
+                    filepath=filepath_str,
+                    domain=domain,
+                    collection_name=collection_name,
+                    qdrant_host=qdrant_host,
+                    qdrant_port=qdrant_port,
+                    title_override=metadata_overrides.get('title'),
+                    author_override=metadata_overrides.get('author'),
+                    language_override=metadata_overrides.get('language')
+                )
+                print(f"FRONTEND ingest_book returned: {result}", file=sys.stderr)
+            except Exception as ex:
+                print(f"FRONTEND ingest_book raised exception: {ex.__class__.__name__}: {ex}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                result = {'success': False, 'error': f"{ex.__class__.__name__}: {ex}"}
 
             st.write(f"🔍 ingest_book returned: success={result.get('success') if result else None}, error={result.get('error') if result else 'No result'}")
 

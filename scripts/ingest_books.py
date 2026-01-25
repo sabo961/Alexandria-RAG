@@ -346,9 +346,17 @@ def ingest_book(
     title_override: Optional[str] = None,
     author_override: Optional[str] = None
 ):
+    import sys
+    print(f"BACKEND ingest_book START: filepath={repr(filepath)}", file=sys.stderr)
     logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
 
-    normalized_path, display_path, _, _ = normalize_file_path(filepath)
+    print(f"BACKEND calling normalize_file_path({repr(filepath)})", file=sys.stderr)
+    try:
+        normalized_path, display_path, _, _ = normalize_file_path(filepath)
+        print(f"BACKEND normalize_file_path returned: normalized_path={repr(normalized_path)}", file=sys.stderr)
+    except Exception as e:
+        print(f"BACKEND normalize_file_path FAILED: {e.__class__.__name__}: {e}", file=sys.stderr)
+        return {'success': False, 'error': f"Path normalization failed: {e}"}
 
     ok, err = validate_file_access(normalized_path, display_path)
     if not ok:

@@ -208,6 +208,116 @@ def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, hos
     return results
 
 
+def ingest_items_batch(
+    items,
+    extract_item_fn,
+    domain: str,
+    collection_name: str,
+    qdrant_host: str,
+    qdrant_port: int,
+    move_files: bool = False,
+    ingested_dir: Path = None,
+    progress_callback=None,
+    status_callback=None
+) -> dict:
+    """
+    Consolidates ingestion logic for multiple items (Calibre books, folder files, etc).
+    Reduces code duplication between Calibre and Folder ingestion routes.
+
+    Args:
+        items: List of items to ingest (books, rows, dicts, etc)
+        extract_item_fn: Callable that takes an item and returns (filepath, metadata_overrides dict)
+                        Example: lambda book: (str(book.file_path), {'title': book.title, 'author': book.author})
+        domain: Content domain for chunking strategy
+        collection_name: Qdrant collection name
+        qdrant_host: Qdrant server host
+        qdrant_port: Qdrant server port
+        move_files: Whether to move successfully ingested files to ingested_dir
+        ingested_dir: Directory to move files to (required if move_files=True)
+        progress_callback: Callable(current_idx, total) for progress updates
+        status_callback: Callable(status_text) for status messages
+
+    Returns:
+        {
+            'success_count': int,
+            'error_count': int,
+            'errors': list[str],
+            'total': int
+        }
+    """
+    from scripts.ingest_books import ingest_book
+    from scripts.collection_manifest import CollectionManifest
+    import shutil
+
+    # Initialize manifest
+    manifest = CollectionManifest(collection_name=collection_name)
+    manifest.verify_collection_exists(collection_name, qdrant_host=qdrant_host, qdrant_port=qdrant_port)
+
+    results = {
+        'total': len(items),
+        'success_count': 0,
+        'error_count': 0,
+        'errors': []
+    }
+
+    for idx, item in enumerate(items):
+        try:
+            # Extract filepath and metadata overrides from item
+            filepath, metadata_overrides = extract_item_fn(item)
+
+            # Update progress
+            if progress_callback:
+                progress_callback((idx + 1) / len(items))
+
+            # Update status
+            item_title = metadata_overrides.get('title', Path(filepath).name)
+            if status_callback:
+                status_callback(f"Ingesting {idx + 1}/{len(items)}: {item_title}")
+
+            # Ingest the item with metadata overrides
+            result = ingest_book(
+                filepath=str(filepath),
+                domain=domain,
+                collection_name=collection_name,
+                qdrant_host=qdrant_host,
+                qdrant_port=qdrant_port,
+                title_override=metadata_overrides.get('title'),
+                author_override=metadata_overrides.get('author'),
+                language_override=metadata_overrides.get('language')
+            )
+
+            if result and result.get('success'):
+                # Add to manifest
+                manifest.add_book(
+                    collection_name=collection_name,
+                    book_path=str(filepath),
+                    book_title=result.get('title', item_title),
+                    author=result.get('author', metadata_overrides.get('author', 'Unknown')),
+                    domain=domain,
+                    chunks_count=result.get('chunks', 0),
+                    file_size_mb=result.get('file_size_mb', 0),
+                    language=result.get('language')
+                )
+
+                # Move file if requested
+                if move_files and ingested_dir:
+                    target_path = ingested_dir / Path(filepath).name
+                    shutil.move(filepath, target_path)
+
+                results['success_count'] += 1
+            else:
+                error_msg = result.get('error', 'Unknown error') if result else 'Failed to ingest'
+                results['errors'].append(f"{item_title}: {error_msg}")
+                results['error_count'] += 1
+
+        except Exception as e:
+            item_title = metadata_overrides.get('title', 'Unknown') if 'metadata_overrides' in locals() else 'Unknown'
+            results['errors'].append(f"{item_title}: {str(e)}")
+            results['error_count'] += 1
+
+    return results
+
+
 @st.cache_data(ttl=30)
 def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, str]:
     """
@@ -1071,104 +1181,65 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                     # Show configuration being used
                     st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
 
-                    # Initialize manifest for tracking
-                    manifest = CollectionManifest(collection_name=calibre_collection)
-
                     # Progress tracking
                     progress_bar = st.progress(0)
                     status_text = st.empty()
 
-                    success_count = 0
-                    error_count = 0
-                    errors = []
-                    ingested_books = []
+                    # Define extraction function for Calibre books with format selection and file discovery
+                    def extract_calibre_book(book):
+                        """
+                        Extract filepath and metadata from Calibre book object.
+                        Handles format preference and file lookup logic.
+                        """
+                        # Determine which format to use
+                        format_to_use = None
+                        if preferred_format in book.formats:
+                            format_to_use = preferred_format
+                        else:
+                            # Fallback to first available format
+                            format_to_use = book.formats[0] if book.formats else None
 
-                    for idx, book in enumerate(selected_books):
-                        # Update progress
-                        progress = (idx + 1) / len(selected_books)
-                        progress_bar.progress(progress)
-                        status_text.text(f"Ingesting {idx + 1}/{len(selected_books)}: {book.title}")
+                        if not format_to_use:
+                            raise ValueError(f"No supported format available for {book.title}")
 
-                        try:
-                            # Determine which format to use
-                            format_to_use = None
-                            if preferred_format in book.formats:
-                                format_to_use = preferred_format
-                            else:
-                                # Fallback to first available format
-                                format_to_use = book.formats[0] if book.formats else None
+                        # Construct absolute file path
+                        active_library_path = Path(library_dir)
+                        book_dir = active_library_path / book.path
 
-                            if not format_to_use:
-                                errors.append(f"{book.title}: No supported format available")
-                                error_count += 1
-                                continue
+                        # Find the actual file
+                        matching_files = list(book_dir.glob(f"*.{format_to_use}"))
 
-                            # Construct absolute file path
-                            active_library_path = Path(library_dir)
-                            book_dir = active_library_path / book.path
+                        if not matching_files:
+                            raise FileNotFoundError(f"File not found at {book_dir}")
 
-                            # Find the actual file
-                            matching_files = list(book_dir.glob(f"*.{format_to_use}"))
+                        file_path = matching_files[0]
+                        st.write(f"📂 Accessing: {file_path}")
 
-                            if not matching_files:
-                                errors.append(f"{book.title}: File not found at {book_dir}")
-                                error_count += 1
-                                continue
+                        return (
+                            file_path,
+                            {
+                                'title': book.title,
+                                'author': book.author,
+                                'language': book.language
+                            }
+                        )
 
-                            file_path = matching_files[0]
-                            st.write(f"📂 Accessing: {file_path}")
-
-                            # Ingest the book
-                            result = ingest_book(
-                                filepath=str(file_path),
-                                domain=calibre_domain,
-                                collection_name=calibre_collection,
-                                qdrant_host=qdrant_host,
-                                qdrant_port=qdrant_port,
-                                language_override=book.language
-                            )
-
-                            if result and result.get('success'):
-                                success_count += 1
-                                ingested_books.append({
-                                    'file_path': result['filepath'],
-                                    'book_title': result['title'],
-                                    'author': result['author'],
-                                    'domain': calibre_domain,
-                                    'chunks': result['chunks'],
-                                    'file_size_mb': result['file_size_mb'],
-                                    'language': result.get('language')
-                                })
-                                render_ingestion_diagnostics(result, book.title)
-                            else:
-                                error_msg = result.get('error', 'Failed to extract content or ingest') if result else 'Unknown error'
-                                errors.append(f"{book.title}: {error_msg}")
-                                error_count += 1
-                                if result:
-                                    render_ingestion_diagnostics(result, book.title)
-
-                        except Exception as e:
-                            errors.append(f"{book.title}: {str(e)}")
-                            error_count += 1
+                    # Use DRY helper function for batch ingestion (consolidates common loop logic)
+                    results = ingest_items_batch(
+                        items=selected_books,
+                        extract_item_fn=extract_calibre_book,
+                        domain=calibre_domain,
+                        collection_name=calibre_collection,
+                        qdrant_host=qdrant_host,
+                        qdrant_port=qdrant_port,
+                        move_files=False,  # Calibre doesn't move files
+                        progress_callback=lambda p: progress_bar.progress(p),
+                        status_callback=lambda s: status_text.text(s)
+                    )
 
                     # Final status
                     progress_bar.progress(1.0)
                     status_text.text("✅ Ingestion complete!")
-
-                    # Update manifest with successfully ingested books
-                    if ingested_books:
-                        for book_info in ingested_books:
-                            manifest.add_book(
-                                collection_name=calibre_collection,
-                                book_path=book_info['file_path'],
-                                book_title=book_info['book_title'],
-                                author=book_info['author'],
-                                domain=book_info['domain'],
-                                chunks_count=book_info['chunks'],
-                                file_size_mb=book_info['file_size_mb'],
-                                language=book_info.get('language')
-                            )
-                        st.success(f"📝 Updated manifest with {len(ingested_books)} book(s)")
 
                     # Verify ingestion by checking collection
                     try:
@@ -1179,16 +1250,16 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                     except Exception as e:
                         st.warning(f"⚠️ Could not verify collection: {e}")
 
-                    if success_count > 0:
-                        st.success(f"✅ Successfully ingested {success_count} books!")
+                    if results['success_count'] > 0:
+                        st.success(f"✅ Successfully ingested {results['success_count']} books!")
                         st.session_state.calibre_selected_books = set()
                         st.session_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
                         st.rerun()
 
-                    if error_count > 0:
-                        st.error(f"❌ Failed to ingest {error_count} books")
+                    if results['error_count'] > 0:
+                        st.error(f"❌ Failed to ingest {results['error_count']} books")
                         with st.expander("Show errors"):
-                            for error in errors:
+                            for error in results['errors']:
                                 st.text(f"• {error}")
             else:
                 st.info("👆 Select books using the checkboxes in the table above to begin")
@@ -1513,78 +1584,55 @@ with tab_ingestion:
             col_confirm, col_cancel = st.columns([1, 1])
             with col_confirm:
                 if st.button("✅ Confirm & Ingest All", type="primary"):
-                    # Process edited dataframe
+                    # Process edited dataframe using DRY helper function
                     st.info(f"🚀 Starting ingestion for {len(edited_df)} books with corrected metadata...")
-                    
-                    # Need to adapt run_batch_ingestion to accept overrides, OR just loop here manually
-                    # Looping manually is safer as run_batch_ingestion is a bit rigid
-                    
-                    from scripts.ingest_books import ingest_book
-                    from scripts.collection_manifest import CollectionManifest
-                    import shutil
-                    
-                    manifest = CollectionManifest(collection_name=collection_name)
-                    manifest.verify_collection_exists(collection_name, qdrant_host=qdrant_host, qdrant_port=qdrant_port)
-                    
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    success_count = 0
-                    
+
                     # Resolve ingest_dir for moving
                     app_root = Path(__file__).parent
                     ingest_path_base = Path(ingest_dir) if Path(ingest_dir).is_absolute() else app_root / ingest_dir
                     ingested_dir = ingest_path_base.parent / 'ingested'
                     ingested_dir.mkdir(exist_ok=True)
 
-                    for idx, row in edited_df.iterrows():
-                        file_path = row['Path']
-                        status_text.text(f"Ingesting: {row['Title']}")
-                        
-                        try:
-                            # Call ingest with OVERRIDES
-                            result = ingest_book(
-                                filepath=file_path,
-                                domain=domain,
-                                collection_name=collection_name,
-                                qdrant_host=qdrant_host,
-                                qdrant_port=qdrant_port,
-                                title_override=row['Title'],
-                                author_override=row['Author'],
-                                language_override=row['Language']
-                            )
-                            
-                            if result and result['success']:
-                                # Add to manifest
-                                manifest.add_book(
-                                    collection_name=collection_name,
-                                    book_path=file_path,
-                                    book_title=result['title'],
-                                    author=result['author'],
-                                    domain=domain,
-                                    chunks_count=result['chunks'],
-                                    file_size_mb=result['file_size_mb'],
-                                    language=result.get('language')
-                                )
-                                
-                                # Move file
-                                if move_files:
-                                    target_path = ingested_dir / Path(file_path).name
-                                    shutil.move(file_path, target_path)
-                                    st.toast(f"✅ {row['Title']} ingested & moved")
-                                else:
-                                    st.toast(f"✅ {row['Title']} ingested")
-                                    
-                                success_count += 1
-                            else:
-                                st.error(f"❌ Failed: {row['Title']} - {result.get('error')}")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error processing {row['Title']}: {e}")
-                        
-                        progress_bar.progress((idx + 1) / len(edited_df))
-                    
-                    st.success(f"🎉 Batch complete! Successfully ingested {success_count} books.")
-                    
+                    # Setup progress tracking UI
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    # Define extraction function for dataframe rows
+                    def extract_row(row):
+                        """Extract filepath and metadata from dataframe row"""
+                        return (
+                            row['Path'],  # filepath
+                            {
+                                'title': row['Title'],
+                                'author': row['Author'],
+                                'language': row['Language']
+                            }
+                        )
+
+                    # Use DRY helper function for batch ingestion (consolidates common loop logic)
+                    results = ingest_items_batch(
+                        items=edited_df.itertuples(index=False),
+                        extract_item_fn=lambda row: extract_row(row),
+                        domain=domain,
+                        collection_name=collection_name,
+                        qdrant_host=qdrant_host,
+                        qdrant_port=qdrant_port,
+                        move_files=move_files,
+                        ingested_dir=ingested_dir,
+                        progress_callback=lambda p: progress_bar.progress(p),
+                        status_callback=lambda s: status_text.text(s)
+                    )
+
+                    # Display results
+                    if results['success_count'] > 0:
+                        st.success(f"🎉 Batch complete! Successfully ingested {results['success_count']} books.")
+
+                    if results['error_count'] > 0:
+                        st.error(f"❌ Failed to ingest {results['error_count']} books")
+                        with st.expander("Show errors"):
+                            for error in results['errors']:
+                                st.text(f"• {error}")
+
                     # Cleanup session state
                     del st.session_state['ingest_metadata_preview']
                     del st.session_state['ingest_ready_to_confirm']

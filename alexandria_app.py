@@ -1359,7 +1359,6 @@ with tab_ingestion:
         with col_b:
             resume_ingest = st.button("▶️ Resume", use_container_width=True)
         with col_c:
-            review_metadata = st.checkbox("Review Metadata", value=False, help="Check and edit book details before ingestion")
             move_files = st.checkbox("Move completed files", value=True)
 
         if start_ingest:
@@ -1387,63 +1386,31 @@ with tab_ingestion:
                 if str(scripts_path) not in sys.path:
                     sys.path.insert(0, str(scripts_path))
                 
-                if review_metadata:
-                    # PREVIEW MODE
-                    from scripts.ingest_books import extract_metadata_only
-                    
-                    st.info("🔍 Scanning files for metadata...")
-                    metadata_list = []
-                    
-                    progress_bar = st.progress(0)
-                    for idx, file_path in enumerate(selected_files):
-                        meta = extract_metadata_only(file_path)
-                        if 'error' not in meta:
-                            metadata_list.append({
-                                "File": Path(file_path).name,
-                                "Title": meta.get('title', 'Unknown'),
-                                "Author": meta.get('author', 'Unknown'),
-                                "Language": meta.get('language', 'unknown'),
-                                "Path": file_path # Hidden key
-                            })
-                        progress_bar.progress((idx + 1) / len(selected_files))
-                    
-                    if metadata_list:
-                        st.session_state['ingest_metadata_preview'] = metadata_list
-                        st.session_state['ingest_ready_to_confirm'] = True
-                        st.rerun() # Rerun to show editor
-                    else:
-                        st.error("❌ Failed to extract metadata from selected files.")
-
+                # PREVIEW MODE (now always active)
+                from scripts.ingest_books import extract_metadata_only
+                
+                st.info("🔍 Scanning files for metadata...")
+                metadata_list = []
+                
+                progress_bar = st.progress(0)
+                for idx, file_path in enumerate(selected_files):
+                    meta = extract_metadata_only(file_path)
+                    if 'error' not in meta:
+                                                    metadata_list.append({
+                                                        "Title": meta.get('title', 'Unknown'),
+                                                        "Author": meta.get('author', 'Unknown'),
+                                                        "Language": meta.get('language', 'unknown'),
+                                                        "Format": meta.get('format', 'Unknown').lower(), # Added Format, now lowercase
+                                                        "Path": file_path # Hidden key
+                                                    })
+                    progress_bar.progress((idx + 1) / len(selected_files))
+                
+                if metadata_list:
+                    st.session_state['ingest_metadata_preview'] = metadata_list
+                    st.session_state['ingest_ready_to_confirm'] = True
+                    st.rerun() # Rerun to show editor
                 else:
-                    # DIRECT EXECUTION (Legacy Mode)
-                    st.info(f"""
-                    **Ingestion Parameters:**
-                    - Domain: {domain}
-                    - Collection: {collection_name}
-                    - Chunking: **Universal Semantic** (AI-driven segmentation)
-                    - Move completed files: {move_files}
-                    - Files to process: {selected_count}
-                    """)
-
-                    with st.spinner(f"Ingesting {selected_count} book(s)..."):
-                        try:
-                            results = run_batch_ingestion(
-                                selected_files=selected_files,
-                                ingest_dir=ingest_dir,
-                                domain=domain,
-                                collection_name=collection_name,
-                                host=qdrant_host,
-                                port=qdrant_port,
-                                move_files=move_files
-                            )
-                            st.markdown("---")
-                            st.success("✅ Ingestion complete!")
-                            st.markdown("### Results:")
-                            st.write(f"- **Total:** {results['total']}")
-                            st.write(f"- **Completed:** {results['completed']}")
-                            st.write(f"- **Failed:** {results['failed']}")
-                        except Exception as e:
-                            st.error(f"❌ Ingestion failed: {str(e)}")
+                    st.error("❌ Failed to extract metadata from selected files.")
 
         # REVIEW CONFIRMATION UI (Outside the button logic)
         if st.session_state.get('ingest_ready_to_confirm', False):
@@ -1456,11 +1423,10 @@ with tab_ingestion:
             edited_df = st.data_editor(
                 df,
                 use_container_width=True,
-                disabled=["File", "Path"],
-                column_config={
-                    "Path": None # Hide full path
-                },
-                key="metadata_editor"
+                                        disabled=["Path"],
+                                        column_config={
+                                            "Path": None # Hide full path
+                                        },                key="metadata_editor"
             )
             
             col_confirm, col_cancel = st.columns([1, 1])

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
 import logging
+from scripts.calibre_db import CalibreDB # Import CalibreDB
 
 # Book parsing libraries
 import ebooklib
@@ -38,6 +39,9 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+CALIBRE_LIBRARY_PATH = "G:\\My Drive\\alexandria" # Calibre library path
+calibre_db_instance = None # Lazy load
 
 
 # ============================================================================ 
@@ -107,7 +111,7 @@ def extract_text(filepath: str) -> Tuple[str, Dict]:
         metadata = {
             'title': doc.metadata.get('title', 'Unknown'),
             'author': doc.metadata.get('author', 'Unknown'),
-            'language': doc.metadata.get('language', 'unknown') or 'unknown',
+            'language': standardize_language_code(doc.metadata.get('language') or 'unknown'),
             'format': 'PDF'
         }
         doc.close()
@@ -125,9 +129,28 @@ def extract_text(filepath: str) -> Tuple[str, Dict]:
 def _get_epub_metadata(book, key: str) -> str:
     try:
         result = book.get_metadata('DC', key)
-        if result: return result[0][0]
+        if result: 
+            return standardize_language_code(result[0][0])
     except: pass
-    return "Unknown"
+    return "unknown"
+
+def standardize_language_code(lang: str) -> str:
+    """Standardizes common language codes to a consistent format (e.g., 'en', 'hr')."""
+    if not lang:
+        return "unknown"
+    
+    lang = lang.lower().strip()
+
+    # Standardize known problematic English indicators
+    if lang == 'eng': # Only 'eng' to 'en', keep 'en-us', 'en-gb'
+        return 'en'
+    
+    # Standardize known problematic Croatian indicators
+    if lang in ['hrv', 'cro']:
+        return 'hr' 
+    
+    # Keep other specific regional variants or unexpected codes as they are
+    return lang
 
 
 # ============================================================================ 
@@ -209,9 +232,55 @@ def upload_to_qdrant(
     logger.info(f"✅ Uploaded {len(points)} semantic chunks to '{collection_name}'")
 
 
-# ============================================================================ 
-# METADATA EXTRACTION FOR PREVIEW
-# ============================================================================ 
+def _get_calibre_db() -> Optional[CalibreDB]:
+    """Lazy-loads and returns a CalibreDB instance."""
+    global calibre_db_instance
+    if calibre_db_instance is None:
+        try:
+            calibre_db_instance = CalibreDB(CALIBRE_LIBRARY_PATH)
+        except FileNotFoundError:
+            logger.warning(f"Calibre DB not found at {CALIBRE_LIBRARY_PATH}. Metadata enrichment from Calibre will be skipped.")
+            calibre_db_instance = None
+        except Exception as e:
+            logger.error(f"Failed to connect to Calibre DB at {CALIBRE_LIBRARY_PATH}: {e}. Metadata enrichment from Calibre will be skipped.")
+            calibre_db_instance = None
+    return calibre_db_instance
+
+def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
+    """
+    Attempts to enrich metadata from Calibre DB if a match is found.
+    Prioritizes Calibre data for title, author, and language if current metadata is 'Unknown' or 'unknown'.
+    """
+    db = _get_calibre_db()
+    if not db:
+        return metadata # Cannot enrich without Calibre DB
+
+    filename = Path(filepath).name
+    calibre_book = db.match_file_to_book(filename)
+
+    if calibre_book:
+        logger.info(f"Matched '{filename}' to Calibre book: '{calibre_book.title}' by '{calibre_book.author}'.")
+        # Override 'Unknown' or 'unknown' fields with Calibre data
+        if metadata.get('title', 'Unknown') in ['Unknown', 'unknown']:
+            metadata['title'] = calibre_book.title
+        # Calibre stores authors as "Author1 & Author2", but metadata expects a string.
+        # CalibreBook.author field already handles this.
+        if metadata.get('author', 'Unknown') in ['Unknown', 'unknown']:
+            metadata['author'] = calibre_book.author
+
+        if metadata.get('language', 'unknown') == 'unknown':
+            # Use standardized language from Calibre if available and current is 'unknown'
+            metadata['language'] = standardize_language_code(calibre_book.language)
+        
+        # Also ensure format is consistent (take first format from Calibre and uppercase it)
+        if calibre_book.formats and metadata.get('format', 'unknown') == 'unknown':
+             metadata['format'] = calibre_book.formats[0].upper()
+
+    return metadata
+
+
+
+
 
 def extract_metadata_only(filepath: str) -> Dict:
     """
@@ -227,6 +296,10 @@ def extract_metadata_only(filepath: str) -> Dict:
     try:
         _, metadata = extract_text(normalized_path)
         metadata['filepath'] = display_path
+        
+        # Enrich metadata from Calibre if available
+        metadata = _enrich_metadata_from_calibre(filepath, metadata)
+
         return metadata
     except ValueError as e:
         return {'error': str(e), 'filepath': display_path}
@@ -259,6 +332,9 @@ def ingest_book(
     if language_override: metadata['language'] = language_override
     if title_override: metadata['title'] = title_override
     if author_override: metadata['author'] = author_override
+
+    # Enrich metadata from Calibre after initial extraction but before overrides
+    metadata = _enrich_metadata_from_calibre(filepath, metadata)
 
     # 2. Semantic Chunking
     # Adjust threshold based on domain (Philosophy needs tighter focus)

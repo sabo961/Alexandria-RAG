@@ -1438,7 +1438,9 @@ with tab_calibre:
         library_dir = app_state.library_dir  # Use library_dir from app_state (set in sidebar)
 
         # Only show ingestion section if books are selected
-        with st.expander(f"🚀 Calibre > Qdrant ({len(selected_books)} selected)", expanded=False):
+        # Keep expander open if ingestion just completed (results available) so user can see message and dismiss
+        should_expand_ingestion = "last_ingestion_results" in st.session_state
+        with st.expander(f"🚀 Calibre > Qdrant ({len(selected_books)} selected)", expanded=should_expand_ingestion):
             # Display stored ingestion results if they exist (from previous rerun)
             if "last_ingestion_results" in st.session_state:
                 results_data = st.session_state["last_ingestion_results"]

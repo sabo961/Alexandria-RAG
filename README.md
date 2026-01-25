@@ -10,6 +10,17 @@ Semantička RAG knjižnica koja povezuje 9000 multidisciplinarnih knjiga (tehnik
 
 ---
 
+## Architecture & Documentation
+
+- **[Architecture Documentation](docs/architecture/README.md)** - C4 model diagrams, ADRs, and technical specs
+- **[System Context (C4 Level 1)](docs/architecture/c4/01-context.md)** - How Alexandria fits in the ecosystem
+- **[Container Diagram (C4 Level 2)](docs/architecture/c4/02-container.md)** - Major architectural components
+- **[Component Diagram (C4 Level 3)](docs/architecture/c4/03-component.md)** - Internal structure of Scripts Package
+- **[Universal Semantic Chunking](docs/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)** - Technical deep-dive into chunking algorithm
+- **[Structurizr Workspace](docs/architecture/workspace.dsl)** - Interactive diagrams (view with Structurizr Lite)
+
+---
+
 ## Quick Start
 
 ### GUI (Recommended)
@@ -56,10 +67,10 @@ python batch_ingest.py --directory ../ingest --domain technical --collection ale
 
 - **GUI:** Streamlit web interface (localhost:8501)
 - **Vector DB:** Qdrant (192.168.0.151:6333)
-- **Embedding Model:** Nomic AI embedding model (768-dim)
+- **Embedding Model:** sentence-transformers (all-MiniLM-L6-v2, 384-dim)
 - **LLM:** OpenRouter API (configurable models, free & paid)
 - **Calibre:** Direct integration with Calibre library database
-- **Chunking:** Domain-specific automatic optimization (Technical: 1500-2000 tokens, Psychology: 1000-1500, Philosophy: 1200-1800, History: 1500-2000)
+- **Chunking:** Universal Semantic Chunking (splits by semantic similarity, not word count - see [technical spec](docs/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md))
 - **Workflow:** Streamlit GUI + Python CLI
 - **Ingestion:** EPUB, PDF, TXT, MD support
 - **Tracking:** Automatic collection-specific manifest logging

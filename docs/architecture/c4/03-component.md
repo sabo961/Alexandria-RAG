@@ -43,41 +43,56 @@ Or see `workspace.dsl` component definitions.
 
 ---
 
-### 2. Chunking Strategies
-**Files:** `philosophical_chunking.py`, chunking logic in `ingest_books.py`
-**Purpose:** Domain-specific text chunking for optimal retrieval
+### 2. Universal Semantic Chunker
+**Files:** `universal_chunking.py`, `ingest_books.py`
+**Purpose:** Semantic-aware text chunking for optimal retrieval across all domains
 
 **Responsibilities:**
-- Apply domain-specific chunk sizes (technical: 1500-2000, psychology: 1000-1500, etc.)
-- Argument-based pre-chunking for philosophical texts
-- Author-specific opposition detection (Mishima, Nietzsche, Cioran)
-- Token counting and overlap management
-- Text merging strategies (PDFs vs EPUBs)
+- Split text into sentences using regex
+- Generate embeddings for all sentences
+- Calculate cosine similarity between consecutive sentences
+- Break chunks at semantic topic boundaries (low similarity)
+- Enforce min/max chunk size constraints
+- Domain-agnostic approach (works for all content types)
 
-**Chunking Strategies:**
+**Algorithm:**
+```
+1. Split text into sentences
+2. Embed all sentences (all-MiniLM-L6-v2)
+3. For each sentence pair:
+   - Calculate similarity with previous sentence
+   - If similarity < threshold AND buffer >= min_size:
+     → Create new chunk
+   - Else: Add to current buffer
+4. Enforce max_chunk_size safety cap
+```
 
-| Domain | Min Tokens | Max Tokens | Overlap | Special Processing |
-|--------|------------|------------|---------|-------------------|
-| Technical | 1500 | 2000 | 200 | Merge pages for full context |
-| Psychology | 1000 | 1500 | 150 | Self-contained concepts |
-| Philosophy | 1200 | 1800 | 180 | **Argument-based pre-chunking** |
-| History | 1500 | 2000 | 200 | Case study context preservation |
-| Literature | 1500 | 2000 | 200 | Standard merging |
+**Parameters:**
 
-**Philosophical Chunking:**
-- Detects conceptual oppositions (words↔body, ideal↔real, mind↔flesh)
-- Preserves complete arguments in single chunks
-- Author-specific patterns for Mishima, Nietzsche, Cioran
-- Activated via `use_argument_chunking` flag in `domains.json`
+| Parameter | Default | Philosophy | Description |
+|-----------|---------|------------|-------------|
+| threshold | 0.55 | 0.45 | Lower = fewer breaks, larger chunks |
+| min_chunk_size | 200 words | 200 words | Minimum context buffer |
+| max_chunk_size | 1200 words | 1200 words | Safety cap for LLM limits |
+
+**Philosophy Tuning:**
+- Lower threshold (0.45) for tighter topic focus
+- Preserves argument coherence through semantic similarity
+- No hard-coded opposition detection needed
 
 **Key Functions:**
-- `argument_prechunk()` - Pre-chunk philosophical text by arguments
-- `should_use_argument_chunking()` - Check domain config
-- `detect_author_style()` - Identify author for opposition patterns
-- `calculate_optimal_chunk_params()` - Auto-optimize chunk sizes
+- `UniversalChunker.chunk()` - Main chunking entry point
+- `_split_sentences()` - Regex-based sentence splitting
+- `_create_chunk_dict()` - Chunk metadata generation
+
+**Benefits:**
+- **Semantic integrity:** Breaks where topic changes, not at word count
+- **Domain agnostic:** Same logic for technical, psychology, philosophy, literature
+- **Adaptive:** Automatically adjusts to content structure
+- **Context preservation:** Maintains minimum chunk size for LLM context
 
 **Related Story:** [02-CHUNKING.md](../../stories/02-CHUNKING.md)
-**Related ADR:** [ADR 0002: Domain-Specific Chunking](../decisions/0002-domain-specific-chunking.md), [ADR 0005: Philosophical Argument Chunking](../decisions/0005-philosophical-argument-chunking.md)
+**Related ADR:** [ADR 0002: Domain-Specific Chunking](../decisions/0002-domain-specific-chunking.md) - Superseded by Universal Semantic approach
 
 ---
 
@@ -232,9 +247,10 @@ class CalibreBook:
 ### Ingestion Flow
 ```
 Calibre Integration → Ingestion Engine (book path + metadata)
-Ingestion Engine → Chunking Strategies (apply domain chunking)
+Ingestion Engine → Universal Semantic Chunker (split by semantic similarity)
+Universal Semantic Chunker → Embedder (generate chunk embeddings)
 Ingestion Engine → Collection Management (log to manifest)
-Ingestion Engine → Qdrant (upload chunks)
+Ingestion Engine → Qdrant (upload chunks with metadata)
 ```
 
 ### Query Flow

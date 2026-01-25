@@ -17,12 +17,8 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
                     tags "Ingestion"
                 }
                 
-                chunkingRouter = component "Chunking Router" "Determines optimal chunking strategy based on Domain and Content Type" "ingest_books.py (calculate_params)" {
-                    tags "Ingestion" "Logic"
-                }
-
-                chunker = component "Chunking Engine" "Executes the selected splitting strategy (Fixed Window or Semantic)" "ingest_books.py (chunk_text), philosophical_chunking.py" {
-                    tags "Ingestion" "Core"
+                universalChunker = component "Universal Semantic Chunker" "Semantic-aware text splitting using sentence embeddings and cosine similarity" "universal_chunking.py (UniversalChunker)" {
+                    tags "Ingestion" "Core" "AI"
                 }
 
                 embedder = component "Embedder" "Converts text chunks into 384-dim vectors" "SentenceTransformer (all-MiniLM-L6-v2)" {
@@ -49,9 +45,8 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
 
                 # Internal Data Flow (Ingestion)
                 calibreIntegration -> textExtractor "Provides file path & metadata"
-                textExtractor -> chunkingRouter "Passes raw text & domain"
-                chunkingRouter -> chunker "Configures strategy (Size/Overlap/Method)"
-                chunker -> embedder "Yields text chunks"
+                textExtractor -> universalChunker "Passes raw text"
+                universalChunker -> embedder "Uses for sentence embeddings + yields text chunks"
                 embedder -> qdrantUploader "Yields vectors"
                 qdrantUploader -> collectionManagement "Logs success"
 
@@ -118,11 +113,12 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         # DETAILED INGESTION FLOW
         dynamic scripts "DetailedIngestionFlow" "The lifecycle of a book from file to vector" {
             calibreIntegration -> textExtractor "1. Get file path"
-            textExtractor -> chunkingRouter "2. Analyze text structure"
-            chunkingRouter -> chunker "3. Select & Execute Strategy (e.g., Argument vs Fixed)"
-            chunker -> embedder "4. Generate Embeddings"
-            embedder -> qdrantUploader "5. Prepare Batch"
-            qdrantUploader -> collectionManagement "6. Log to Manifest"
+            textExtractor -> universalChunker "2. Pass raw text"
+            universalChunker -> embedder "3. Generate sentence embeddings for semantic chunking"
+            universalChunker -> universalChunker "4. Split by semantic similarity (threshold-based)"
+            universalChunker -> embedder "5. Generate final chunk embeddings"
+            embedder -> qdrantUploader "6. Prepare Batch"
+            qdrantUploader -> collectionManagement "7. Log to Manifest"
             autolayout lr
         }
 

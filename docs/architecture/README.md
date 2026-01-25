@@ -6,6 +6,7 @@
 
 ## Quick Navigation
 
+- **[Architecture Summary](ARCHITECTURE_SUMMARY.md)** - ⭐ One-page architecture reference
 - **[C4 Diagrams](#c4-diagrams)** - Visual architecture at different abstraction levels
 - **[Architecture Decisions](#architecture-decisions)** - ADRs explaining "why" behind design choices
 - **[Technical Specifications](#technical-specifications)** - Detailed technical docs
@@ -124,4 +125,63 @@ Architecture components map directly to feature stories:
 
 ---
 
-**Last Updated:** 2026-01-23
+---
+
+## Quick Architecture Overview
+
+### System Components
+
+**Alexandria RAG System** consists of:
+
+1. **Streamlit GUI** - Web interface for browsing, ingesting, and querying
+2. **Scripts Package** - Core business logic (Python modules)
+   - Ingestion Engine (`ingest_books.py`)
+   - Universal Semantic Chunker (`universal_chunking.py`)
+   - RAG Query Engine (`rag_query.py`)
+   - Collection Management (`collection_manifest.py`)
+   - Calibre Integration (`calibre_db.py`)
+3. **Qdrant Vector DB** - Stores 384-dim embeddings with metadata
+4. **OpenRouter API** - LLM inference for answer generation
+5. **Calibre Database** - Book metadata (SQLite)
+6. **File System** - Book storage and manifests
+
+### Data Flow Summary
+
+**Ingestion:**
+```
+Book File → Text Extraction → Universal Semantic Chunking → Embedding → Qdrant Storage
+                                      ↓
+                              (Splits by semantic similarity, not word count)
+```
+
+**Query:**
+```
+User Query → Embedding → Qdrant Search → Filter by Threshold → Optional LLM Rerank → OpenRouter Answer Generation
+```
+
+### Key Technologies
+
+- **Python 3.14** - All application code
+- **Streamlit** - GUI framework
+- **sentence-transformers** - Embeddings (all-MiniLM-L6-v2, 384 dimensions)
+- **Qdrant** - Vector database (cosine distance)
+- **OpenRouter** - Multi-model LLM API
+- **SQLite** - Calibre metadata storage
+- **PyMuPDF** - PDF text extraction
+- **ebooklib** - EPUB text extraction
+
+### Universal Semantic Chunking
+
+Alexandria uses a **semantic-aware chunking strategy** that breaks text at topic boundaries:
+
+- **Embedding-based:** Each sentence is embedded and compared to previous sentence
+- **Similarity threshold:** Chunks split when cosine similarity drops below threshold (0.55 default, 0.45 for philosophy)
+- **Context preservation:** Minimum 200 words per chunk ensures adequate context
+- **Safety cap:** Maximum 1200 words prevents LLM context overflow
+- **Domain agnostic:** Same algorithm works for technical, psychology, philosophy, literature
+
+This replaces earlier fixed-window and domain-specific strategies with a unified, intelligent approach.
+
+---
+
+**Last Updated:** 2026-01-25

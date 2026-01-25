@@ -1021,6 +1021,11 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
     # Load manifest to check which books are already ingested
     ingested_file_paths = set()
+
+    # Debug output container if diagnostics enabled
+    if app_state.show_ingestion_diagnostics:
+        debug_container = st.expander("🔍 Manifest Loading Debug", expanded=False)
+
     try:
         manifest = CollectionManifest(collection_name=calibre_collection)
         if calibre_collection in manifest.manifest['collections']:
@@ -1029,8 +1034,9 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
             # Debug output if diagnostics enabled
             if app_state.show_ingestion_diagnostics:
-                st.write(f"🔍 MANIFEST DEBUG: Collection '{calibre_collection}' has {len(manifest_books)} books")
-                st.write(f"🔍 Library path: {library_path}")
+                with debug_container:
+                    st.write(f"📊 Collection '{calibre_collection}' has {len(manifest_books)} books")
+                    st.write(f"📁 Library path: {library_path}")
 
             for idx, book in enumerate(manifest_books):
                 # Convert absolute path to relative path (relative to library_dir)
@@ -1047,25 +1053,29 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
                     # Debug: Show first 3 conversions
                     if app_state.show_ingestion_diagnostics and idx < 3:
-                        st.write(f"🔍 Manifest book {idx+1}:")
-                        st.write(f"   Absolute file: {absolute_path}")
-                        st.write(f"   Relative file: {relative_path}")
-                        st.write(f"   Book directory: {book_directory}")
-                        st.write(f"   Normalized: {normalized}")
+                        with debug_container:
+                            st.write(f"**Manifest book {idx+1}:**")
+                            st.write(f"  • Absolute file: `{absolute_path}`")
+                            st.write(f"  • Relative file: `{relative_path}`")
+                            st.write(f"  • Book directory: `{book_directory}`")
+                            st.write(f"  • Normalized: `{normalized}`")
                 except ValueError as e:
                     # Path is not relative to library_dir, skip it
                     if app_state.show_ingestion_diagnostics:
-                        st.warning(f"⚠️ Could not make relative: {absolute_path} (not relative to {library_path})")
+                        with debug_container:
+                            st.warning(f"⚠️ Could not make relative: {absolute_path}")
                     pass
 
             if app_state.show_ingestion_diagnostics:
-                st.write(f"🔍 Total ingested paths loaded: {len(ingested_file_paths)}")
-                if ingested_file_paths:
-                    sample_paths = list(ingested_file_paths)[:3]
-                    st.write(f"🔍 Sample ingested paths: {sample_paths}")
+                with debug_container:
+                    st.write(f"✅ Total ingested paths loaded: {len(ingested_file_paths)}")
+                    if ingested_file_paths:
+                        sample_paths = list(ingested_file_paths)[:3]
+                        st.write(f"📋 Sample paths: {sample_paths}")
     except Exception as e:
         if app_state.show_ingestion_diagnostics:
-            st.error(f"🔍 Manifest loading error: {e}")
+            with debug_container:
+                st.error(f"❌ Manifest loading error: {e}")
         pass  # Manifest doesn't exist yet or collection not created
 
     # Get all formats
@@ -1206,12 +1216,13 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
             # Debug: Show first 3 checks
             if app_state.show_ingestion_diagnostics and idx < 3:
-                st.write(f"🔍 Calibre book {idx+1} check:")
-                st.write(f"   Raw path: {book.path}")
-                st.write(f"   Normalized: {book_path}")
-                st.write(f"   In manifest? {is_already_ingested}")
-                if is_already_ingested:
-                    st.success(f"   ✓ MATCH FOUND")
+                with debug_container:
+                    st.write(f"**Calibre book {idx+1} check:**")
+                    st.write(f"  • Raw path: `{book.path}`")
+                    st.write(f"  • Normalized: `{book_path}`")
+                    st.write(f"  • In manifest? {is_already_ingested}")
+                    if is_already_ingested:
+                        st.success(f"  ✓ MATCH FOUND")
 
             df_data.append({
                 'Select': book.id in selected_ids,
@@ -1328,16 +1339,6 @@ tab_query = tabs_by_label[speaker_tab_label]
 with tab_calibre:
     st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
 
-    # Display stored ingestion results if they exist (from previous rerun)
-    if "last_ingestion_results" in st.session_state:
-        results_data = st.session_state["last_ingestion_results"]
-        # Show success message and dismiss button
-        st.success(f"✅ {results_data['message']}")
-        # Put dismiss button right below the message for better visibility
-        if st.button("🗑️ Dismiss notification", key="dismiss_ingestion_results", type="secondary"):
-            del st.session_state["last_ingestion_results"]
-            st.rerun()
-
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
         # Force recreate CalibreDB to pick up module changes
@@ -1417,6 +1418,17 @@ with tab_calibre:
 
         # Only show ingestion section if books are selected
         with st.expander(f"🚀 Calibre > Qdrant ({len(selected_books)} selected)", expanded=False):
+            # Display stored ingestion results if they exist (from previous rerun)
+            if "last_ingestion_results" in st.session_state:
+                results_data = st.session_state["last_ingestion_results"]
+                # Show success message and dismiss button
+                st.success(f"✅ {results_data['message']}")
+                # Put dismiss button right below the message for better visibility
+                if st.button("🗑️ Dismiss notification", key="dismiss_ingestion_results", type="secondary"):
+                    del st.session_state["last_ingestion_results"]
+                    st.rerun()
+                st.markdown("---")
+
             # Configuration section
             config_col1, config_col2, config_col3 = st.columns(3)
 

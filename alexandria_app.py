@@ -293,6 +293,9 @@ def ingest_items_batch(
     from scripts.collection_manifest import CollectionManifest
     import shutil
 
+    # Convert items to list if it's an iterator (e.g., from itertuples())
+    items = list(items) if not isinstance(items, list) else items
+
     # Initialize manifest
     manifest = CollectionManifest(collection_name=collection_name)
     manifest.verify_collection_exists(collection_name, qdrant_host=qdrant_host, qdrant_port=qdrant_port)

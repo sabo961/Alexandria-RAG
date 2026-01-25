@@ -11,19 +11,34 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
             gui = container "Streamlit GUI" "Web-based interface for browsing, ingesting, and querying books" "Python 3.14, Streamlit" "Web Browser"
 
             scripts = container "Scripts Package" "Core business logic for ingestion, chunking, querying, and management" "Python 3.14" {
-                # Components
-                ingestionEngine = component "Ingestion Engine" "Processes EPUB/PDF/TXT/MD books into chunks and uploads to Qdrant" "batch_ingest.py, ingest_books.py" {
+                
+                # --- INGESTION COMPONENTS ---
+                textExtractor = component "Text Extractor" "Parses EPUB/PDF/TXT files into raw text with metadata" "ingest_books.py (extract_text)" {
+                    tags "Ingestion"
+                }
+                
+                chunkingRouter = component "Chunking Router" "Determines optimal chunking strategy based on Domain and Content Type" "ingest_books.py (calculate_params)" {
+                    tags "Ingestion" "Logic"
+                }
+
+                chunker = component "Chunking Engine" "Executes the selected splitting strategy (Fixed Window or Semantic)" "ingest_books.py (chunk_text), philosophical_chunking.py" {
+                    tags "Ingestion" "Core"
+                }
+
+                embedder = component "Embedder" "Converts text chunks into 384-dim vectors" "SentenceTransformer (all-MiniLM-L6-v2)" {
+                    tags "Ingestion" "AI"
+                }
+
+                qdrantUploader = component "Qdrant Uploader" "Batches and uploads vectors + payloads to Qdrant" "ingest_books.py (upload_to_qdrant)" {
                     tags "Ingestion"
                 }
 
-                chunkingStrategies = component "Chunking Strategies" "Domain-specific chunking (technical, psychology, philosophy, history) with argument-based pre-chunking for philosophical texts" "philosophical_chunking.py" {
-                    tags "Chunking"
-                }
-
+                # --- QUERY COMPONENTS ---
                 ragQueryEngine = component "RAG Query Engine" "Semantic search via Qdrant with similarity filtering, fetch multiplier, and LLM answer generation" "rag_query.py" {
                     tags "Query"
                 }
 
+                # --- MANAGEMENT COMPONENTS ---
                 collectionManagement = component "Collection Management" "Tracks ingested books via per-collection manifests, CSV exports, and Qdrant statistics" "collection_manifest.py, qdrant_utils.py" {
                     tags "Management"
                 }
@@ -32,11 +47,17 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
                     tags "Integration"
                 }
 
-                # Component relationships
-                ingestionEngine -> chunkingStrategies "Uses chunking strategies"
-                ingestionEngine -> collectionManagement "Logs ingested books to manifest"
+                # Internal Data Flow (Ingestion)
+                calibreIntegration -> textExtractor "Provides file path & metadata"
+                textExtractor -> chunkingRouter "Passes raw text & domain"
+                chunkingRouter -> chunker "Configures strategy (Size/Overlap/Method)"
+                chunker -> embedder "Yields text chunks"
+                embedder -> qdrantUploader "Yields vectors"
+                qdrantUploader -> collectionManagement "Logs success"
+
+                # Internal Data Flow (Query)
                 ragQueryEngine -> collectionManagement "Checks collection status"
-                calibreIntegration -> ingestionEngine "Provides book paths for ingestion"
+                ragQueryEngine -> embedder "Embeds query string"
             }
 
             filesystem = container "File System" "Book storage (ingest/, ingested/) and logs (logs/)" "File System" "Storage"
@@ -66,76 +87,45 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         scripts -> openrouter "Sends context + query for answer generation"
 
         # Component Relationships (from GUI)
-        gui -> ingestionEngine "Triggers book ingestion with domain selection"
-        gui -> ragQueryEngine "Executes RAG queries with parameters"
-        gui -> collectionManagement "Displays collection statistics and manifests"
-        gui -> calibreIntegration "Browses Calibre library with filters"
+        gui -> textExtractor "Initiates ingestion"
+        gui -> ragQueryEngine "Executes query"
+        gui -> collectionManagement "Displays stats"
+        gui -> calibreIntegration "Browses library"
+        
+        # Backend to External
+        qdrantUploader -> qdrant "Upserts vectors"
+        ragQueryEngine -> qdrant "Searches vectors"
+        ragQueryEngine -> openrouter "Generates answers"
     }
 
     views {
-        # System Context View
         systemContext alexandriaSystem "SystemContext" {
             include *
             autolayout lr
-            description "System context diagram showing Alexandria RAG System and external dependencies"
         }
 
-        # Container View
         container alexandriaSystem "Containers" {
             include *
             autolayout lr
-            description "Container diagram showing major architectural components of Alexandria"
         }
 
-        # Component View (Scripts Package)
         component scripts "Components" {
             include *
             autolayout lr
-            description "Component diagram showing internal structure of Scripts Package"
+            description "Detailed breakdown of the Scripts Package"
         }
 
-        # Dynamic View: Book Ingestion Flow (Container Level)
-        dynamic alexandriaSystem "BookIngestionFlow" "Illustrates the book ingestion process from selection to Qdrant upload" {
-            user -> gui "Selects books from Calibre library"
-            gui -> scripts "Calls calibre_db.get_all_books()"
-            scripts -> calibreDb "Queries book metadata"
-            gui -> scripts "Triggers ingest_books.py with domain"
-            scripts -> filesystem "Reads book file (EPUB/PDF/TXT)"
-            scripts -> qdrant "Uploads chunks with embeddings"
-            scripts -> filesystem "Writes manifest JSON/CSV"
-            gui -> user "Displays ingestion success"
+        # DETAILED INGESTION FLOW
+        dynamic scripts "DetailedIngestionFlow" "The lifecycle of a book from file to vector" {
+            calibreIntegration -> textExtractor "1. Get file path"
+            textExtractor -> chunkingRouter "2. Analyze text structure"
+            chunkingRouter -> chunker "3. Select & Execute Strategy (e.g., Argument vs Fixed)"
+            chunker -> embedder "4. Generate Embeddings"
+            embedder -> qdrantUploader "5. Prepare Batch"
+            qdrantUploader -> collectionManagement "6. Log to Manifest"
             autolayout lr
         }
 
-        # Dynamic View: RAG Query Flow (Container Level)
-        dynamic alexandriaSystem "RAGQueryFlow" "Illustrates the RAG query process from question to answer" {
-            user -> gui "Enters query + parameters"
-            gui -> scripts "Calls perform_rag_query()"
-            scripts -> qdrant "Semantic search with fetch multiplier"
-            scripts -> openrouter "Sends context + query for answer"
-            openrouter -> scripts "Returns generated answer"
-            scripts -> gui "Returns RAGResult (answer + sources)"
-            gui -> user "Displays answer with source citations"
-            autolayout lr
-        }
-
-        # Dynamic View: Component-Level Ingestion
-        dynamic scripts "ComponentIngestionFlow" "Detailed component interactions during book ingestion" {
-            calibreIntegration -> ingestionEngine "Provides book path and metadata"
-            ingestionEngine -> chunkingStrategies "Applies domain-specific chunking"
-            chunkingStrategies -> ingestionEngine "Returns chunks"
-            ingestionEngine -> collectionManagement "Logs to manifest"
-            autolayout lr
-        }
-
-        # Dynamic View: Component-Level Query
-        dynamic scripts "ComponentQueryFlow" "Detailed component interactions during RAG query" {
-            ragQueryEngine -> collectionManagement "Verifies collection exists"
-            collectionManagement -> ragQueryEngine "Returns collection status"
-            autolayout lr
-        }
-
-        # Styles
         styles {
             element "Software System" {
                 background #1168bd
@@ -156,24 +146,15 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
                 color #000000
                 shape Component
             }
-            element "Person" {
-                shape person
-                background #08427b
-                color #ffffff
+            element "Ingestion" {
+                background #2d8a5f
             }
-            element "Database" {
-                shape Cylinder
+            element "Query" {
+                background #8a2d58
             }
-            element "Storage" {
-                shape Folder
-            }
-            element "Web Browser" {
-                shape WebBrowser
+            element "AI" {
+                background #5c2d8a
             }
         }
-    }
-
-    configuration {
-        scope softwaresystem
     }
 }

@@ -155,12 +155,7 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
     }
 
     # Documentation - markdown files will appear in Structurizr UI
-    # Note: Files are relative to workspace.dsl location (docs/architecture/)
     !docs ARCHITECTURE_SUMMARY.md
-    !docs c4/01-context.md
-    !docs c4/02-container.md
-    !docs c4/03-component.md
-    !docs technical/UNIVERSAL_SEMANTIC_CHUNKING.md
-    !docs technical/QDRANT_PAYLOAD_STRUCTURE.md
-    !docs technical/PDF_vs_EPUB_COMPARISON.md
+    !docs c4
+    !docs technical
 }

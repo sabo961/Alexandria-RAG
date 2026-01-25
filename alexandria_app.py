@@ -322,9 +322,8 @@ def ingest_items_batch(
                 status_callback(f"Ingesting {idx + 1}/{len(items)}: {item_title}")
 
             # Debug: Show what we're passing to ingest_book
-            import sys
             filepath_str = str(filepath)
-            print(f"FRONTEND calling ingest_book: filepath type={type(filepath)}, str(filepath)={repr(filepath_str)}", file=sys.stderr)
+            st.write(f"🔍 FRONTEND: Calling ingest_book() with filepath={repr(filepath_str)}")
 
             # Ingest the item with metadata overrides
             try:
@@ -338,14 +337,12 @@ def ingest_items_batch(
                     author_override=metadata_overrides.get('author'),
                     language_override=metadata_overrides.get('language')
                 )
-                print(f"FRONTEND ingest_book returned: {result}", file=sys.stderr)
+                st.write(f"🔍 FRONTEND: ingest_book() returned result={result}")
             except Exception as ex:
-                print(f"FRONTEND ingest_book raised exception: {ex.__class__.__name__}: {ex}", file=sys.stderr)
+                st.error(f"🔍 FRONTEND: ingest_book() raised {ex.__class__.__name__}: {ex}")
                 import traceback
-                traceback.print_exc(file=sys.stderr)
+                st.code(traceback.format_exc())
                 result = {'success': False, 'error': f"{ex.__class__.__name__}: {ex}"}
-
-            st.write(f"🔍 ingest_book returned: success={result.get('success') if result else None}, error={result.get('error') if result else 'No result'}")
 
             if result and result.get('success'):
                 # Add to manifest

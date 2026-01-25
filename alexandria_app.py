@@ -1428,12 +1428,11 @@ with tab_calibre:
                         # Clear ingestion progress flag
                         st.session_state["ingest_in_progress"] = False
 
-                        # Don't auto-clear selection or rerun - let user see results
-                        # User can manually Update Selection to clear and start new ingestion
-                        # if results['success_count'] > 0:
-                        #     app_state.calibre_selected_books = set()
-                        #     app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
-                        #     st.rerun()
+                        # Clear selection after successful ingestion
+                        if results['success_count'] > 0:
+                            app_state.calibre_selected_books = set()
+                            st.session_state.app_state.calibre_selected_books = set()  # Ensure persistence
+                            # Don't rerun - let user see results, table will update on next interaction
 
                     except Exception as e:
                         import traceback

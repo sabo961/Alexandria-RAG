@@ -91,7 +91,6 @@ class CalibreDB:
         cursor = conn.cursor()
 
         # Main query with joins for authors, languages, tags, series
-        # Note: GROUP_CONCAT with DISTINCT not supported with custom separator in SQLite
         query = """
         SELECT
             b.id,
@@ -101,9 +100,9 @@ class CalibreDB:
             b.pubdate,
             b.isbn,
             b.series_index,
-            GROUP_CONCAT(a.name, ' & ') as authors,
-            GROUP_CONCAT(l.lang_code, ', ') as languages,
-            GROUP_CONCAT(t.name, ', ') as tags,
+            GROUP_CONCAT(DISTINCT a.name, ' & ') as authors,
+            GROUP_CONCAT(DISTINCT l.lang_code, ', ') as languages,
+            GROUP_CONCAT(DISTINCT t.name, ', ') as tags,
             s.name as series_name,
             p.name as publisher,
             r.rating

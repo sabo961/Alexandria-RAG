@@ -1379,13 +1379,16 @@ with tab_calibre:
                             st.write(f"📂 Path object: {file_path}")
                             st.write(f"📂 As string: {str(file_path)}")
 
+                            metadata_dict = {
+                                'title': book.title,
+                                'author': book.author,
+                                'language': book.language
+                            }
+                            st.write(f"📋 Metadata from Calibre: author='{book.author}'")
+
                             return (
                                 file_path,  # Return Path object, ingest_items_batch will convert to str
-                                {
-                                    'title': book.title,
-                                    'author': book.author,
-                                    'language': book.language
-                                }
+                                metadata_dict
                             )
 
                         # Use DRY helper function for batch ingestion

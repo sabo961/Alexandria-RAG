@@ -369,16 +369,22 @@ def ingest_book(
     text, metadata = extract_text(normalized_path)
 
     logging.debug(f"Text extracted. Title: '{metadata.get('title')}', Author: '{metadata.get('author')}'")
+    logging.debug(f"Overrides: title_override={title_override}, author_override={author_override}")
 
     # Enrich metadata from Calibre ONLY if we don't have overrides (i.e., not from Calibre ingestion)
     # When ingesting from Calibre, metadata already comes from Calibre book object
     if not (title_override and author_override):
+        logging.debug(f"Running Calibre enrichment (no overrides present)")
         metadata = _enrich_metadata_from_calibre(filepath, metadata)
+    else:
+        logging.debug(f"Skipping Calibre enrichment (overrides present)")
 
     # Apply overrides AFTER enrichment
     if language_override: metadata['language'] = language_override
     if title_override: metadata['title'] = title_override
-    if author_override: metadata['author'] = author_override
+    if author_override:
+        logging.debug(f"Applying author_override: {author_override}")
+        metadata['author'] = author_override
 
     # 2. Semantic Chunking
     # Adjust threshold based on domain (Philosophy needs tighter focus)

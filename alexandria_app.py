@@ -1278,6 +1278,13 @@ with tab_calibre:
 
         all_books = st.session_state.calibre_books
 
+        # Debug: Check for duplicates
+        son_of_hamas_books = [b for b in all_books if 'Son of Hamas' in b.title]
+        if len(son_of_hamas_books) > 1:
+            st.warning(f"⚠️ DEBUG: Found {len(son_of_hamas_books)} copies of 'Son of Hamas' in all_books!")
+            for i, book in enumerate(son_of_hamas_books):
+                st.write(f"  Copy {i+1}: ID={book.id}, author='{book.author}'")
+
         # Stats at top
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("📚 Total Books", f"{len(all_books):,}")

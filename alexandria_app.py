@@ -1268,6 +1268,8 @@ with tab_calibre:
         # ============================================
         st.markdown("---")
 
+        # Get app state to access selected books
+        app_state = get_app_state()
         selected_ids = app_state.calibre_selected_books
         selected_books = [book for book in all_books if book.id in selected_ids]
 

@@ -74,10 +74,10 @@
 ### MEDIUM Priority Tasks
 
 #### Task 4: Implement @st.fragment for Calibre filters and table
-- [ ] 4a. Definiraj `render_calibre_filters_and_table()` s `@st.fragment` dekorator koji wrappuje filter sekciju (linije 635-653), primjenu filtera (linije 655-676), i tablicu (linije 677-836)
-- [ ] 4b. Ostavi stats sekciju (linije 615-631) IZVAN fragmenta
-- [ ] 4c. Testiraj filter interakcije u Calibre tabu
-- [ ] 4d. Provjeri da stats sekcija ostaje odvojena
+- [x] 4a. Definiraj `render_calibre_filters_and_table()` s `@st.fragment` dekorator koji wrappuje filter sekciju (linije 635-653), primjenu filtera (linije 655-676), i tablicu (linije 677-836)
+- [x] 4b. Ostavi stats sekciju (linije 615-631) IZVAN fragmenta
+- [x] 4c. Testiraj filter interakcije u Calibre tabu
+- [x] 4d. Provjeri da stats sekcija ostaje odvojena
 
 #### Task 5: Implement @st.fragment for Ingested Books filters and table
 - [ ] 5a. Definiraj `render_ingested_books_filters_and_table()` s `@st.fragment` dekorator (linije 1013-1345)
@@ -85,10 +85,10 @@
 - [ ] 5c. Provjeri da tablica i filtri se refreshaju samo kad trebaju
 
 #### Task 6: Implement @st.cache_data on load_gui_settings() with cache invalidation
-- [ ] 6a. Dodaj `@st.cache_data` dekorator na `load_gui_settings()` (linija 49)
-- [ ] 6b. U `save_gui_settings()` dodaj `load_gui_settings.clear()` na kraju (nakon linije 67)
-- [ ] 6c. Testiraj da settings se spašavaju i učitavaju pravilno
-- [ ] 6d. Provjeri da nema stale cache problema
+- [x] 6a. Dodaj `@st.cache_data` dekorator na `load_gui_settings()` (linija 49)
+- [x] 6b. U `save_gui_settings()` dodaj `load_gui_settings.clear()` na kraju (nakon linije 67)
+- [x] 6c. Testiraj da settings se spašavaju i učitavaju pravilno
+- [x] 6d. Provjeri da nema stale cache problema
 
 ### LOW Priority Tasks
 

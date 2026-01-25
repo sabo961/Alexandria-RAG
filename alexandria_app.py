@@ -46,6 +46,7 @@ def render_ingestion_diagnostics(result: dict, context_label: str) -> None:
                 st.json(diagnostics)
 
 
+@st.cache_data
 def load_gui_settings() -> dict:
     """Load persisted GUI settings (non-sensitive)."""
     settings_path = Path(__file__).parent / '.streamlit' / 'gui_settings.json'
@@ -65,6 +66,8 @@ def save_gui_settings(settings: dict) -> None:
     settings_path.parent.mkdir(exist_ok=True)
     with open(settings_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
+    # Invalidate cache when settings are saved
+    load_gui_settings.clear()
 
 # Constants
 MANIFEST_GLOB_PATTERN = '*_manifest.json'
@@ -735,6 +738,384 @@ def render_query_tab():
                 import traceback
                 st.code(traceback.format_exc())
 
+# ============================================
+# FRAGMENT: Calibre Filters and Table
+# ============================================
+@st.fragment
+def render_calibre_filters_and_table(all_books, calibre_db):
+    """Isolated Calibre filters and table - prevents full app rerun on filter interactions"""
+    # Get all formats
+    all_formats = set()
+    for book in all_books:
+        all_formats.update(book.formats)
+
+    # Filters
+    st.markdown("#### 🔍 Filters")
+    filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+
+    with filter_col1:
+        author_search = st.text_input("Author", placeholder="e.g., Mishima", key="calibre_author_search")
+
+    with filter_col2:
+        title_search = st.text_input("Title", placeholder="e.g., Steel", key="calibre_title_search")
+
+    with filter_col3:
+        # Get available languages
+        available_languages = sorted(set(b.language for b in all_books if b.language))
+        language_filter = st.multiselect("Language", options=available_languages, key="calibre_language_filter")
+
+    with filter_col4:
+        # Get available formats
+        format_options = sorted(all_formats)
+        format_filter = st.multiselect("Format", options=format_options, key="calibre_format_filter")
+
+    # Apply filters
+    filtered_books = all_books
+
+    if author_search:
+        filtered_books = [b for b in filtered_books if author_search.lower() in b.author.lower()]
+
+    if title_search:
+        filtered_books = [b for b in filtered_books if title_search.lower() in b.title.lower()]
+
+    if language_filter:
+        filtered_books = [b for b in filtered_books if b.language in language_filter]
+
+    if format_filter:
+        filtered_books = [b for b in filtered_books if any(fmt in b.formats for fmt in format_filter)]
+
+    # Sort options
+    sort_col1, sort_col2 = st.columns([3, 1])
+    with sort_col1:
+        st.info(f"📚 Showing {len(filtered_books):,} of {len(all_books):,} books")
+
+    with sort_col2:
+        sort_by = st.selectbox("Sort by", [
+            "Date Added (newest)",
+            "Date Added (oldest)",
+            "Title (A-Z)",
+            "Title (Z-A)",
+            "Author (A-Z)",
+            "Author (Z-A)"
+        ], key="calibre_sort")
+
+    # Apply sorting
+    if "newest" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.timestamp, reverse=True)
+    elif "oldest" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.timestamp)
+    elif "Title (A-Z)" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.title.lower())
+    elif "Title (Z-A)" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.title.lower(), reverse=True)
+    elif "Author (A-Z)" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.author.lower())
+    elif "Author (Z-A)" in sort_by:
+        filtered_books = sorted(filtered_books, key=lambda x: x.author.lower(), reverse=True)
+
+    # Display as DataFrame with pagination
+    if filtered_books:
+        if "calibre_selected_books" not in st.session_state:
+            st.session_state.calibre_selected_books = set()
+
+        # Pagination controls at top
+        pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
+
+        with pagination_col1:
+            rows_per_page = st.selectbox(
+                "Rows",
+                options=[20, 50, 100, 200],
+                index=1,  # Default to 50
+                key="calibre_rows_per_page"
+            )
+
+        # Initialize current page in session state
+        if 'calibre_current_page' not in st.session_state:
+            st.session_state.calibre_current_page = 1
+
+        # Calculate total pages
+        total_books = len(filtered_books)
+        total_pages: int = (total_books + rows_per_page - 1) // rows_per_page
+
+        # Ensure current page is always an int within bounds
+        raw_page = st.session_state.get('calibre_current_page')
+        try:
+            current_page: int = int(raw_page) if raw_page is not None else 1
+        except (TypeError, ValueError):
+            current_page = 1
+
+        current_page = max(1, min(current_page, total_pages))
+        st.session_state.calibre_current_page = current_page
+
+        with pagination_col2:
+            st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
+
+        # Calculate slice for current page
+        start_idx = (current_page - 1) * rows_per_page
+        end_idx = min(start_idx + rows_per_page, total_books)
+
+        # Build DataFrame for current page with global row numbers
+        df_data = []
+        selected_ids = st.session_state.calibre_selected_books
+        for idx, book in enumerate(filtered_books[start_idx:end_idx]):
+            # Format icons
+            format_icons = []
+            if 'epub' in book.formats:
+                format_icons.append('📕')
+            if 'pdf' in book.formats:
+                format_icons.append('📄')
+            if 'mobi' in book.formats or 'azw3' in book.formats:
+                format_icons.append('📱')
+            if 'txt' in book.formats or 'md' in book.formats:
+                format_icons.append('📝')
+
+            # Series info
+            series_info = f"{book.series} #{book.series_index:.0f}" if book.series else ""
+
+            # Global row number (1-based)
+            global_row_num = start_idx + idx + 1
+
+            df_data.append({
+                'Select': book.id in selected_ids,
+                'Id': book.id,
+                '#': global_row_num,
+                '': ' '.join(format_icons) if format_icons else '📄',
+                'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
+                'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,
+                'Language': book.language.upper(),
+                'Series': series_info,
+                'Formats': ', '.join(book.formats[:3]),
+                'Added': book.timestamp[:10]
+            })
+
+        df = pd.DataFrame(df_data)
+        table_reset_token = st.session_state.get("calibre_table_reset", 0)
+        with st.form(key=f"calibre_table_form_{current_page}_{table_reset_token}"):
+            row_height_px = 35
+            header_height_px = 38
+            table_padding_px = 12
+            max_table_height = 500
+            dynamic_table_height = min(
+                max_table_height,
+                header_height_px + (row_height_px * max(len(df), 1)) + table_padding_px
+            )
+            edited_df = st.data_editor(
+                df,
+                use_container_width=True,
+                height=dynamic_table_height,
+                hide_index=True,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn(required=True),
+                    "Id": None
+                },
+                disabled=df.columns.drop(["Select"]),
+                key=f"calibre_table_editor_{current_page}_{table_reset_token}"
+            )
+            apply_selection = st.form_submit_button("✅ Update Selection")
+
+        if apply_selection:
+            page_ids = set(edited_df["Id"].tolist())
+            page_selected_ids = set(edited_df.loc[edited_df["Select"], "Id"].tolist())
+            updated_selected_ids = set(st.session_state.calibre_selected_books)
+            updated_selected_ids.difference_update(page_ids)
+            updated_selected_ids.update(page_selected_ids)
+            st.session_state.calibre_selected_books = updated_selected_ids
+
+        # Pagination controls
+        st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)
+
+        nav_col1, nav_col2, nav_col3 = st.columns([0.3, 6, 0.3])
+
+        with nav_col1:
+            if current_page > 1 and st.button("←", key="calibre_prev", type="secondary"):
+                st.session_state.calibre_current_page -= 1
+                st.rerun()
+
+        with nav_col2:
+            st.markdown(
+                f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
+                f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+        with nav_col3:
+            if current_page < total_pages and st.button("→", key="calibre_next", type="secondary"):
+                st.session_state.calibre_current_page += 1
+                st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Direct Ingestion Section (collapsible)
+        with st.expander("🚀 Calibre > Qdrant", expanded=False):
+
+            # Ingestion configuration
+            config_col1, config_col2, config_col3 = st.columns(3)
+
+            with config_col1:
+                calibre_domain = st.selectbox(
+                    "Domain",
+                    load_domains(),
+                    help="Content domain for chunking strategy",
+                    key="calibre_ingest_domain"
+                )
+
+            with config_col2:
+                calibre_collection = st.text_input(
+                    "Collection Name",
+                    value="alexandria",
+                    help="Qdrant collection name",
+                    key="calibre_ingest_collection"
+                )
+
+            with config_col3:
+                preferred_format = st.selectbox(
+                    "Preferred Format",
+                    ["epub", "pdf", "txt", "md"],
+                    help="Which format to use when multiple available",
+                    key="calibre_preferred_format"
+                )
+
+            selected_ids = st.session_state.get("calibre_selected_books", set())
+            selected_books = [book for book in all_books if book.id in selected_ids]
+
+            # Display selection summary and ingest button
+            if selected_books:
+                st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
+
+                if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
+                    # Show configuration being used
+                    st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
+
+                    # Initialize manifest for tracking
+                    manifest = CollectionManifest(collection_name=calibre_collection)
+
+                    # Progress tracking
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    success_count = 0
+                    error_count = 0
+                    errors = []
+                    ingested_books = []
+
+                    for idx, book in enumerate(selected_books):
+                        # Update progress
+                        progress = (idx + 1) / len(selected_books)
+                        progress_bar.progress(progress)
+                        status_text.text(f"Ingesting {idx + 1}/{len(selected_books)}: {book.title}")
+
+                        try:
+                            # Determine which format to use
+                            format_to_use = None
+                            if preferred_format in book.formats:
+                                format_to_use = preferred_format
+                            else:
+                                # Fallback to first available format
+                                format_to_use = book.formats[0] if book.formats else None
+
+                            if not format_to_use:
+                                errors.append(f"{book.title}: No supported format available")
+                                error_count += 1
+                                continue
+
+                            # Construct absolute file path
+                            active_library_path = Path(library_dir)
+                            book_dir = active_library_path / book.path
+
+                            # Find the actual file
+                            matching_files = list(book_dir.glob(f"*.{format_to_use}"))
+
+                            if not matching_files:
+                                errors.append(f"{book.title}: File not found at {book_dir}")
+                                error_count += 1
+                                continue
+
+                            file_path = matching_files[0]
+                            st.write(f"📂 Accessing: {file_path}")
+
+                            # Ingest the book
+                            result = ingest_book(
+                                filepath=str(file_path),
+                                domain=calibre_domain,
+                                collection_name=calibre_collection,
+                                qdrant_host=qdrant_host,
+                                qdrant_port=qdrant_port,
+                                language_override=book.language
+                            )
+
+                            if result and result.get('success'):
+                                success_count += 1
+                                ingested_books.append({
+                                    'file_path': result['filepath'],
+                                    'book_title': result['title'],
+                                    'author': result['author'],
+                                    'domain': calibre_domain,
+                                    'chunks': result['chunks'],
+                                    'file_size_mb': result['file_size_mb'],
+                                    'language': result.get('language')
+                                })
+                                render_ingestion_diagnostics(result, book.title)
+                            else:
+                                error_msg = result.get('error', 'Failed to extract content or ingest') if result else 'Unknown error'
+                                errors.append(f"{book.title}: {error_msg}")
+                                error_count += 1
+                                if result:
+                                    render_ingestion_diagnostics(result, book.title)
+
+                        except Exception as e:
+                            errors.append(f"{book.title}: {str(e)}")
+                            error_count += 1
+
+                    # Final status
+                    progress_bar.progress(1.0)
+                    status_text.text("✅ Ingestion complete!")
+
+                    # Update manifest with successfully ingested books
+                    if ingested_books:
+                        for book_info in ingested_books:
+                            manifest.add_book(
+                                collection_name=calibre_collection,
+                                book_path=book_info['file_path'],
+                                book_title=book_info['book_title'],
+                                author=book_info['author'],
+                                domain=book_info['domain'],
+                                chunks_count=book_info['chunks'],
+                                file_size_mb=book_info['file_size_mb'],
+                                language=book_info.get('language')
+                            )
+                        st.success(f"📝 Updated manifest with {len(ingested_books)} book(s)")
+
+                    # Verify ingestion by checking collection
+                    try:
+                        from qdrant_client import QdrantClient
+                        client = QdrantClient(host=qdrant_host, port=qdrant_port)
+                        collection_info = client.get_collection(calibre_collection)
+                        st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not verify collection: {e}")
+
+                    if success_count > 0:
+                        st.success(f"✅ Successfully ingested {success_count} books!")
+                        st.session_state.calibre_selected_books = set()
+                        st.session_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
+                        st.rerun()
+
+                    if error_count > 0:
+                        st.error(f"❌ Failed to ingest {error_count} books")
+                        with st.expander("Show errors"):
+                            for error in errors:
+                                st.text(f"• {error}")
+            else:
+                st.info("👆 Select books using the checkboxes in the table above to begin")
+
+        if len(filtered_books) > 500:
+            st.warning(f"⚠️ Showing first 500 books. {len(filtered_books) - 500} more books match your filters. Refine filters to see more.")
+
+    else:
+        st.warning("No books match the filters.")
+
 # Check for archives to conditionally show the Restore tab
 archive_dir = Path(__file__).parent / 'logs' / 'deleted'
 archived_manifests_exist = archive_dir.exists() and any(archive_dir.glob('*_manifest_*.json'))
@@ -807,377 +1188,8 @@ with tab_calibre:
 
         st.markdown("---")
 
-        # Filters
-        st.markdown("#### 🔍 Filters")
-        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
-
-        with filter_col1:
-            author_search = st.text_input("Author", placeholder="e.g., Mishima", key="calibre_author_search")
-
-        with filter_col2:
-            title_search = st.text_input("Title", placeholder="e.g., Steel", key="calibre_title_search")
-
-        with filter_col3:
-            # Get available languages
-            available_languages = sorted(set(b.language for b in all_books if b.language))
-            language_filter = st.multiselect("Language", options=available_languages, key="calibre_language_filter")
-
-        with filter_col4:
-            # Get available formats
-            format_options = sorted(all_formats)
-            format_filter = st.multiselect("Format", options=format_options, key="calibre_format_filter")
-
-        # Apply filters
-        filtered_books = all_books
-
-        if author_search:
-            filtered_books = [b for b in filtered_books if author_search.lower() in b.author.lower()]
-
-        if title_search:
-            filtered_books = [b for b in filtered_books if title_search.lower() in b.title.lower()]
-
-        if language_filter:
-            filtered_books = [b for b in filtered_books if b.language in language_filter]
-
-        if format_filter:
-            filtered_books = [b for b in filtered_books if any(fmt in b.formats for fmt in format_filter)]
-
-        # Sort options
-        sort_col1, sort_col2 = st.columns([3, 1])
-        with sort_col1:
-            st.info(f"📚 Showing {len(filtered_books):,} of {len(all_books):,} books")
-
-        with sort_col2:
-            sort_by = st.selectbox("Sort by", [
-                "Date Added (newest)",
-                "Date Added (oldest)",
-                "Title (A-Z)",
-                "Title (Z-A)",
-                "Author (A-Z)",
-                "Author (Z-A)"
-            ], key="calibre_sort")
-
-        # Apply sorting
-        if "newest" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.timestamp, reverse=True)
-        elif "oldest" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.timestamp)
-        elif "Title (A-Z)" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.title.lower())
-        elif "Title (Z-A)" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.title.lower(), reverse=True)
-        elif "Author (A-Z)" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.author.lower())
-        elif "Author (Z-A)" in sort_by:
-            filtered_books = sorted(filtered_books, key=lambda x: x.author.lower(), reverse=True)
-
-        # Display as DataFrame with pagination
-        if filtered_books:
-            if "calibre_selected_books" not in st.session_state:
-                st.session_state.calibre_selected_books = set()
-
-            # Pagination controls at top
-            pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
-
-            with pagination_col1:
-                rows_per_page = st.selectbox(
-                    "Rows",
-                    options=[20, 50, 100, 200],
-                    index=1,  # Default to 50
-                    key="calibre_rows_per_page"
-                )
-
-            # Initialize current page in session state
-            if 'calibre_current_page' not in st.session_state:
-                st.session_state.calibre_current_page = 1
-
-            # Calculate total pages
-            total_books = len(filtered_books)
-            total_pages: int = (total_books + rows_per_page - 1) // rows_per_page  # Ceiling division
-
-            # Ensure current page is always an int within bounds (avoid None comparisons)
-            raw_page = st.session_state.get('calibre_current_page')
-            try:
-                current_page: int = int(raw_page) if raw_page is not None else 1
-            except (TypeError, ValueError):
-                current_page = 1
-
-            current_page = max(1, min(current_page, total_pages))
-            st.session_state.calibre_current_page = current_page
-
-            with pagination_col2:
-                st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
-
-            # Calculate slice for current page
-            start_idx = (current_page - 1) * rows_per_page
-            end_idx = min(start_idx + rows_per_page, total_books)
-
-            # Build DataFrame for current page with global row numbers
-            df_data = []
-            selected_ids = st.session_state.calibre_selected_books
-            for idx, book in enumerate(filtered_books[start_idx:end_idx]):
-                # Format icons
-                format_icons = []
-                if 'epub' in book.formats:
-                    format_icons.append('📕')
-                if 'pdf' in book.formats:
-                    format_icons.append('📄')
-                if 'mobi' in book.formats or 'azw3' in book.formats:
-                    format_icons.append('📱')
-                if 'txt' in book.formats or 'md' in book.formats:
-                    format_icons.append('📝')
-
-                # Series info
-                series_info = f"{book.series} #{book.series_index:.0f}" if book.series else ""
-
-                # Global row number (1-based)
-                global_row_num = start_idx + idx + 1
-
-                df_data.append({
-                    'Select': book.id in selected_ids,
-                    'Id': book.id,
-                    '#': global_row_num,
-                    '': ' '.join(format_icons) if format_icons else '📄',
-                    'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
-                    'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,
-                    'Language': book.language.upper(),
-                    'Series': series_info,
-                    'Formats': ', '.join(book.formats[:3]),  # Show first 3 formats
-                    'Added': book.timestamp[:10]
-                })
-
-            df = pd.DataFrame(df_data)
-            table_reset_token = st.session_state.get("calibre_table_reset", 0)
-            with st.form(key=f"calibre_table_form_{current_page}_{table_reset_token}"):
-                # Hide default index since we have our own "#" column
-                row_height_px = 35
-                header_height_px = 38
-                table_padding_px = 12
-                max_table_height = 500
-                dynamic_table_height = min(
-                    max_table_height,
-                    header_height_px + (row_height_px * max(len(df), 1)) + table_padding_px
-                )
-                edited_df = st.data_editor(
-                    df,
-                    use_container_width=True,
-                    height=dynamic_table_height,
-                    hide_index=True,
-                    column_config={
-                        "Select": st.column_config.CheckboxColumn(required=True),
-                        "Id": None
-                    },
-                    disabled=df.columns.drop(["Select"]),
-                    key=f"calibre_table_editor_{current_page}_{table_reset_token}"
-                )
-                apply_selection = st.form_submit_button("✅ Update Selection")
-
-            if apply_selection:
-                page_ids = set(edited_df["Id"].tolist())
-                page_selected_ids = set(edited_df.loc[edited_df["Select"], "Id"].tolist())
-                updated_selected_ids = set(st.session_state.calibre_selected_books)
-                updated_selected_ids.difference_update(page_ids)
-                updated_selected_ids.update(page_selected_ids)
-                st.session_state.calibre_selected_books = updated_selected_ids
-
-            # Pagination controls - minimal with arrow buttons
-            st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
-            st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)
-
-            nav_col1, nav_col2, nav_col3 = st.columns([0.3, 6, 0.3])
-
-            with nav_col1:
-                if current_page > 1 and st.button("←", key="calibre_prev", type="secondary"):
-                    st.session_state.calibre_current_page -= 1
-                    st.rerun()
-
-            with nav_col2:
-                st.markdown(
-                    f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
-                    f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-
-            with nav_col3:
-                if current_page < total_pages and st.button("→", key="calibre_next", type="secondary"):
-                    st.session_state.calibre_current_page += 1
-                    st.rerun()
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # Direct Ingestion Section (collapsible)
-            with st.expander("🚀 Calibre > Qdrant", expanded=False):
-
-                # Ingestion configuration
-                config_col1, config_col2, config_col3 = st.columns(3)
-
-                with config_col1:
-                    calibre_domain = st.selectbox(
-                        "Domain",
-                        load_domains(),
-                        help="Content domain for chunking strategy",
-                        key="calibre_ingest_domain"
-                    )
-
-                with config_col2:
-                    calibre_collection = st.text_input(
-                        "Collection Name",
-                        value="alexandria",
-                        help="Qdrant collection name",
-                        key="calibre_ingest_collection"
-                    )
-
-                with config_col3:
-                    preferred_format = st.selectbox(
-                        "Preferred Format",
-                        ["epub", "pdf", "txt", "md"],
-                        help="Which format to use when multiple available",
-                        key="calibre_preferred_format"
-                    )
-
-                selected_ids = st.session_state.get("calibre_selected_books", set())
-                selected_books = [book for book in all_books if book.id in selected_ids]
-
-                # Display selection summary and ingest button
-                if selected_books:
-                    st.info(f"📊 **Selected:** {len(selected_books)} book(s) ready for ingestion")
-
-                    if st.button("🚀 Start Ingestion", type="primary", use_container_width=True):
-                        # Show configuration being used
-                        st.info(f"ℹ️ Ingesting to: {qdrant_host}:{qdrant_port} | Collection: {calibre_collection} | Domain: {calibre_domain}")
-
-                        # Initialize manifest for tracking (collection-specific)
-                        manifest = CollectionManifest(collection_name=calibre_collection)
-
-                        # Progress tracking
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-
-                        success_count = 0
-                        error_count = 0
-                        errors = []
-                        ingested_books = []
-
-                        for idx, book in enumerate(selected_books):
-                            # Update progress
-                            progress = (idx + 1) / len(selected_books)
-                            progress_bar.progress(progress)
-                            status_text.text(f"Ingesting {idx + 1}/{len(selected_books)}: {book.title}")
-
-                            try:
-                                # Determine which format to use
-                                format_to_use = None
-                                if preferred_format in book.formats:
-                                    format_to_use = preferred_format
-                                else:
-                                    # Fallback to first available format
-                                    format_to_use = book.formats[0] if book.formats else None
-
-                                if not format_to_use:
-                                    errors.append(f"{book.title}: No supported format available")
-                                    error_count += 1
-                                    continue
-
-                                # Construct absolute file path
-                                # Strategy: Use the actual 'library_dir' variable from the sidebar
-                                # to ensure we are looking relative to the user's current choice.
-                                active_library_path = Path(library_dir)
-                                book_dir = active_library_path / book.path
-
-                                # Find the actual file
-                                matching_files = list(book_dir.glob(f"*.{format_to_use}"))
-
-                                if not matching_files:
-                                    # Try one more fallback: if the database thinks it's on G: but sidebar says C:
-                                    # calibre_db.library_path might be different from the sidebar 'library_dir'
-                                    errors.append(f"{book.title}: File not found at {book_dir}")
-                                    error_count += 1
-                                    continue
-
-                                file_path = matching_files[0]
-                                st.write(f"📂 Accessing: {file_path}")
-
-                                # Ingest the book
-                                result = ingest_book(
-                                    filepath=str(file_path),
-                                    domain=calibre_domain,
-                                    collection_name=calibre_collection,
-                                    qdrant_host=qdrant_host,
-                                    qdrant_port=qdrant_port,
-                                    language_override=book.language
-                                )
-
-                                if result and result.get('success'):
-                                    success_count += 1
-                                    ingested_books.append({
-                                        'file_path': result['filepath'],
-                                        'book_title': result['title'],
-                                        'author': result['author'],
-                                        'domain': calibre_domain,
-                                        'chunks': result['chunks'],
-                                        'file_size_mb': result['file_size_mb'],
-                                        'language': result.get('language')
-                                    })
-                                    render_ingestion_diagnostics(result, book.title)
-                                else:
-                                    error_msg = result.get('error', 'Failed to extract content or ingest') if result else 'Unknown error'
-                                    errors.append(f"{book.title}: {error_msg}")
-                                    error_count += 1
-                                    if result:
-                                        render_ingestion_diagnostics(result, book.title)
-
-                            except Exception as e:
-                                errors.append(f"{book.title}: {str(e)} \n   (Path: {str(file_path)})")
-                                error_count += 1
-
-                        # Final status
-                        progress_bar.progress(1.0)
-                        status_text.text("✅ Ingestion complete!")
-
-                        # Update manifest with successfully ingested books
-                        if ingested_books:
-                            for book_info in ingested_books:
-                                manifest.add_book(
-                                    collection_name=calibre_collection,
-                                    book_path=book_info['file_path'],
-                                    book_title=book_info['book_title'],
-                                    author=book_info['author'],
-                                    domain=book_info['domain'],
-                                    chunks_count=book_info['chunks'],
-                                    file_size_mb=book_info['file_size_mb'],
-                                    language=book_info.get('language')
-                                )
-                            st.success(f"📝 Updated manifest with {len(ingested_books)} book(s)")
-
-                        # Verify ingestion by checking collection
-                        try:
-                            from qdrant_client import QdrantClient
-                            client = QdrantClient(host=qdrant_host, port=qdrant_port)
-                            collection_info = client.get_collection(calibre_collection)
-                            st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not verify collection: {e}")
-
-                        if success_count > 0:
-                            st.success(f"✅ Successfully ingested {success_count} books!")
-                            st.session_state.calibre_selected_books = set()
-                            st.session_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
-                            st.rerun()
-
-                        if error_count > 0:
-                            st.error(f"❌ Failed to ingest {error_count} books")
-                            with st.expander("Show errors"):
-                                for error in errors:
-                                    st.text(f"• {error}")
-                else:
-                    st.info("👆 Select books using the checkboxes in the table above to begin")
-
-            if len(filtered_books) > 500:
-                st.warning(f"⚠️ Showing first 500 books. {len(filtered_books) - 500} more books match your filters. Refine filters to see more.")
-
-        else:
-            st.warning("No books match the filters.")
+        # Call isolated fragment for filters and table
+        render_calibre_filters_and_table(all_books, calibre_db)
 
     except Exception as e:
         st.error(f"❌ Error connecting to Calibre database: {e}")

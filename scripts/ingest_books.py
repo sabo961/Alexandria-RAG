@@ -55,8 +55,11 @@ calibre_db_instance = None # Lazy load
 
 def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
     """Normalize paths for cross-platform file access."""
+    logger.debug(f"normalize_file_path input: {repr(filepath)}")
     expanded = os.path.expanduser(filepath)
+    logger.debug(f"After expanduser: {repr(expanded)}")
     abs_path = os.path.abspath(expanded)
+    logger.debug(f"After abspath: {repr(abs_path)}")
     path_for_open = abs_path
     used_long_path = False
 
@@ -67,21 +70,30 @@ def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
             else:
                 path_for_open = "\\\\?\\" + abs_path
             used_long_path = True
+            logger.debug(f"Applied long path prefix: {repr(path_for_open)}")
 
+    logger.debug(f"normalize_file_path output: path_for_open={repr(path_for_open)}, abs_path={repr(abs_path)}")
     return path_for_open, abs_path, used_long_path, len(abs_path)
 
 
 def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
     """Validate file exists and is readable."""
+    logger.debug(f"validate_file_access checking: {repr(path_for_open)}")
+
     if not os.path.exists(path_for_open):
+        logger.debug(f"File does not exist: {path_for_open}")
         return False, f"File not found: {display_path}"
 
     try:
+        logger.debug(f"Calling os.stat()...")
         os.stat(path_for_open)
+        logger.debug(f"os.stat() succeeded, attempting to open file...")
         with open(path_for_open, 'rb') as f:
             f.read(1)
+        logger.debug(f"File opened and read successfully")
         return True, None
     except OSError as e:
+        logger.error(f"OSError during file access: {e.__class__.__name__}: {e}", exc_info=True)
         return False, f"{e.__class__.__name__}: {e}"
 
 

@@ -118,6 +118,9 @@ def get_app_state() -> AppState:
     """Get or create the global app state"""
     if "app_state" not in st.session_state:
         st.session_state.app_state = AppState()
+        st.write(f"🔍 DEBUG get_app_state: CREATED NEW AppState")
+    else:
+        st.write(f"🔍 DEBUG get_app_state: REUSING existing AppState with {len(st.session_state.app_state.calibre_selected_books)} books")
     return st.session_state.app_state
 
 
@@ -1055,8 +1058,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
     # Display as DataFrame with pagination
     if filtered_books:
-        if "calibre_selected_books" not in st.session_state:
-            app_state.calibre_selected_books = set()
+        # AppState already initializes calibre_selected_books, no need to reset it here
 
         # Pagination controls at top
         pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
@@ -1159,7 +1161,11 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             updated_selected_ids = set(app_state.calibre_selected_books)
             updated_selected_ids.difference_update(page_ids)
             updated_selected_ids.update(page_selected_ids)
-            app_state.calibre_selected_books = updated_selected_ids
+            st.write(f"🔍 DEBUG: Before update: {len(app_state.calibre_selected_books)}, After: {len(updated_selected_ids)}")
+            st.write(f"🔍 DEBUG: Updated IDs: {updated_selected_ids}")
+            # CRITICAL: Write directly to session_state to ensure persistence across reruns
+            st.session_state.app_state.calibre_selected_books = updated_selected_ids
+            st.write(f"🔍 DEBUG: Wrote to session_state: {len(st.session_state.app_state.calibre_selected_books)} books")
             st.rerun()  # Refresh to show ingestion section with updated selection
 
         # Pagination controls
@@ -1272,6 +1278,9 @@ with tab_calibre:
         app_state = get_app_state()
         selected_ids = app_state.calibre_selected_books
         selected_books = [book for book in all_books if book.id in selected_ids]
+
+        st.write(f"🔍 DEBUG MAIN: app_state has {len(selected_ids)} selected IDs: {selected_ids}")
+        st.write(f"🔍 DEBUG MAIN: Found {len(selected_books)} matching books in all_books")
 
         # Get ingestion configuration from session state
         calibre_domain = st.session_state.get("calibre_ingest_domain", "technical")

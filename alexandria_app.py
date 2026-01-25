@@ -337,6 +337,8 @@ def ingest_items_batch(
                 language_override=metadata_overrides.get('language')
             )
 
+            st.write(f"🔍 ingest_book returned: success={result.get('success') if result else None}, error={result.get('error') if result else 'No result'}")
+
             if result and result.get('success'):
                 # Add to manifest
                 manifest.add_book(
@@ -1360,12 +1362,17 @@ with tab_calibre:
                                 raise FileNotFoundError(f"File not found at {book_dir} (looking for *.{format_to_use}, book has formats: {book.formats})")
 
                             file_path = matching_files[0]
-                            # Normalize path to use correct OS separators (backslashes on Windows)
-                            normalized_path = os.path.normpath(str(file_path))
-                            st.write(f"📂 Accessing: {normalized_path}")
+                            # Use resolve() to get absolute path, works correctly on all platforms
+                            resolved_path = file_path.resolve()
+                            # Try using forward slashes (Python on Windows accepts both)
+                            # This may work better with network drives like Google Drive
+                            path_as_string = resolved_path.as_posix()
+                            st.write(f"📂 Path object: {file_path}")
+                            st.write(f"📂 Resolved: {resolved_path}")
+                            st.write(f"📂 As POSIX (forward slashes): {path_as_string}")
 
                             return (
-                                normalized_path,  # Return normalized path string
+                                path_as_string,  # Return resolved path as string
                                 {
                                     'title': book.title,
                                     'author': book.author,

@@ -78,21 +78,28 @@ def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
 
 def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
     """Validate file exists and is readable."""
+    import sys
+    print(f"BACKEND validate_file_access: path_for_open={repr(path_for_open)}", file=sys.stderr)
     logger.debug(f"validate_file_access checking: {repr(path_for_open)}")
 
     if not os.path.exists(path_for_open):
+        print(f"BACKEND File does NOT exist!", file=sys.stderr)
         logger.debug(f"File does not exist: {path_for_open}")
         return False, f"File not found: {display_path}"
 
+    print(f"BACKEND File exists, attempting to open...", file=sys.stderr)
     try:
         logger.debug(f"Calling os.stat()...")
         os.stat(path_for_open)
         logger.debug(f"os.stat() succeeded, attempting to open file...")
+        print(f"BACKEND About to call open('{path_for_open}', 'rb')...", file=sys.stderr)
         with open(path_for_open, 'rb') as f:
             f.read(1)
+        print(f"BACKEND File opened successfully!", file=sys.stderr)
         logger.debug(f"File opened and read successfully")
         return True, None
     except OSError as e:
+        print(f"BACKEND OSError: {e.__class__.__name__}: {e}", file=sys.stderr)
         logger.error(f"OSError during file access: {e.__class__.__name__}: {e}", exc_info=True)
         return False, f"{e.__class__.__name__}: {e}"
 

@@ -9,6 +9,9 @@ Usage:
 """
 
 import os
+# Disable tqdm globally to avoid stderr issues in Streamlit
+os.environ['TQDM_DISABLE'] = '1'
+
 import argparse
 import uuid
 from pathlib import Path
@@ -198,9 +201,14 @@ class EmbeddingGenerator:
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         model = self.get_model()
-        # Disable progress bar to avoid sys.stderr issues in Streamlit environment
+        # Disable ALL progress bars to avoid sys.stderr issues in Streamlit environment
         # tqdm progress bar causes [Errno 22] when sys.stderr is not available
-        embeddings = model.encode(texts, show_progress_bar=False)
+        embeddings = model.encode(
+            texts,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=False
+        )
         return embeddings.tolist()
 
 def generate_embeddings(texts: List[str]) -> List[List[float]]:

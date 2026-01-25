@@ -293,6 +293,13 @@ def ingest_items_batch(
     from scripts.collection_manifest import CollectionManifest
     import shutil
 
+    # Force reload of ingest_books module to pick up changes
+    import sys
+    import importlib
+    if 'scripts.ingest_books' in sys.modules:
+        importlib.reload(sys.modules['scripts.ingest_books'])
+        from scripts.ingest_books import ingest_book
+
     # Convert items to list if it's an iterator (e.g., from itertuples())
     items = list(items) if not isinstance(items, list) else items
 

@@ -380,11 +380,19 @@ def ingest_book(
         logging.debug(f"Skipping Calibre enrichment (overrides present)")
 
     # Apply overrides AFTER enrichment
+    debug_info = {
+        'extracted_author': metadata.get('author'),
+        'author_override': author_override,
+    }
+
     if language_override: metadata['language'] = language_override
     if title_override: metadata['title'] = title_override
     if author_override:
         logging.debug(f"Applying author_override: {author_override}")
+        debug_info['final_author'] = author_override
         metadata['author'] = author_override
+    else:
+        debug_info['final_author'] = metadata.get('author')
 
     # 2. Semantic Chunking
     # Adjust threshold based on domain (Philosophy needs tighter focus)
@@ -421,7 +429,8 @@ def ingest_book(
         'sentences': sentence_count,
         'strategy': 'Universal Semantic',
         'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
-        'filepath': display_path
+        'filepath': display_path,
+        'debug_author': debug_info  # Debug: track author through pipeline
     }
 
     logging.info(f"✅ Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {len(chunks)} chunks)")

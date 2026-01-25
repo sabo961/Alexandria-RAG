@@ -336,7 +336,7 @@ def ingest_items_batch(
 
             # Debug: Show what we're passing to ingest_book
             filepath_str = str(filepath)
-            st.write(f"🔍 FRONTEND: Calling ingest_book() with filepath={repr(filepath_str)}")
+            st.write(f"🔍 FRONTEND: Calling ingest_book() with author_override={repr(metadata_overrides.get('author'))}")
 
             # Ingest the item with metadata overrides
             try:
@@ -350,7 +350,9 @@ def ingest_items_batch(
                     author_override=metadata_overrides.get('author'),
                     language_override=metadata_overrides.get('language')
                 )
-                st.write(f"🔍 FRONTEND: ingest_book() returned result={result}")
+                if result and 'debug_author' in result:
+                    st.write(f"🔍 BACKEND debug_author: {result['debug_author']}")
+                st.write(f"🔍 Final author in result: {result.get('author')}")
             except Exception as ex:
                 st.error(f"🔍 FRONTEND: ingest_book() raised {ex.__class__.__name__}: {ex}")
                 import traceback

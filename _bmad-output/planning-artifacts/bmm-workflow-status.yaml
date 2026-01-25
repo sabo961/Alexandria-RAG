@@ -1,0 +1,57 @@
+# Workflow Status - Alexandria
+generated: "2026-01-24"
+project_name: "Alexandria"
+user_description: |-
+  ovo je 2 dana star projekt. glavna je ideja punjenje lokalne qdrant baze s knigama i dokumentima primarno iz lokalne calibre baze i lokalnog foldera (ingest). GUI je u alexandria_app.py fileu i on poziva sve funkcije u scripts  folderu (thin client). trenutno ingest postavlja automatski parametre (po meni nepoznatom kriteriju, treba dokumentirati). planira se razrada parametaram po tipovima dokumenta (technical, history, philosophy, literature). isto tako treba razraditi i tipove da budu dovoljno 'zrnati' da omoguće kvalitetno chunkanje (ili kako se to već zove). postoji i 'Speaker's corner' za testiranje qdrant vektora pomoću modela s OpenRoutera. 
+  cilj projekta je omogućiti AI agentima u drugim projektima pristup toj bazi radi interdisciplinarnog razvoja i planiranja. znači, softverski projekt mora/poželjno je da ima dobru filozofsku i svaku dublju podlogu 😂
+  docs folder sadrži dosta detaljnu dokumentaciju i započete structrurizr DSL dijagrame koje treba održavati. Lakše, jeftinije i brže je čitati dijagrame od koda.
+  od tebe očekujem evaluaciju i prijedloge za daljni tok projekta. Izvol'te 😊
+project_type: "software"
+selected_track: "method"
+field_type: "brownfield"
+workflow_path: "_bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
+
+workflow_status:
+  - phase: 0
+    name: "Documentation"
+    workflows:
+      - id: "document-project"
+        status: "completed"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:document-project"
+  - phase: 1
+    name: "Analysis"
+    workflows:
+      - id: "brainstorm-project"
+        status: "required"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:brainstorming"
+  - phase: 2
+    name: "Planning"
+    workflows:
+      - id: "prd"
+        status: "required"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-prd"
+  - phase: 3
+    name: "Solutioning"
+    workflows:
+      - id: "create-architecture"
+        status: "required"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:create-architecture"
+      - id: "create-epics-and-stories"
+        status: "required"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-epics-and-stories"
+      - id: "implementation-readiness"
+        status: "required"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:implementation-readiness"
+  - phase: 4
+    name: "Implementation"
+    workflows:
+      - id: "sprint-planning"
+        status: "required"
+        agent: "sm"
+        command: "/bmad:bmm:workflows:sprint-planning"

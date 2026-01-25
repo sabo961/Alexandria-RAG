@@ -11,6 +11,7 @@ import streamlit as st
 import sys
 import os
 from pathlib import Path
+from dataclasses import dataclass, field
 
 # Add project root to path so the scripts package resolves for Pylance/runtime
 project_root = Path(__file__).parent
@@ -76,6 +77,49 @@ def load_css() -> None:
     if css_path.exists():
         with open(css_path, 'r', encoding='utf-8') as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+# ============================================
+# APP STATE MANAGEMENT
+# ============================================
+
+@dataclass
+class AppState:
+    """Consolidated session state management for Alexandria application"""
+    # Configuration
+    library_dir: str = ""
+    openrouter_api_key: str = ""
+    qdrant_healthy: bool = None
+    show_ingestion_diagnostics: bool = True
+
+    # Calibre tab state
+    calibre_selected_books: set = field(default_factory=set)
+    calibre_current_page: int = 1
+    calibre_books: list = field(default_factory=list)
+    calibre_db: object = None
+    calibre_table_reset: int = 0
+
+    # Ingestion state
+    confirm_delete: str = None
+    ingest_metadata_preview: list = field(default_factory=list)
+    ingest_ready_to_confirm: bool = False
+    last_ingestion_diagnostics: dict = field(default_factory=dict)
+
+    # Query/Models state
+    last_selected_model: str = None
+    last_selected_rerank_model: str = None
+    openrouter_models: dict = field(default_factory=dict)
+
+    # UI state
+    force_speaker_tab: bool = False
+
+
+def get_app_state() -> AppState:
+    """Get or create the global app state"""
+    if "app_state" not in st.session_state:
+        st.session_state.app_state = AppState()
+    return st.session_state.app_state
+
 
 # Constants
 MANIFEST_GLOB_PATTERN = '*_manifest.json'
@@ -362,48 +406,45 @@ else:
     st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
 
-# Initialize session state for Qdrant health (will be set by sidebar)
-if 'qdrant_healthy' not in st.session_state:
-    st.session_state.qdrant_healthy = None
+# Get consolidated app state
+app_state = get_app_state()
+
+# Initialize app state from GUI settings on first load
+gui_settings = load_gui_settings()
+if not app_state.library_dir:
+    app_state.library_dir = gui_settings.get("library_dir", "G:\\My Drive\\alexandria")
+if app_state.show_ingestion_diagnostics is None:
+    app_state.show_ingestion_diagnostics = gui_settings.get("show_ingestion_diagnostics", True)
 
 # Show warning banner if Qdrant is offline (set by sidebar health check)
-if st.session_state.qdrant_healthy is False:
+if app_state.qdrant_healthy is False:
     st.error("⚠️ **Qdrant Vector Database is offline!** Ingestion and queries will not work. Check Qdrant server status and configuration in sidebar.")
 
 # Sidebar
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
 
-    gui_settings = load_gui_settings()
-    default_library_dir = gui_settings.get("library_dir", "G:\\My Drive\\alexandria")
-    default_show_diagnostics = gui_settings.get("show_ingestion_diagnostics", True)
-
-    if "library_dir" not in st.session_state:
-        st.session_state.library_dir = default_library_dir
-    if "show_ingestion_diagnostics" not in st.session_state:
-        st.session_state.show_ingestion_diagnostics = default_show_diagnostics
-
     library_dir = st.text_input(
         "Library Directory",
-        value=st.session_state.library_dir,
+        value=app_state.library_dir,
         help="Path to Calibre library"
-    ) or st.session_state.library_dir
+    ) or app_state.library_dir
 
     settings_changed = False
 
-    if library_dir != st.session_state.library_dir:
-        st.session_state.library_dir = library_dir
+    if library_dir != app_state.library_dir:
+        app_state.library_dir = library_dir
         gui_settings["library_dir"] = library_dir
         settings_changed = True
 
     show_diagnostics = st.checkbox(
         "Show ingestion diagnostics",
-        value=st.session_state.show_ingestion_diagnostics,
+        value=app_state.show_ingestion_diagnostics,
         help="Toggle diagnostics display for the latest ingestion run"
     )
 
-    if show_diagnostics != st.session_state.show_ingestion_diagnostics:
-        st.session_state.show_ingestion_diagnostics = show_diagnostics
+    if show_diagnostics != app_state.show_ingestion_diagnostics:
+        app_state.show_ingestion_diagnostics = show_diagnostics
         gui_settings["show_ingestion_diagnostics"] = show_diagnostics
         settings_changed = True
 
@@ -429,8 +470,8 @@ with st.sidebar:
     # Qdrant Health Check
     is_healthy, health_message = check_qdrant_health(qdrant_host, qdrant_port)
 
-    # Store health status in session state for banner display
-    st.session_state.qdrant_healthy = is_healthy
+    # Store health status in app state for banner display
+    app_state.qdrant_healthy = is_healthy
 
     if is_healthy:
         st.success(f"✅ Qdrant: {health_message}")
@@ -438,8 +479,8 @@ with st.sidebar:
         st.error(f"❌ Qdrant: {health_message}")
         st.warning("⚠️ Ingestion and queries will not work until Qdrant is available")
 
-    last_diagnostics = st.session_state.get("last_ingestion_diagnostics")
-    if last_diagnostics and st.session_state.show_ingestion_diagnostics:
+    last_diagnostics = app_state.last_ingestion_diagnostics
+    if last_diagnostics and app_state.show_ingestion_diagnostics:
         st.markdown("---")
         st.markdown("### 🔍 Latest Ingestion Diagnostics")
         st.caption(f"{last_diagnostics['context']} • {last_diagnostics['captured_at']}")
@@ -449,25 +490,25 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔑 OpenRouter")
 
-    # Initialize session state for API key if not present
-    if 'openrouter_api_key' not in st.session_state:
+    # Initialize app state for API key if not present
+    if not app_state.openrouter_api_key:
         # Try to load from secrets.toml first (persistent across restarts)
         try:
-            st.session_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
+            app_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
         except Exception:
-            st.session_state.openrouter_api_key = ""
+            app_state.openrouter_api_key = ""
 
     openrouter_api_key = st.text_input(
         "OpenRouter API Key",
         type="password",
-        value=st.session_state.openrouter_api_key,
+        value=app_state.openrouter_api_key,
         help="Get your API key from https://openrouter.ai/keys"
     )
 
     if st.button("💾 Save Permanently", use_container_width=True):
         if openrouter_api_key:
-            # Save to session state
-            st.session_state.openrouter_api_key = openrouter_api_key
+            # Save to app state
+            app_state.openrouter_api_key = openrouter_api_key
 
             # Save to secrets.toml for persistence across restarts
             secrets_path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
@@ -525,7 +566,7 @@ with st.sidebar:
                         ))
 
                         # Store in session state
-                        st.session_state['openrouter_models'] = sorted_models
+                        app_state.openrouter_models = sorted_models
                         st.success(f"✅ {len(sorted_models)} models")
                     else:
                         st.error(f"Failed: {response.status_code}")
@@ -533,15 +574,15 @@ with st.sidebar:
                     st.error(f"Error: {str(e)}")
 
     # Use cached models or show empty state
-    if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
-        openrouter_models = st.session_state['openrouter_models']
+    if 'openrouter_models' in st.session_state and app_state.openrouter_models:
+        openrouter_models = app_state.openrouter_models
         st.caption(f"🆓 = Free, 💰 = Paid")
 
         # Find default index (last selected model if exists)
         default_index = 0
         if 'last_selected_model' in st.session_state:
             try:
-                default_index = list(openrouter_models.keys()).index(st.session_state['last_selected_model'])
+                default_index = list(openrouter_models.keys()).index(app_state.last_selected_model)
             except (ValueError, KeyError):
                 default_index = 0
 
@@ -553,7 +594,7 @@ with st.sidebar:
         )
 
         # Save last selected model
-        st.session_state['last_selected_model'] = selected_model_name
+        app_state.last_selected_model = selected_model_name
         selected_model = openrouter_models[selected_model_name]
     else:
         # No models fetched yet
@@ -568,14 +609,14 @@ def render_query_tab():
     """Isolated Query tab - prevents full app rerun on query interactions"""
     st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
 
-    # Get API key and model from sidebar
-    openrouter_api_key = st.session_state.get('openrouter_api_key', '')
-    selected_model_name = st.session_state.get('last_selected_model', None)
+    # Get API key and model from app state
+    app_state = get_app_state()
+    openrouter_api_key = app_state.openrouter_api_key
+    selected_model_name = app_state.last_selected_model
 
-    # Get the actual model ID from session state
-    if 'openrouter_models' in st.session_state and selected_model_name:
-        openrouter_models = st.session_state['openrouter_models']
-        selected_model = openrouter_models.get(selected_model_name)
+    # Get the actual model ID from app state
+    if app_state.openrouter_models and selected_model_name:
+        selected_model = app_state.openrouter_models.get(selected_model_name)
     else:
         selected_model = None
 
@@ -631,8 +672,8 @@ def render_query_tab():
 
             if enable_reranking:
                 # Use fetched models if available, otherwise use small hardcoded set
-                if 'openrouter_models' in st.session_state and st.session_state['openrouter_models']:
-                    rerank_models = st.session_state['openrouter_models']
+                if 'openrouter_models' in st.session_state and app_state.openrouter_models:
+                    rerank_models = app_state.openrouter_models
                 else:
                     rerank_models = {
                         "⚠️ Fetch models first": None,
@@ -640,9 +681,9 @@ def render_query_tab():
 
                 # Find default index for reranking model
                 default_rerank_index = 0
-                if 'last_selected_rerank_model' in st.session_state and st.session_state['last_selected_rerank_model'] in rerank_models:
+                if 'last_selected_rerank_model' in st.session_state and app_state.last_selected_rerank_model in rerank_models:
                     try:
-                        default_rerank_index = list(rerank_models.keys()).index(st.session_state['last_selected_rerank_model'])
+                        default_rerank_index = list(rerank_models.keys()).index(app_state.last_selected_rerank_model)
                     except (ValueError, KeyError):
                         default_rerank_index = 0
 
@@ -654,7 +695,7 @@ def render_query_tab():
                 )
 
                 # Save last selected reranking model
-                st.session_state['last_selected_rerank_model'] = rerank_model_name
+                app_state.last_selected_rerank_model = rerank_model_name
                 rerank_model = rerank_models[rerank_model_name]
             else:
                 rerank_model = None
@@ -877,11 +918,11 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
 
         # Confirmation state management
         if 'confirm_delete' not in st.session_state:
-            st.session_state.confirm_delete = None
+            app_state.confirm_delete = None
 
-        if st.session_state.confirm_delete != selected_collection:
+        if app_state.confirm_delete != selected_collection:
             if st.button(f"🗑️ Delete '{selected_collection}' Collection", use_container_width=True):
-                st.session_state.confirm_delete = selected_collection
+                app_state.confirm_delete = selected_collection
                 st.rerun()
         else:
             confirmation_label = (
@@ -917,7 +958,7 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                             st.success(
                                 f"✅ Collection '{selected_collection}' deleted and artifacts removed permanently."
                             )
-                        st.session_state.confirm_delete = None
+                        app_state.confirm_delete = None
                         st.info("Refreshing app...")
                         time.sleep(2)
                         st.rerun()
@@ -925,10 +966,10 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                         st.error(f"❌ Failed to completely delete collection '{selected_collection}'.")
                         for error in delete_results['errors']:
                             st.error(f"- {error}")
-                        st.session_state.confirm_delete = None
+                        app_state.confirm_delete = None
             with confirm_col2:
                 if st.button("Cancel", use_container_width=True):
-                    st.session_state.confirm_delete = None
+                    app_state.confirm_delete = None
                     st.rerun()
 
 # ============================================
@@ -937,6 +978,9 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
 @st.fragment
 def render_calibre_filters_and_table(all_books, calibre_db):
     """Isolated Calibre filters and table - prevents full app rerun on filter interactions"""
+    # Get consolidated app state for Calibre tab
+    app_state = get_app_state()
+
     # Get all formats
     all_formats = set()
     for book in all_books:
@@ -1009,7 +1053,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     # Display as DataFrame with pagination
     if filtered_books:
         if "calibre_selected_books" not in st.session_state:
-            st.session_state.calibre_selected_books = set()
+            app_state.calibre_selected_books = set()
 
         # Pagination controls at top
         pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
@@ -1024,7 +1068,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         # Initialize current page in session state
         if 'calibre_current_page' not in st.session_state:
-            st.session_state.calibre_current_page = 1
+            app_state.calibre_current_page = 1
 
         # Calculate total pages
         total_books = len(filtered_books)
@@ -1038,7 +1082,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             current_page = 1
 
         current_page = max(1, min(current_page, total_pages))
-        st.session_state.calibre_current_page = current_page
+        app_state.calibre_current_page = current_page
 
         with pagination_col2:
             st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
@@ -1049,7 +1093,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         # Build DataFrame for current page with global row numbers
         df_data = []
-        selected_ids = st.session_state.calibre_selected_books
+        selected_ids = app_state.calibre_selected_books
         for idx, book in enumerate(filtered_books[start_idx:end_idx]):
             # Format icons
             format_icons = []
@@ -1109,10 +1153,10 @@ def render_calibre_filters_and_table(all_books, calibre_db):
         if apply_selection:
             page_ids = set(edited_df["Id"].tolist())
             page_selected_ids = set(edited_df.loc[edited_df["Select"], "Id"].tolist())
-            updated_selected_ids = set(st.session_state.calibre_selected_books)
+            updated_selected_ids = set(app_state.calibre_selected_books)
             updated_selected_ids.difference_update(page_ids)
             updated_selected_ids.update(page_selected_ids)
-            st.session_state.calibre_selected_books = updated_selected_ids
+            app_state.calibre_selected_books = updated_selected_ids
 
         # Pagination controls
         st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
@@ -1122,7 +1166,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         with nav_col1:
             if current_page > 1 and st.button("←", key="calibre_prev", type="secondary"):
-                st.session_state.calibre_current_page -= 1
+                app_state.calibre_current_page -= 1
                 st.rerun()
 
         with nav_col2:
@@ -1135,7 +1179,7 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         with nav_col3:
             if current_page < total_pages and st.button("→", key="calibre_next", type="secondary"):
-                st.session_state.calibre_current_page += 1
+                app_state.calibre_current_page += 1
                 st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1252,8 +1296,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
                     if results['success_count'] > 0:
                         st.success(f"✅ Successfully ingested {results['success_count']} books!")
-                        st.session_state.calibre_selected_books = set()
-                        st.session_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
+                        app_state.calibre_selected_books = set()
+                        app_state.calibre_table_reset = st.session_state.get("calibre_table_reset", 0) + 1
                         st.rerun()
 
                     if results['error_count'] > 0:

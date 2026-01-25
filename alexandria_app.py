@@ -1249,15 +1249,27 @@ with tab_calibre:
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
+        # Force recreate CalibreDB to pick up module changes
         if 'calibre_db' not in st.session_state or str(st.session_state.calibre_db.library_path) != str(Path(library_dir)):
             with st.spinner("Connecting to Calibre database..."):
-                st.session_state.calibre_db = CalibreDB(library_dir)
+                # Clear both db and books cache to force fresh load
+                if 'calibre_db' in st.session_state:
+                    del st.session_state.calibre_db
                 if 'calibre_books' in st.session_state:
                     del st.session_state.calibre_books
 
+                st.session_state.calibre_db = CalibreDB(library_dir)
+
         calibre_db = st.session_state.calibre_db
 
-        # Get all books
+        # Get all books - add refresh button during debug
+        col_refresh, col_spacer = st.columns([1, 5])
+        with col_refresh:
+            if st.button("🔄 Refresh Books", help="Reload books from Calibre DB"):
+                if 'calibre_books' in st.session_state:
+                    del st.session_state.calibre_books
+                st.rerun()
+
         if 'calibre_books' not in st.session_state:
             with st.spinner("Loading books from Calibre... (this may take a moment)"):
                 st.session_state.calibre_books = calibre_db.get_all_books()
@@ -1390,7 +1402,8 @@ with tab_calibre:
                                 'author': book.author,
                                 'language': book.language
                             }
-                            st.write(f"📋 Metadata from Calibre: author='{book.author}'")
+                            st.write(f"📋 Metadata from Calibre book object: author='{book.author}'")
+                            st.write(f"📋 Calibre book ID: {book.id}, Title: {book.title}")
 
                             return (
                                 file_path,  # Return Path object, ingest_items_batch will convert to str

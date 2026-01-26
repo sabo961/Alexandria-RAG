@@ -1,7 +1,13 @@
 # ADR 0002: Domain-Specific Chunking
 
 ## Status
-Accepted
+**Superseded by [ADR 0007: Universal Semantic Chunking](0007-universal-semantic-chunking.md)**
+
+Originally Accepted: 2026-01-20
+Superseded: 2026-01-25
+
+## Supersession Reason
+Replaced fixed token-based domain chunks with semantic similarity-based chunking that adapts to content structure automatically. Universal Semantic Chunking provides better semantic coherence without requiring manual domain classification.
 
 ## Date
 2026-01-20

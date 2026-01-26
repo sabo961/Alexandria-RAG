@@ -1,7 +1,13 @@
 # ADR 0005: Philosophical Argument Chunking
 
 ## Status
-Accepted
+**Superseded by [ADR 0007: Universal Semantic Chunking](0007-universal-semantic-chunking.md)**
+
+Originally Accepted: 2026-01-22
+Superseded: 2026-01-25
+
+## Supersession Reason
+Keyword-based opposition detection replaced with semantic similarity approach that implicitly preserves philosophical arguments without requiring author-specific patterns. Universal Semantic Chunking achieves same quality with lower maintenance overhead.
 
 ## Date
 2026-01-22

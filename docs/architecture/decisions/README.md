@@ -21,10 +21,12 @@ An **Architecture Decision Record (ADR)** captures a significant architectural d
 | ADR | Title | Status | Date | Component |
 |-----|-------|--------|------|-----------|
 | [0001](0001-use-qdrant-vector-db.md) | Use Qdrant Vector DB | ✅ Accepted | 2026-01-20 | External System |
-| [0002](0002-domain-specific-chunking.md) | Domain-Specific Chunking | ✅ Accepted | 2026-01-20 | Chunking Strategies |
+| [0002](0002-domain-specific-chunking.md) | Domain-Specific Chunking | 🔄 Superseded | 2026-01-20 | Chunking Strategies |
 | [0003](0003-gui-as-thin-layer.md) | GUI as Thin Presentation Layer | ✅ Accepted | 2026-01-21 | GUI + Scripts |
 | [0004](0004-collection-specific-manifests.md) | Collection-Specific Manifests | ✅ Accepted | 2026-01-21 | Collection Management |
-| [0005](0005-philosophical-argument-chunking.md) | Philosophical Argument Chunking | ✅ Accepted | 2026-01-22 | Chunking Strategies |
+| [0005](0005-philosophical-argument-chunking.md) | Philosophical Argument Chunking | 🔄 Superseded | 2026-01-22 | Chunking Strategies |
+| [0006](0006-separate-systems-architecture.md) | Local Qdrant with Separate Collections | ✅ Accepted | 2026-01-23 | External System |
+| [0007](0007-universal-semantic-chunking.md) | Universal Semantic Chunking | ✅ Accepted | 2026-01-25 | Chunking Strategies |
 
 **Legend:**
 - ✅ Accepted - Implemented and in use
@@ -111,4 +113,4 @@ Decision is no longer relevant but kept for historical context.
 
 ---
 
-**Last Updated:** 2026-01-23
+**Last Updated:** 2026-01-26

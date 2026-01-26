@@ -90,8 +90,7 @@
 
 | Document | Scope | Detail Level |
 |----------|-------|--------------|
-| **[Architecture](architecture.md)** | Complete system | Comprehensive (12,000+ words) |
-| **[Architecture Summary](architecture/ARCHITECTURE_SUMMARY.md)** | System overview | High-level |
+| **[Architecture](architecture.md)** | Complete system | Comprehensive (includes executive summary, quick reference, detailed specs) |
 | **[Project Overview](project-overview.md)** | Quick summary | Executive summary |
 
 ### Visual Diagrams (C4 Model)

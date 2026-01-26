@@ -499,7 +499,7 @@ path_for_open, display_path, _, _ = normalize_file_path(filepath)
 
 ### Documentation
 
-- **[Architecture Summary](architecture/ARCHITECTURE_SUMMARY.md)** - System overview
+- **[Architecture](architecture.md)** - Complete architecture reference
 - **[Data Models](data-models-alexandria.md)** - API reference
 - **[Source Tree](source-tree-analysis.md)** - Codebase structure
 - **[ADRs](architecture/decisions/README.md)** - Architecture decisions

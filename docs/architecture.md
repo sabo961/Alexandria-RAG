@@ -21,6 +21,37 @@ Alexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic sea
 
 ---
 
+## Quick Reference
+
+### System Context (C4 Level 1)
+
+```
+[Developer/Researcher]
+         ↓
+   [Alexandria RAG System]
+         ↓ ↑
+    ┌────┴────┬──────────────┐
+    ↓         ↓              ↓
+[Qdrant]  [OpenRouter]  [Calibre DB]
+```
+
+**External Systems:**
+- **Qdrant (192.168.0.151:6333)** - Vector database storing 384-dim embeddings
+- **OpenRouter API** - LLM inference (GPT-4, Claude, Llama, etc.)
+- **Calibre Library** - Book metadata and file storage
+
+### Performance at a Glance
+
+| Operation | Latency | Details |
+|-----------|---------|---------|
+| **Book Ingestion** | ~11-13 sec | Text extraction (5s) + Chunking (3-5s) + Embedding (2s) + Upload (1s) |
+| **Semantic Search** | <100ms | Qdrant vector search |
+| **RAG Query (with LLM)** | 2.5-5.5 sec | Search (0.4s) + LLM inference (2-5s) |
+| **Current Scale** | 150 books, 23K chunks | Main collection |
+| **Target Scale** | 9,000 books, 1.35M chunks | ~2GB vectors, easily handled by Qdrant |
+
+---
+
 ## Technology Stack
 
 | Category | Technology | Version | Purpose |
@@ -71,9 +102,19 @@ Alexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic sea
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Architectural Principles (ADR 0003)
+### Architecture Principles
 
-**Thin GUI Layer Pattern:**
+#### 1. Scripts-First Architecture (ADR 0003)
+
+**Principle:** All business logic lives in `scripts/` package. GUI is a thin presentation layer.
+
+**Why?**
+- Single source of truth (no duplication)
+- Multiple interfaces (GUI, CLI, AI agents)
+- Easy testing (no GUI overhead)
+- Clear separation of concerns
+
+**Implementation:**
 - GUI (`alexandria_app.py`) only handles presentation
 - All business logic lives in `scripts/` package
 - GUI calls scripts, displays results
@@ -83,6 +124,53 @@ Alexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic sea
 - ✅ Testability (scripts can be unit tested)
 - ✅ Reusability (scripts usable from CLI and GUI)
 - ✅ Maintainability (single source of truth for logic)
+
+**See:** [ADR 0003: GUI as Thin Layer](architecture/decisions/0003-gui-as-thin-layer.md)
+
+---
+
+#### 2. Collection Isolation (ADR 0004)
+
+**Principle:** Each collection has separate manifests, progress files, and can use different settings.
+
+**Why?**
+- Prevents cross-contamination between collections
+- Allows experimentation (test different chunking strategies)
+- Supports multiple use cases (personal library, research corpus, client project)
+
+**Implementation:**
+- `logs/{collection}_manifest.json` - Master manifest
+- `logs/{collection}_manifest.csv` - Human-readable export
+- `scripts/batch_ingest_progress_{collection}.json` - Resume tracker
+- Separate Qdrant collections per domain/experiment
+
+**Benefits:**
+- ✅ Data integrity (no cross-contamination)
+- ✅ Experimentation (A/B test chunking strategies)
+- ✅ Flexibility (different settings per collection)
+
+**See:** [ADR 0004: Collection-Specific Manifests](architecture/decisions/0004-collection-specific-manifests.md)
+
+---
+
+#### 3. Progressive Enhancement
+
+**Principle:** Core functionality works with minimal dependencies. Advanced features are optional.
+
+**Examples:**
+- Ingestion works without Calibre DB (use folder ingestion)
+- Query works without OpenRouter (search-only mode, no answer generation)
+- GUI is optional (CLI works standalone)
+
+**Why?**
+- Easier onboarding (start simple, add features as needed)
+- Resilience (system degrades gracefully)
+- Flexibility (choose features based on use case)
+
+**Benefits:**
+- ✅ Lower barrier to entry
+- ✅ Graceful degradation
+- ✅ Modular feature adoption
 
 ---
 
@@ -420,7 +508,14 @@ tests/
 
 ## Deployment Architecture
 
-**Current:** Local development environment
+### Current: Single-User Desktop
+
+```
+[User's PC]
+├── Alexandria (Python scripts + Streamlit GUI)
+├── Calibre Library (SQLite)
+└── External Qdrant Server (192.168.0.151:6333)
+```
 
 **Components:**
 - **Alexandria Application:** Runs on developer machine (Streamlit GUI)
@@ -428,12 +523,39 @@ tests/
 - **Calibre Library:** External storage at G:\My Drive\alexandria
 - **OpenRouter API:** Cloud service (optional)
 
+**Access:** http://localhost:8501
+
 **No containerization** (Docker, Kubernetes) currently implemented.
 
-**Future considerations:**
-- Docker container for Streamlit GUI
-- Environment-based configuration (dev/prod)
-- CI/CD pipeline for automated testing
+---
+
+### Future: NAS Deployment (Planned)
+
+```
+[NAS - 192.168.0.151]
+├── Docker: Alexandria Container
+│   ├── Port: 8501 (Streamlit)
+│   └── Volumes: /books, /calibre, /logs
+├── Docker: Qdrant Container
+│   └── Port: 6333
+├── Calibre Library (metadata.db)
+└── Book Storage (EPUB/PDF files)
+```
+
+**Access:** http://192.168.0.151:8501 (network-wide)
+
+**Benefits:**
+- 24/7 availability
+- Multi-device access (phone, tablet, desktop)
+- Centralized storage with RAID backup
+- Low latency (Alexandria and Qdrant on same host)
+
+**Implementation Steps:**
+1. Dockerize Alexandria app (Dockerfile + docker-compose.yml)
+2. Move Qdrant to Docker container on NAS
+3. Mount Calibre library as Docker volume
+4. Configure environment variables for NAS paths
+5. Set up reverse proxy (optional, for HTTPS)
 
 ---
 
@@ -461,25 +583,66 @@ tests/
 
 ## Performance Characteristics
 
-### Ingestion Performance
+### Ingestion Throughput
 
-- **EPUB:** ~2-5 seconds per book (depends on size)
-- **PDF:** ~5-15 seconds per book (depends on size/complexity)
-- **Bottleneck:** Embedding generation (CPU-bound)
+**Benchmark (typical book, ~500 pages):**
+- Text extraction: ~5 seconds
+- Semantic chunking: ~3-5 seconds
+- Embedding generation: ~2 seconds
+- Qdrant upload: ~1 second
+- **Total:** ~11-13 seconds per book
+
+**Format-Specific:**
+- **EPUB:** ~2-5 seconds per book (cleaner extraction)
+- **PDF:** ~5-15 seconds per book (OCR/complex layouts slower)
+
+**Bottleneck:** Semantic chunking (6x slower than fixed-window, but better quality)
 
 **Optimization:**
 - Batch ingestion for multiple books
 - tqdm progress bars disabled globally (Streamlit compatibility)
+- No caching implemented (each book processed fresh)
 
-### Query Performance
+---
 
-- **Vector Search:** <100ms (Qdrant)
-- **LLM Answer:** 2-10 seconds (depends on model, network)
-- **Reranking:** 1-3 seconds (LLM call)
+### Query Latency
+
+**Benchmark (typical query):**
+- Query embedding: ~0.1 seconds
+- Qdrant search: ~0.3 seconds
+- LLM answer generation: ~2-5 seconds (depends on model)
+- **Total:** ~2.5-5.5 seconds
+
+**Breakdown:**
+- **Vector Search Alone:** <100ms (Qdrant)
+- **With Reranking:** +1-3 seconds (LLM call)
+- **With Answer Generation:** +2-10 seconds (depends on model, network)
+
+**Bottleneck:** LLM inference (OpenRouter API network latency)
 
 **Optimization:**
 - Qdrant handles vector search efficiently
 - Caching not implemented (future enhancement)
+- No connection pooling for OpenRouter API
+
+---
+
+### Scalability
+
+**Current Scale:**
+- ~150 books ingested
+- ~23,000 chunks in Qdrant
+- ~9,000 books in Calibre library (not all ingested)
+
+**Projected Scale (full library):**
+- 9,000 books × ~150 chunks/book = ~1.35 million chunks
+- 1.35M chunks × 384 dims × 4 bytes = ~2 GB vectors
+- Qdrant easily handles this on commodity hardware
+
+**Future Scale (if needed):**
+- Qdrant supports billions of vectors
+- Can add multiple Qdrant nodes (clustering)
+- Can partition by domain (separate collections)
 
 ---
 
@@ -545,10 +708,10 @@ tests/
 ## Related Documentation
 
 ### Architecture
-- **[Architecture Summary](architecture/ARCHITECTURE_SUMMARY.md)** - High-level overview
 - **[C4 Diagrams](architecture/c4/)** - Visual architecture (Context, Container, Component)
 - **[ADRs](architecture/decisions/README.md)** - Architecture Decision Records (7 ADRs)
 - **[Technical Specs](architecture/technical/)** - Detailed technical documentation
+- **[Structurizr Workspace](architecture/workspace.dsl)** - Interactive diagrams
 
 ### Development
 - **[Development Guide](development-guide-alexandria.md)** - Setup and workflow
@@ -563,6 +726,28 @@ tests/
 ### Research
 - **[docs/research/](research/)** - Background research documents
 - **[docs/backlog/](backlog/)** - Feature proposals
+
+---
+
+## View Interactive Diagrams
+
+### Structurizr Lite (Recommended)
+
+```bash
+# Start Structurizr Lite on port 8081
+cd docs/architecture
+docker run -it --rm -p 8081:8080 -v "%cd%:/usr/local/structurizr" structurizr/lite
+```
+
+Open: http://localhost:8081
+
+**Views Available:**
+- System Context - High-level ecosystem
+- Containers - Major components
+- Components - Internal structure
+- Detailed Ingestion Flow - Book processing pipeline
+
+**See:** [Structurizr Guide](architecture/STRUCTURIZR.md) for more details
 
 ---
 

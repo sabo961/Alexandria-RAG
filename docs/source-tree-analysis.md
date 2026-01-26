@@ -43,7 +43,6 @@ alexandria/
 │   ├── source-tree-analysis.md        # This file
 │   │
 │   ├── architecture/                  # Architecture documentation
-│   │   ├── ARCHITECTURE_SUMMARY.md    # High-level overview
 │   │   ├── README.md                  # Architecture index
 │   │   ├── STRUCTURIZR.md             # C4 diagram tooling guide
 │   │   │
@@ -402,7 +401,7 @@ logger.warning(f"⚠️ Missing metadata for {title}")
 
 ## Related Documentation
 
-- **[Architecture Summary](architecture/ARCHITECTURE_SUMMARY.md)** - High-level architecture
+- **[Architecture Documentation](architecture.md)** - Complete architecture reference
 - **[Data Models & API Reference](data-models-alexandria.md)** - Module APIs
 - **[ADRs](architecture/decisions/README.md)** - Architecture decisions
 - **[Project Context](../_bmad-output/project-context.md)** - AI agent rules (45 rules)

@@ -6,7 +6,7 @@
 
 ## Quick Navigation
 
-- **[Architecture Summary](ARCHITECTURE_SUMMARY.md)** - ⭐ One-page architecture reference
+- **[Architecture Documentation](../architecture.md)** - ⭐ Complete architecture reference (executive summary, quick reference, detailed specs)
 - **[C4 Diagrams](#c4-diagrams)** - Visual architecture at different abstraction levels
 - **[Architecture Decisions](#architecture-decisions)** - ADRs explaining "why" behind design choices
 - **[Technical Specifications](#technical-specifications)** - Detailed technical docs

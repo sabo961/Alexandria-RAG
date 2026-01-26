@@ -233,7 +233,7 @@ User Query → search_qdrant() → [optional: rerank_with_llm()] →
 - **[Project Context](../_bmad-output/project-context.md)** - AI agent rules
 
 ### Architecture Details
-- **[Architecture Summary](architecture/ARCHITECTURE_SUMMARY.md)** - High-level overview
+- **[Architecture](architecture.md)** - Complete system architecture (executive summary, quick reference, detailed specs)
 - **[C4 Diagrams](architecture/c4/)** - Visual diagrams (Context, Container, Component)
 - **[ADRs](architecture/decisions/README.md)** - Architecture Decision Records (7 ADRs)
 - **[Technical Specs](architecture/technical/)** - Detailed technical docs

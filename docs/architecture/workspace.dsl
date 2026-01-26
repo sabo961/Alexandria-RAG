@@ -155,7 +155,7 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
     }
 
     # Documentation - markdown files will appear in Structurizr UI
-    !docs ARCHITECTURE_SUMMARY.md
+    !docs ../architecture.md
     !docs c4
     !docs technical
 }

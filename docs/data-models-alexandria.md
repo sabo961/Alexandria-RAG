@@ -512,6 +512,6 @@ python scripts/generate_book_inventory.py
 ---
 
 **Related Documentation:**
-- [Architecture Overview](architecture/ARCHITECTURE_SUMMARY.md)
+- [Architecture Documentation](architecture.md)
 - [ADR 0003: GUI as Thin Layer](architecture/decisions/0003-gui-as-thin-layer.md)
 - [ADR 0007: Universal Semantic Chunking](architecture/decisions/0007-universal-semantic-chunking.md)

@@ -339,6 +339,15 @@ Examples:
     - Must handle multi-author books correctly during ingestion
     - **Don't**: Split on `&` without understanding Calibre format
 
+**Critical Files (DO NOT DELETE):**
+
+13. **requirements.txt is OFFICIAL Python dependency file**
+    - File MUST be named `requirements.txt` (NOT .md)
+    - Used by: `pip install -r requirements.txt`
+    - Expected by: PyCharm, Docker, GitHub Actions, all Python tooling
+    - **Don't**: Rename to .md, delete, or move to docs/
+    - **Location:** Project root (same directory as README.md)
+
 ---
 
 ## Usage Guidelines

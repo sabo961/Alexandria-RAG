@@ -1,4 +1,11 @@
+# ============================================================================
 # Alexandria RAG System - Python Dependencies
+# ============================================================================
+#
+# ⚠️  CRITICAL: This is the OFFICIAL Python dependency file (.txt NOT .md)
+# ⚠️  DO NOT DELETE or rename to .md - pip install -r requirements.txt expects .txt
+# ⚠️  Python tools (pip, PyCharm, Docker, CI/CD) all look for requirements.txt
+#
 # Python 3.14+ required
 
 # Vector Database

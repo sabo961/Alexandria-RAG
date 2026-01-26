@@ -357,4 +357,71 @@ Examples:
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
+---
+
+## Backlog & Task Management
+
+**Purpose:** Clarify relationship between human-maintained TODO.md, BMad agent stories, and docs/backlog/ research.
+
+### How Task Management Works
+
+**TODO.md (Human Input - Ideas):**
+- Lightweight prioritized backlog (HIGH/MEDIUM/LOW/BACKLOG)
+- Ideas come from user, AI agents, research
+- Checkbox-based list, minimal detail
+- **NOT** the single source of truth for execution
+- Think: "What should we work on next?"
+
+**BMad Stories (Execution Truth):**
+- Created in `_bmad-output/implementation-artifacts/` by BMad workflow agents
+- Single source of truth for WHAT gets built and HOW
+- Detailed specs with acceptance criteria, test plans, files affected
+- Agents create stories from TODO.md ideas after analysis
+- Think: "What are we building RIGHT NOW?"
+
+**CHANGELOG.md (Completed Work Archive):**
+- Historical record of completed sprints/features
+- Extracted from TODO.md when work is done
+- Format: Date, Story name, Deliverables, Files modified
+- Reference for project history
+- Think: "What have we already built?"
+
+**docs/backlog/ (Research & Proposals):**
+- Deep-dive research documents
+- Architectural proposals (e.g., Hierarchical Chunking)
+- Long-form analysis that doesn't fit TODO.md format
+- Informational, not executable
+- Think: "What are we researching?"
+
+### Syncing Workflow (BMad Agent Behavior)
+
+When a BMad agent starts work:
+
+1. **Check TODO.md** for user-prioritized ideas
+2. **Compare with existing stories** in `_bmad-output/implementation-artifacts/`
+3. **If idea exists as story:** Continue execution
+4. **If idea is new:** Propose story creation to user
+5. **If story is completed:** Move TODO item → CHANGELOG.md
+6. **Consult docs/backlog/** for research context if needed
+
+### Guidelines for Humans
+
+**When adding to TODO.md:**
+- Keep it short (1-2 sentences max)
+- Prioritize by impact (HIGH/MEDIUM/LOW/BACKLOG)
+- Don't write full specs (agents will do that)
+
+**When to create docs/backlog/ file:**
+- Requires >500 words of explanation
+- Architectural decision with trade-offs
+- Research with citations/references
+- Multi-week exploration
+
+**What NOT to put in TODO.md:**
+- Completed work (goes to CHANGELOG.md)
+- Implementation details (goes to BMad stories)
+- Research findings (goes to docs/backlog/)
+
+---
+
 **Last Updated:** 2026-01-25

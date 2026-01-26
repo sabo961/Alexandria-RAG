@@ -1,9 +1,12 @@
-# Alexandria - Documentation Index
+# Alexandria Documentation
 
-**Project:** Alexandria - Temenos Academy Library
-**Type:** RAG (Retrieval-Augmented Generation) System
-**Status:** Production
-**Last Updated:** 2026-01-26
+**Welcome to Alexandria** - a Python-based RAG (Retrieval-Augmented Generation) system providing semantic search across 9,000+ books in the Temenos Academy Library.
+
+**Quick Facts:**
+- **Tech Stack:** Python 3.14, Streamlit GUI, Qdrant vector database, sentence-transformers
+- **Vector DB:** Qdrant (external: 192.168.0.151:6333)
+- **Embedding Model:** all-MiniLM-L6-v2 (384-dimensional)
+- **Architecture:** Monolithic backend with scripts-first design pattern
 
 ---
 
@@ -11,9 +14,9 @@
 
 **New to Alexandria?** Start here:
 
-1. **[Project Overview](project-overview.md)** - What is Alexandria? (5-minute read)
-2. **[Development Guide](development-guide-alexandria.md)** - Setup and installation
-3. **[Quick Reference](guides/QUICK_REFERENCE.md)** - Command cheat sheet
+1. **[Project Overview](./explanation/project-overview.md)** - What is Alexandria and what problems does it solve?
+2. **[Getting Started Tutorial](./tutorials/getting-started.md)** - Set up Alexandria in 15 minutes
+3. **[Common Workflows](./how-to-guides/common-workflows.md)** - Command cheat sheet for daily use
 
 **For AI Agents:**
 - **[Project Context](../_bmad-output/project-context.md)** - 🔹 **MANDATORY READ** - 45 implementation rules
@@ -21,250 +24,141 @@
 
 ---
 
-## 🎯 Project Summary
-
-| Aspect | Details |
-|--------|---------|
-| **Purpose** | Semantic search across 9,000+ books using RAG |
-| **Architecture** | Python RAG System (Monolith) |
-| **Entry Point** | `alexandria_app.py` (Streamlit GUI) |
-| **Tech Stack** | Python 3.14 + Streamlit + Qdrant + sentence-transformers |
-| **Vector DB** | Qdrant (external: 192.168.0.151:6333) |
-| **Embedding Model** | all-MiniLM-L6-v2 (384-dimensional) |
-
----
-
 ## 📚 Documentation by Purpose
 
-### 🚀 For New Users
+Alexandria's documentation follows the **[Diataxis framework](https://diataxis.fr)** - organized by what you need to accomplish:
 
-| Document | Purpose | Time to Read |
-|----------|---------|--------------|
-| **[../README.md](../README.md)** | Project landing page | 3 min |
-| **[Project Overview](project-overview.md)** | High-level system summary | 5 min |
-| **[Quick Reference](guides/QUICK_REFERENCE.md)** | Command cheat sheet | 2 min |
-| **[Professional Setup](guides/PROFESSIONAL_SETUP_COMPLETE.md)** | Advanced setup guide | 10 min |
-| **[../TODO.md](../TODO.md)** | Current backlog | 3 min |
-| **[../CHANGELOG.md](../CHANGELOG.md)** | Completed work archive | 5 min |
+### 📘 [Tutorials](./tutorials/index.md) - Learn by Doing
 
-### 🤖 For AI Agents
+**Learning-oriented:** Step-by-step lessons to gain hands-on experience with Alexandria.
 
-| Document | Purpose | Critical? |
-|----------|---------|-----------|
-| **[../_bmad-output/project-context.md](../_bmad-output/project-context.md)** | **45 implementation rules** | 🔹 **YES** |
-| **[../AGENTS.md](../AGENTS.md)** | Navigation hub | ✅ Recommended |
-| **[Data Models & API](data-models-alexandria.md)** | Module APIs reference | ✅ Recommended |
-| **[Architecture](architecture.md)** | System architecture | ✅ Recommended |
-| **[Source Tree](source-tree-analysis.md)** | Codebase structure | Optional |
+- **[Getting Started with Alexandria](./tutorials/getting-started.md)** - Complete setup and first ingestion
+- **[Professional Setup Guide](./tutorials/professional-setup.md)** - Production deployment with Docker
+- **[Structurizr Architecture Visualization](./tutorials/structurizr-guide.md)** - Visualize C4 diagrams
+
+**👉 Start here if:** You're new to Alexandria and want to learn by building something.
 
 ---
 
-## 👨‍💻 For Developers
+### 📗 [How-To Guides](./how-to-guides/index.md) - Solve Specific Problems
 
-### Setup & Workflow
+**Problem-oriented:** Practical recipes for accomplishing specific tasks.
 
-| Document | Purpose |
-|----------|---------|
-| **[Development Guide](development-guide-alexandria.md)** | Installation, setup, CLI usage, debugging |
-| **[Source Tree Analysis](source-tree-analysis.md)** | Directory structure with annotations |
-| **[Logging Guide](guides/LOGGING_GUIDE.md)** | Logging patterns and best practices |
+- **[Common Workflows](./how-to-guides/common-workflows.md)** - Frequent operations and commands
+- **[Track Document Ingestion](./how-to-guides/track-ingestion.md)** - Monitor and debug ingestion with logging
+- **[Configure Open WebUI Integration](./how-to-guides/configure-open-webui.md)** - Connect Alexandria to Open WebUI
 
-### Code Reference
-
-| Document | Purpose |
-|----------|---------|
-| **[Data Models & API Reference](data-models-alexandria.md)** | All scripts/ module APIs, data structures, integration points |
-| **[Source Tree Analysis](source-tree-analysis.md)** | File organization, entry points, key locations |
-
-### Tools & Utilities
-
-| Guide | Purpose |
-|-------|---------|
-| **[OpenWebUI Config](guides/OPEN_WEBUI_CONFIG.md)** | OpenWebUI integration setup |
+**👉 Start here if:** You know what you want to do and need directions to get it done.
 
 ---
 
-## 🏗️ Architecture Documentation
+### 📕 [Reference](./reference/index.md) - Look Up Technical Information
 
-### High-Level Architecture
+**Information-oriented:** Dry, factual technical descriptions and API specifications.
 
-| Document | Scope | Detail Level |
-|----------|-------|--------------|
-| **[Architecture](architecture.md)** | Complete system | Comprehensive (includes executive summary, quick reference, detailed specs) |
-| **[Project Overview](project-overview.md)** | Quick summary | Executive summary |
+#### API Documentation
+- **[Data Models](./reference/api/data-models.md)** - Complete schema for Alexandria's data structures
+- **[Source Tree Analysis](./reference/api/source-tree.md)** - Codebase structure and module organization
 
-### Visual Diagrams (C4 Model)
+#### Architecture
+- **[C4 Diagrams](./reference/architecture/c4/)** - Visual architecture models (Context, Container, Component)
+- **[Architecture Decision Records (ADRs)](./reference/architecture/decisions/README.md)** - History of significant decisions
+  - [ADR-0001: Qdrant Vector DB](./reference/architecture/decisions/0001-use-qdrant-vector-db.md)
+  - [ADR-0003: GUI as Thin Layer](./reference/architecture/decisions/0003-gui-as-thin-layer.md)
+  - [ADR-0007: Universal Semantic Chunking](./reference/architecture/decisions/0007-universal-semantic-chunking.md) (current)
+- **[Technical Specifications](./reference/architecture/technical/)** - Detailed implementation specs
+  - [Qdrant Payload Structure](./reference/architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md)
+  - [Universal Semantic Chunking](./reference/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)
+  - [PDF vs EPUB Comparison](./reference/architecture/technical/PDF_vs_EPUB_COMPARISON.md)
 
-| Diagram | Purpose | Format |
-|---------|---------|--------|
-| **[C4: Context](architecture/c4/01-context.md)** | System context & external dependencies | Markdown + Structurizr DSL |
-| **[C4: Container](architecture/c4/02-container.md)** | Container view (GUI, Scripts, Qdrant) | Markdown + Structurizr DSL |
-| **[C4: Component](architecture/c4/03-component.md)** | Component view (scripts package) | Markdown + Structurizr DSL |
-
-**Tool:** [Structurizr Guide](architecture/STRUCTURIZR.md)
-
-### Architecture Decision Records (ADRs)
-
-| ADR | Title | Status | Date |
-|-----|-------|--------|------|
-| **[0001](architecture/decisions/0001-use-qdrant-vector-db.md)** | Use Qdrant Vector DB | ✅ Accepted | 2026-01-20 |
-| **[0002](architecture/decisions/0002-domain-specific-chunking.md)** | Domain-Specific Chunking | 🔄 Superseded by 0007 | 2026-01-20 |
-| **[0003](architecture/decisions/0003-gui-as-thin-layer.md)** | GUI as Thin Presentation Layer | ✅ Accepted | 2026-01-21 |
-| **[0004](architecture/decisions/0004-collection-specific-manifests.md)** | Collection-Specific Manifests | ✅ Accepted | 2026-01-21 |
-| **[0005](architecture/decisions/0005-philosophical-argument-chunking.md)** | Philosophical Argument Chunking | 🔄 Superseded by 0007 | 2026-01-22 |
-| **[0006](architecture/decisions/0006-separate-systems-architecture.md)** | Local Qdrant with Separate Collections | ✅ Accepted | 2026-01-23 |
-| **[0007](architecture/decisions/0007-universal-semantic-chunking.md)** | Universal Semantic Chunking | ✅ Accepted | 2026-01-25 |
-
-**Index:** [ADR README](architecture/decisions/README.md)
-
-### Technical Specifications
-
-| Spec | Purpose |
-|------|---------|
-| **[PDF vs EPUB Comparison](architecture/technical/PDF_vs_EPUB_COMPARISON.md)** | Format comparison analysis |
-| **[Qdrant Payload Structure](architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md)** | Vector DB schema |
-| **[Universal Semantic Chunking](architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)** | Chunking algorithm details |
+**👉 Start here if:** You need to look up specific technical details or API information.
 
 ---
 
-## 🔬 Research & Proposals
+### 📙 [Explanation](./explanation/index.md) - Understand the Design
 
-### Research Documents
+**Understanding-oriented:** Discussions that clarify concepts and illuminate design decisions.
 
-| Document | Topic |
-|----------|-------|
-| **[Alexandria-Qdrant Proposal](research/alexandria-qdrant-project-proposal.md)** | Original project proposal |
-| **[Argument-Based Chunking](research/argument_based_chunking_for_philosophical_texts_alexandria_rag.md)** | Philosophical chunking research |
-| **[Missing Classics Analysis](research/missing-classics-analysis.md)** | Library gap analysis |
-| **[Vector DB Cloud Comparison](research/vector-db-cloud-comparison.md)** | Vector DB evaluation |
+- **[Project Overview](./explanation/project-overview.md)** - High-level introduction and context
+- **[Architecture Overview](./explanation/architecture.md)** - Comprehensive architectural discussion
+- **[Research Documents](./explanation/research/)** - Investigation reports and technical research
+- **[Proposals](./explanation/proposals/)** - Project proposals and strategic initiatives
+- **[User Stories](./explanation/stories/)** - Product requirements and feature specifications
 
-### Backlog & Ideas
-
-| Document | Topic |
-|----------|-------|
-| **[Hierarchical Chunking](backlog/Hierarchical%20Chunking%20for%20Alexandria%20RAG.md)** | Feature proposal |
-| **[Hierarchical Chunking - Additions](backlog/Hierarchical%20Chunking%20for%20Alexandria%20RAG-additions.md)** | Extended proposal |
-
-### External Contributions
-
-| Proposal | Target | Status |
-|----------|--------|--------|
-| **[BMad Workflow Integration](proposals/bmad-workflow-integration-proposal.md)** | github.com/bmadcode/bmad-method | 📝 Draft |
-
-**Index:** [Proposals README](proposals/README.md)
+**👉 Start here if:** You want to understand why Alexandria works the way it does.
 
 ---
 
-## 📦 Project Management (BMad Framework)
+## 🎯 Learning Paths
+
+Choose your role to follow a recommended path through the documentation:
+
+### 🆕 New User Path
+Perfect for first-time users who want to get Alexandria running quickly.
+
+1. [Project Overview](./explanation/project-overview.md) - Understand what Alexandria does
+2. [Getting Started Tutorial](./tutorials/getting-started.md) - Set up and run Alexandria
+3. [Common Workflows](./how-to-guides/common-workflows.md) - Learn daily commands
+4. [Track Ingestion](./how-to-guides/track-ingestion.md) - Monitor your first document ingestion
+
+### 👨‍💻 Developer Path
+For developers implementing features or fixing bugs.
+
+1. [Getting Started Tutorial](./tutorials/getting-started.md) - Set up development environment
+2. [Data Models Reference](./reference/api/data-models.md) - Understand Alexandria's API
+3. [Source Tree Analysis](./reference/api/source-tree.md) - Navigate the codebase
+4. [Architecture Overview](./explanation/architecture.md) - Grasp the system design
+5. [ADR-0003: GUI as Thin Layer](./reference/architecture/decisions/0003-gui-as-thin-layer.md) - Critical design principle
+6. [Common Workflows](./how-to-guides/common-workflows.md) - Daily development tasks
+
+### 🤖 AI Agent Path
+For AI assistants implementing features or answering questions.
+
+1. **[Project Context](../_bmad-output/project-context.md)** - 🔹 **MANDATORY** - 45 implementation rules
+2. [Architecture Overview](./explanation/architecture.md) - System design and patterns
+3. [Data Models Reference](./reference/api/data-models.md) - Module APIs
+4. [ADRs](./reference/architecture/decisions/README.md) - Decision history
+5. [How-To Guides](./how-to-guides/index.md) - Problem-solving recipes
+6. **[AGENTS.md](../AGENTS.md)** - AI-specific navigation guidance
+
+### 🏗️ Architect Path
+For understanding architectural decisions and system design.
+
+1. [Architecture Overview](./explanation/architecture.md) - Complete system architecture
+2. [C4 Diagrams](./reference/architecture/c4/) - Visual models
+3. [ADRs](./reference/architecture/decisions/README.md) - Decision history with rationale
+4. [Technical Specifications](./reference/architecture/technical/) - Detailed specs
+5. [Research Documents](./explanation/research/) - Technical investigations
+
+---
+
+## 📖 What is Diataxis?
+
+**[Diataxis](https://diataxis.fr)** is a documentation framework that organizes content into four quadrants based on user needs:
+
+| | **Learning** | **Problem-Solving** |
+|---|---|---|
+| **Practical** | 📘 **Tutorials** - Lessons | 📗 **How-To Guides** - Directions |
+| **Theoretical** | 📙 **Explanation** - Discussion | 📕 **Reference** - Description |
+
+This structure helps you find the right documentation for your current need:
+- **Learning something new?** → Tutorials
+- **Solving a specific problem?** → How-To Guides
+- **Looking up technical details?** → Reference
+- **Understanding the design?** → Explanation
+
+---
+
+## 📦 Project Management
 
 ### Workflow Tracking
+- **[TODO.md](../TODO.md)** - Prioritized backlog (HIGH/MEDIUM/LOW)
+- **[CHANGELOG.md](../CHANGELOG.md)** - Completed work archive
+- **[Project Context](../_bmad-output/project-context.md)** - AI agent implementation rules
 
-| File | Purpose |
-|------|---------|
-| **[../TODO.md](../TODO.md)** | Prioritized backlog (HIGH/MEDIUM/LOW) |
-| **[../CHANGELOG.md](../CHANGELOG.md)** | Completed work archive |
-| **[../_bmad-output/project-context.md](../_bmad-output/project-context.md)** | AI agent implementation rules (45 rules) |
-
-### BMad Outputs
-
-| Directory | Purpose |
-|-----------|---------|
-| **[../_bmad-output/](../_bmad-output/)** | BMad workflow outputs (project-context, artifacts) |
-| **[../_bmad/](../_bmad/)** | BMad framework (workflows, agents, config) |
-
----
-
-## 📖 Stories & Features
-
-**Index:** [Stories README](stories/README.md)
-
----
-
-## 🔧 Generated Documentation (This Scan)
-
-**Workflow:** document-project (exhaustive scan)
-**Generated:** 2026-01-26
-
-| Document | Purpose | Status |
-|----------|---------|--------|
-| **[index.md](index.md)** | This file - Master index | ✅ Complete |
-| **[project-overview.md](project-overview.md)** | High-level summary | ✅ Complete |
-| **[architecture.md](architecture.md)** | Comprehensive architecture | ✅ Complete |
-| **[data-models-alexandria.md](data-models-alexandria.md)** | API & data models | ✅ Complete |
-| **[source-tree-analysis.md](source-tree-analysis.md)** | Codebase structure | ✅ Complete |
-| **[development-guide-alexandria.md](development-guide-alexandria.md)** | Dev setup & workflow | ✅ Complete |
-| **[project-scan-report.json](project-scan-report.json)** | Workflow state file | ✅ Complete |
-
----
-
-## 🗂️ Documentation Maintenance
-
-### Update Frequency
-
-| Document Type | Update Trigger |
-|---------------|----------------|
-| **ADRs** | When significant architecture decision made |
-| **project-context.md** | When rules/patterns change |
-| **CHANGELOG.md** | After completing each story/sprint |
-| **TODO.md** | Weekly or as priorities shift |
-| **Architecture docs** | When system architecture changes |
-| **API docs** | When module APIs change |
-
-### Quality Checklist
-
-- [ ] All ADRs have status (Accepted/Rejected/Superseded)
-- [ ] Superseded ADRs link to replacement ADR
-- [ ] project-context.md reflects current implementation rules
-- [ ] Generated docs have "Last Updated" dates
-- [ ] Broken links identified and fixed
-- [ ] Code examples tested and verified
-
----
-
-## 🎓 Learning Path
-
-### For New Developers
-
-1. **[Project Overview](project-overview.md)** - Understand what Alexandria does
-2. **[Development Guide](development-guide-alexandria.md)** - Set up local environment
-3. **[Quick Reference](guides/QUICK_REFERENCE.md)** - Learn common commands
-4. **[Source Tree Analysis](source-tree-analysis.md)** - Navigate the codebase
-5. **[Data Models & API](data-models-alexandria.md)** - Understand module APIs
-6. **[ADR 0003: GUI as Thin Layer](architecture/decisions/0003-gui-as-thin-layer.md)** - Critical architecture principle
-7. **[ADR 0007: Universal Semantic Chunking](architecture/decisions/0007-universal-semantic-chunking.md)** - Core innovation
-
-### For AI Agents
-
-1. **[project-context.md](../_bmad-output/project-context.md)** - 🔹 **START HERE** - 45 critical rules
-2. **[AGENTS.md](../AGENTS.md)** - Navigation guidance
-3. **[Data Models & API](data-models-alexandria.md)** - Module reference
-4. **[Architecture](architecture.md)** - System overview
-5. **[TODO.md](../TODO.md)** - Current priorities
-
-### For Architects
-
-1. **[Architecture](architecture.md)** - Complete system architecture
-2. **[C4 Diagrams](architecture/c4/)** - Visual models (Context, Container, Component)
-3. **[ADRs](architecture/decisions/README.md)** - Decision history & rationale
-4. **[Technical Specs](architecture/technical/)** - Detailed specifications
-
----
-
-## 📞 Getting Help
-
-### Where to Look
-
-1. **Search this index** for relevant documentation
-2. **Check [TODO.md](../TODO.md)** for known issues
-3. **Review [CHANGELOG.md](../CHANGELOG.md)** for recent changes
-4. **Consult [project-context.md](../_bmad-output/project-context.md)** for implementation rules
-
-### External Resources
-
-- **Streamlit:** https://docs.streamlit.io
-- **Qdrant:** https://qdrant.tech/documentation
-- **sentence-transformers:** https://www.sbert.net
-- **BMad Method:** https://github.com/bmadcode/bmad-method
+### BMad Framework Integration
+- **[BMad Outputs](../_bmad-output/)** - Workflow artifacts and project context
+- **[BMad Framework](../_bmad/)** - Workflows, agents, and configuration
 
 ---
 
@@ -276,6 +170,23 @@
 | **project-context.md** | AI agent implementation rules (45 rules) |
 | **.streamlit/secrets.toml** | API keys (gitignored, must recreate if deleted) |
 | **collection_manifest_*.json** | Ingestion tracking (data loss if deleted) |
+
+---
+
+## 📞 Getting Help
+
+### Where to Look
+1. **Search this index** for relevant documentation by purpose (Tutorials/How-To/Reference/Explanation)
+2. **Check [TODO.md](../TODO.md)** for known issues
+3. **Review [CHANGELOG.md](../CHANGELOG.md)** for recent changes
+4. **Consult [Project Context](../_bmad-output/project-context.md)** for implementation rules
+
+### External Resources
+- **Streamlit:** https://docs.streamlit.io
+- **Qdrant:** https://qdrant.tech/documentation
+- **sentence-transformers:** https://www.sbert.net
+- **BMad Method:** https://github.com/bmadcode/bmad-method
+- **Diataxis Framework:** https://diataxis.fr
 
 ---
 
@@ -292,24 +203,8 @@
 
 ---
 
-## 🎯 Next Steps
-
-**For New Contributors:**
-1. Read [Development Guide](development-guide-alexandria.md)
-2. Set up local environment
-3. Review [TODO.md](../TODO.md) for available tasks
-4. Check [project-context.md](../_bmad-output/project-context.md) for implementation rules
-
-**For AI Agents:**
-1. **Read [project-context.md](../_bmad-output/project-context.md)** (MANDATORY)
-2. Review [Data Models & API](data-models-alexandria.md)
-3. Check [TODO.md](../TODO.md) for current priorities
-4. Implement features following ADR 0003 (thin GUI layer principle)
-
----
-
-**Index Version:** 1.0
-**Generated by:** document-project workflow (exhaustive scan)
+**Documentation Structure:** Diataxis Framework (Tutorials, How-To Guides, Reference, Explanation)
 **Last Updated:** 2026-01-26
+**Version:** 2.0 (Diataxis Restructuring)
 
-**👆 This is your primary entry point for AI-assisted development and project navigation.**
+**👆 Navigate by purpose using the quadrant links above.**

@@ -154,6 +154,64 @@ For active work items, see [TODO.md](TODO.md).
 
 ---
 
+## 2026-01-21
+
+### Automatic File Management + CSV Export
+**Duration:** 1 day
+**Goal:** Production workflow improvements - automatic file organization and human-readable tracking
+
+**Deliverables:**
+- ✅ Automatic file movement: `ingest/` → `ingested/` after successful processing
+- ✅ CSV manifest export for human-readable tracking (open in Excel/LibreOffice)
+- ✅ Visual status checking: empty `ingest/` folder = all books processed
+- ✅ Resume functionality: `--resume` flag skips already processed books
+- ✅ Archive preservation: original files kept in `ingested/` folder
+
+**Files Modified:**
+- `scripts/batch_ingest.py` (auto-move functionality)
+- `scripts/collection_manifest.py` (CSV export)
+- `logs/collection_manifest.csv` (auto-generated)
+- `ingested/README.md` (folder documentation)
+
+**Impact:**
+- No more "Was this book ingested?" confusion - check folders
+- Easy audit via CSV (sort by date, domain, size)
+- Avoid accidental re-processing
+
+---
+
+### Query Tab Refactoring
+- ✅ Eliminated 160+ lines of duplicated RAG logic in GUI
+- ✅ Query tab now calls `perform_rag_query()` from `rag_query.py`
+- ✅ Added missing `RAGResult` attributes
+- ✅ Single source of truth for RAG logic
+
+---
+
+### Configurable Fetch Multiplier
+- ✅ Added `fetch_multiplier` parameter (1-10, default 3)
+- ✅ CLI argument: `--fetch-multiplier`
+- ✅ GUI: Number input in Advanced Settings
+- ✅ Controls quality vs speed trade-off
+
+---
+
+### Philosophical Chunking Module
+- ✅ Created `scripts/philosophical_chunking.py`
+- ✅ Argument-based chunking for philosophical texts
+- ✅ Author-specific opposition pairs (Mishima, Nietzsche, Cioran)
+- ✅ CLI testing interface
+- ✅ **Integration:** Completed 2026-01-23 (see above)
+
+---
+
+### Collection-Specific Logging
+- ✅ Separate manifest per collection: `logs/{collection_name}_manifest.json`
+- ✅ Separate progress per collection: `batch_ingest_progress_{collection_name}.json`
+- ✅ Auto-reset on collection deletion via `verify_collection_exists()`
+
+---
+
 ## 2026-01-22 (Early Morning)
 
 ### GUI Cleanup

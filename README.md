@@ -117,6 +117,31 @@ python batch_ingest.py --directory ../ingest --domain technical
 
 ---
 
+## 📚 Generated Documentation (AI-Ready)
+
+**Generated:** 2026-01-26 by `document-project` workflow (exhaustive scan)
+**Total:** 7 files, 9,614 words (~38 pages), 89 KB
+
+| Document | Size | Purpose |
+|----------|------|---------|
+| **[docs/index.md](docs/index.md)** | 13 KB | 🔹 **Master documentation index** - Start here for navigation |
+| **[docs/architecture.md](docs/architecture.md)** | 21 KB | Complete system architecture (data flow, algorithms, constraints) |
+| **[docs/project-overview.md](docs/project-overview.md)** | 12 KB | Executive summary & quick reference |
+| **[docs/data-models-alexandria.md](docs/data-models-alexandria.md)** | 14 KB | API reference for all scripts/ modules |
+| **[docs/source-tree-analysis.md](docs/source-tree-analysis.md)** | 15 KB | Annotated codebase structure with entry points |
+| **[docs/development-guide-alexandria.md](docs/development-guide-alexandria.md)** | 12 KB | Setup, workflow, CLI usage, debugging |
+| **[docs/project-scan-report.json](docs/project-scan-report.json)** | 2.4 KB | Workflow state & scan metadata |
+
+**Primary entry point:** [docs/index.md](docs/index.md) - Master index with links to all documentation
+
+**Why useful:**
+- ✅ AI agents get complete codebase context (API reference, architecture, data models)
+- ✅ New developers can onboard without Q&A sessions
+- ✅ BMad PRD workflow can reference detailed architecture
+- ✅ Future you (6 months from now) remembers how everything works
+
+---
+
 ## Configuration
 
 **Qdrant Server:**

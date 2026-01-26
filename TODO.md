@@ -5,7 +5,7 @@
 For completed work, see [CHANGELOG.md](CHANGELOG.md).
 For stable reference documentation, see [AGENTS.md](AGENTS.md) and [_bmad-output/project-context.md](_bmad-output/project-context.md).
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-26
 
 ---
 
@@ -27,7 +27,7 @@ For stable reference documentation, see [AGENTS.md](AGENTS.md) and [_bmad-output
 - [ ] **Query Modes** - Single endpoint with multiple modes: `fact`, `cite`, `explore`, `synthesize` for predictable behavior
 - [ ] **Domain-Aware Retrieval Weights** - Domain weight multiplier (philosophy > fiction) for better recall
 - [ ] **Retrieval Self-Test Suite** - Canonical questions per domain with snapshot of expected sources for regression protection
-- [ ] **Real-Time Progress Tracking** - Show live progress during batch ingestion in GUI
+- [x] **Real-Time Progress Tracking** - Show live progress during batch ingestion in GUI
 - [ ] **Resume Functionality in GUI** - Resume interrupted batch ingestion from GUI
 
 ---

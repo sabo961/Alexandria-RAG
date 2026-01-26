@@ -138,15 +138,6 @@ For active work items, see [TODO.md](TODO.md).
 
 ---
 
-### Philosophical Chunking Module
-- ✅ Created `scripts/philosophical_chunking.py`
-- ✅ Argument-based chunking for philosophical texts
-- ✅ Author-specific opposition pairs (Mishima, Nietzsche, Cioran)
-- ✅ CLI testing interface
-- ✅ **Integration:** Completed 2026-01-23 (see above)
-
----
-
 ### Collection-Specific Logging
 - ✅ Separate manifest per collection: `logs/{collection_name}_manifest.json`
 - ✅ Separate progress per collection: `batch_ingest_progress_{collection_name}.json`

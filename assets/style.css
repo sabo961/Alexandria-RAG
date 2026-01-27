@@ -18,6 +18,13 @@
     font-style: italic;
 }
 
+/* Dark mode subtitle - light gray for visibility on dark background */
+@media (prefers-color-scheme: dark) {
+    .subtitle {
+        color: #c9d1d9;
+    }
+}
+
 /* Hidden fancy header (preserved for future use) */
 .fancy-header {
     display: none;

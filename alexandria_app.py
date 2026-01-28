@@ -787,36 +787,72 @@ with st.sidebar:
 # ============================================
 # FRAGMENT: Query Tab
 # ============================================
+# Fragment isolation: Query tab interactions (dropdown changes, text input, button clicks)
+# don't need to reload the entire app (e.g., Calibre table, ingested books list).
+# This improves responsiveness and prevents unnecessary re-execution of expensive operations.
 @st.fragment
 def render_query_tab():
-    """Isolated Query tab - prevents full app rerun on query interactions"""
+    """Isolated Query tab - prevents full app rerun on query interactions
+
+    RAG query flow:
+    1. User selects collection, domain, and result limit
+    2. User configures advanced settings (similarity threshold, fetch multiplier, reranking)
+    3. User enters query and clicks Search
+    4. System retrieves chunks from Qdrant using vector similarity
+    5. Optional: LLM reranks chunks for better relevance
+    6. LLM generates answer based on retrieved context
+    7. Sources displayed with metadata for provenance tracking
+    """
     st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
 
-    # Get API key and model from app state
+    # ==================================================
+    # RETRIEVE MODEL CONFIGURATION FROM APP STATE
+    # ==================================================
+    # Fragment has access to app state configured in sidebar (API key, models)
+    # This pattern keeps sidebar configuration separate from query execution
     app_state = get_app_state()
-    openrouter_api_key = app_state.openrouter_api_key
-    selected_model_name = app_state.last_selected_model
+    openrouter_api_key = app_state.openrouter_api_key  # API key for LLM access
+    selected_model_name = app_state.last_selected_model  # User's last selected model (display name)
 
-    # Get the actual model ID from app state
+    # Resolve display name to actual model ID for OpenRouter API
+    # Models are stored as {display_name: model_id} in app_state.openrouter_models
     if app_state.openrouter_models and selected_model_name:
         selected_model = app_state.openrouter_models.get(selected_model_name)
     else:
+        # No models fetched yet - will trigger validation error on search
         selected_model = None
 
+    # ==================================================
+    # QUERY INPUT CONTROLS
+    # ==================================================
     st.markdown("#### 💬 Query")
 
+    # Three-column layout for basic query configuration
+    # Column widths [2, 1, 1] give more space to collection selector
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
+        # Collection selection - allows switching between prod and test without restarting app
         query_collection = st.selectbox("Collection", ["alexandria", "alexandria_test"])
     with col2:
+        # Domain filtering - narrow search to specific knowledge areas (e.g., data_modeling, devops)
+        # load_domains() reads from data/domains/ directory structure
         query_domain = st.selectbox("Domain Filter", ["all"] + load_domains())
     with col3:
+        # Limit final results returned to user (after filtering/reranking)
+        # Max 20 to prevent UI overload and excessive token usage
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
 
-    # Advanced query settings
+    # ==================================================
+    # ADVANCED SETTINGS (COLLAPSIBLE)
+    # ==================================================
+    # Expander keeps UI clean for basic users while power users can fine-tune
     with st.expander("⚙️ Advanced Settings"):
+        # First row: similarity threshold, fetch multiplier, reranking toggle
         col1, col2, col3 = st.columns(3)
         with col1:
+            # Similarity threshold filters out low-quality matches
+            # Lower = more results (potentially less relevant), Higher = fewer but more precise
+            # Default 0.5 balances recall and precision for most queries
             similarity_threshold = st.slider(
                 "Similarity Threshold",
                 min_value=0.0,
@@ -826,6 +862,10 @@ def render_query_tab():
                 help="Filter out results below this similarity score (0.0 = all results, 1.0 = only perfect matches)"
             )
         with col2:
+            # Fetch multiplier: retrieve (limit × multiplier) chunks from Qdrant BEFORE filtering
+            # Example: limit=5, multiplier=3 → fetch 15 chunks, then filter to top 5
+            # Why: Gives reranker and threshold filter more candidates to choose from
+            # Trade-off: Higher = better quality but slower and more token usage
             fetch_multiplier = st.number_input(
                 "Fetch Multiplier",
                 min_value=1,
@@ -834,16 +874,22 @@ def render_query_tab():
                 help="Fetch limit × N results from Qdrant for better filtering/reranking. Higher = better quality, slower. (Min fetch: 20)"
             )
         with col3:
+            # LLM reranking: Use another LLM to score relevance of retrieved chunks
+            # Why: Vector similarity != semantic relevance for complex queries
+            # Example: "What does Silverston say about X?" needs context understanding
             enable_reranking = st.checkbox(
                 "Enable LLM Reranking",
                 value=False,
                 help="Use LLM to rerank results by relevance (uses OpenRouter API, slower but more accurate)"
             )
 
-        # Second row for Temperature
-        st.markdown("")
+        # Second row: Temperature and conditional reranking model selector
+        st.markdown("")  # Spacing between rows
         col1, col2, col3 = st.columns(3)
         with col1:
+            # Temperature controls LLM answer generation creativity
+            # Lower (0.0-0.5): Factual, deterministic answers (better for knowledge retrieval)
+            # Higher (1.0-2.0): Creative, diverse answers (better for brainstorming)
             temperature = st.slider(
                 "Temperature",
                 min_value=0.0,
@@ -853,21 +899,32 @@ def render_query_tab():
                 help="Controls randomness. Lower = more focused, Higher = more creative"
             )
 
+            # ==================================================
+            # RERANKING MODEL SELECTION (CONDITIONAL)
+            # ==================================================
+            # Only show reranking model selector if reranking is enabled
+            # Placed in temperature column to keep layout balanced
             if enable_reranking:
-                # Use fetched models if available, otherwise use small hardcoded set
+                # Reuse models fetched from OpenRouter (same as main model selector)
+                # Fallback to warning message if user hasn't fetched models yet
                 if 'openrouter_models' in st.session_state and app_state.openrouter_models:
                     rerank_models = app_state.openrouter_models
                 else:
+                    # Placeholder dict - will trigger validation error if user tries to search
                     rerank_models = {
                         "⚠️ Fetch models first": None,
                     }
 
-                # Find default index for reranking model
+                # Restore last selected reranking model for convenience
+                # Separate from main model selection so users can use different models
+                # Example: Fast free model for reranking, expensive model for answer generation
                 default_rerank_index = 0
                 if 'last_selected_rerank_model' in st.session_state and app_state.last_selected_rerank_model in rerank_models:
                     try:
+                        # Find index of last selected model in current models list
                         default_rerank_index = list(rerank_models.keys()).index(app_state.last_selected_rerank_model)
                     except (ValueError, KeyError):
+                        # Model no longer available (e.g., removed from OpenRouter) - reset to first
                         default_rerank_index = 0
 
                 rerank_model_name = st.selectbox(
@@ -877,19 +934,31 @@ def render_query_tab():
                     help="Model used for relevance scoring (free models = slower but no cost)"
                 )
 
-                # Save last selected reranking model
+                # Persist reranking model selection across reruns
                 app_state.last_selected_rerank_model = rerank_model_name
+                # Resolve display name to model ID
                 rerank_model = rerank_models[rerank_model_name]
             else:
+                # Reranking disabled - don't pass model to query function
                 rerank_model = None
 
+    # ==================================================
+    # QUERY TEXT INPUT
+    # ==================================================
+    # Large text area encourages detailed questions for better RAG results
+    # Example placeholder guides users toward author-specific queries
     query = st.text_area(
         "Enter your question",
         placeholder="e.g., What does Silverston say about shipment patterns?",
         height=100
     )
 
+    # ==================================================
+    # SEARCH BUTTON AND VALIDATION
+    # ==================================================
     if st.button("🔍 Search", use_container_width=True):
+        # Validation chain: fail fast with clear error messages
+        # This prevents wasted API calls and confusing errors from downstream code
         if not query:
             st.warning("⚠️ Please enter a query.")
         elif not openrouter_api_key:
@@ -899,62 +968,92 @@ def render_query_tab():
         elif enable_reranking and not rerank_model:
             st.error("❌ Please fetch available models for reranking.")
         else:
+            # All validations passed - execute RAG query
             try:
-                # Call unified RAG query function from scripts/rag_query.py
+                # ==================================================
+                # RAG QUERY EXECUTION
+                # ==================================================
+                # Delegate to unified RAG query function (handles vector search, reranking, answer generation)
+                # This keeps UI code clean and allows CLI/API reuse of RAG logic
                 result = perform_rag_query(
                     query=query,
                     collection_name=query_collection,
                     limit=query_limit,
+                    # Convert "all" to None for qdrant_utils filter logic
                     domain_filter=query_domain if query_domain != "all" else None,
                     threshold=similarity_threshold,
                     enable_reranking=enable_reranking,
                     rerank_model=rerank_model if enable_reranking else None,
-                    generate_llm_answer=True,
+                    generate_llm_answer=True,  # Always generate answer in UI (CLI might skip this)
                     answer_model=selected_model,
                     openrouter_api_key=openrouter_api_key,
-                    host=qdrant_host,
+                    host=qdrant_host,  # Global config from main app
                     port=qdrant_port,
                     fetch_multiplier=fetch_multiplier,
                     temperature=temperature
                 )
 
-                # Check if search was successful
+                # ==================================================
+                # RESULT RENDERING
+                # ==================================================
+                # Handle three result states: error, no results, success
                 if result.error:
+                    # API key invalid, network error, Qdrant unavailable, etc.
                     st.error(f"❌ Error: {result.error}")
+                    # Contextual help for most common error (invalid API key)
                     st.info("💡 **Tip:** Make sure your OpenRouter API key is valid. Get one at https://openrouter.ai/keys")
                     st.info("🔑 Your API key should start with 'sk-or-v1-...'")
                 elif not result.sources:
+                    # Query succeeded but no chunks passed similarity threshold
+                    # Guide user to adjust threshold (common issue for niche queries)
                     st.warning(f"⚠️ No results above similarity threshold {similarity_threshold:.2f}. Try lowering the threshold.")
                 else:
-                    # Display search info
+                    # Success - display retrieval statistics for transparency
+                    # Users can validate that filtering/reranking worked as expected
                     st.info(f"🔍 Retrieved {result.initial_count} initial results from Qdrant")
                     if result.filtered_count < result.initial_count:
+                        # Show how many chunks were filtered out by threshold
                         st.info(f"🎯 Filtered to {result.filtered_count} results above threshold ({similarity_threshold:.2f})")
                     if enable_reranking:
+                        # Indicate reranking was applied (final count may differ from filtered count)
                         st.success(f"✅ Reranked to top {len(result.sources)} most relevant chunks")
                     else:
+                        # No reranking - show final count after threshold filtering
                         st.success(f"✅ Using top {len(result.sources)} filtered chunks")
 
-                    # Display answer
+                    # ==================================================
+                    # DISPLAY LLM-GENERATED ANSWER
+                    # ==================================================
+                    # Answer is synthesized from retrieved chunks using selected LLM
                     if result.answer:
                         st.markdown("---")
                         st.markdown("### 💡 Answer")
                         st.markdown(result.answer)
 
-                    # Display sources
+                    # ==================================================
+                    # DISPLAY SOURCE CHUNKS (PROVENANCE)
+                    # ==================================================
+                    # Show retrieved chunks so users can verify answer accuracy
+                    # Each source includes metadata (book, author, domain, section, relevance score)
                     st.markdown("---")
                     st.markdown("### 📚 Sources")
                     for idx, source in enumerate(result.sources, 1):
+                        # Expander keeps UI clean - users can inspect sources if needed
+                        # Header shows book title and relevance score for quick scanning
                         with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
                             st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
                             st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
                             st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
                             st.markdown("**Content:**")
+                            # Truncate long chunks to prevent UI overload
+                            # Users can click into book if they need full context
                             text = source.get('text', '')
                             st.text(text[:500] + "..." if len(text) > 500 else text)
 
             except Exception as e:
+                # Catch-all for unexpected errors (e.g., Qdrant connection loss mid-query)
                 st.error(f"❌ Error: {str(e)}")
+                # Show full traceback for debugging (helpful for reporting issues)
                 import traceback
                 st.code(traceback.format_exc())
 

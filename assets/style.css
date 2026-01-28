@@ -110,6 +110,76 @@
 }
 
 /* ============================================
+   SKELETON LOADER STYLES
+   Used for loading placeholders in tables
+   ============================================ */
+
+/* Skeleton shimmer animation */
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+/* Base skeleton element */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        #f0f0f0 0%,
+        #e0e0e0 20%,
+        #f0f0f0 40%,
+        #f0f0f0 100%
+    );
+    background-size: 1000px 100%;
+    animation: skeleton-shimmer 1.5s linear infinite;
+    border-radius: 4px;
+    display: inline-block;
+    width: 100%;
+    height: 1rem;
+}
+
+/* Skeleton table row container */
+.skeleton-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    align-items: center;
+}
+
+/* Skeleton table cell */
+.skeleton-cell {
+    background: linear-gradient(
+        90deg,
+        #f0f0f0 0%,
+        #e0e0e0 20%,
+        #f0f0f0 40%,
+        #f0f0f0 100%
+    );
+    background-size: 1000px 100%;
+    animation: skeleton-shimmer 1.5s linear infinite;
+    border-radius: 4px;
+    height: 1rem;
+    flex: 1;
+}
+
+/* Skeleton cell variations for different column widths */
+.skeleton-cell-small {
+    flex: 0.5;
+}
+
+.skeleton-cell-medium {
+    flex: 1;
+}
+
+.skeleton-cell-large {
+    flex: 2;
+}
+
+/* ============================================
    TERMINAL / MATRIX MODE (Dark Theme)
    Activated when user selects Dark mode
    ============================================ */

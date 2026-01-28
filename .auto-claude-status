@@ -3,7 +3,7 @@
   "spec": "008-fix-broken-documentation-links-in-readme-md",
   "state": "building",
   "subtasks": {
-    "completed": 3,
+    "completed": 4,
     "total": 5,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 5,
+    "number": 6,
     "started_at": "2026-01-28T03:02:16.481515"
   },
-  "last_update": "2026-01-28T03:13:08.821866"
+  "last_update": "2026-01-28T03:15:12.072061"
 }

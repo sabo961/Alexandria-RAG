@@ -169,6 +169,10 @@ Ingested data je automatski kompatibilan s Open WebUI:
 
 ## Troubleshooting
 
+**📚 For comprehensive troubleshooting, see [Troubleshooting Guide](../docs/how-to-guides/troubleshoot-ingestion.md)**
+
+**Quick Fixes:**
+
 ### Error: `ModuleNotFoundError: No module named 'ebooklib'`
 ```bash
 pip install EbookLib

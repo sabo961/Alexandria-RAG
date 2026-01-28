@@ -15,6 +15,9 @@ Learn how to monitor and debug the document ingestion process using Alexandria's
 ### [Configure Open WebUI Integration](./configure-open-webui.md)
 Step-by-step guide to connecting Alexandria with Open WebUI for an enhanced chat interface. Includes RAG configuration and troubleshooting.
 
+### [Troubleshoot Document Ingestion](./troubleshoot-ingestion.md)
+Diagnose and fix common ingestion errors including connection issues, file format problems, memory errors, and path limitations. Comprehensive troubleshooting guide with solutions and prevention strategies.
+
 ## What Makes a How-To Guide?
 
 How-to guides should:

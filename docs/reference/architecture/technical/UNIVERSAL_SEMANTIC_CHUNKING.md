@@ -238,17 +238,199 @@ else:
     current_sentences.append(sentence)
 ```
 
-**Flow Chart:**
+### Enhanced Decision Flowchart
+
+**Complete Algorithm Decision Tree (matches `universal_chunking.py` lines 82-97):**
+
 ```
-New Sentence
-    ↓
-Calculate similarity with previous sentence
-    ↓
-Is similarity < threshold?
-    ↓ Yes                      ↓ No
-Is buffer >= min_size?    Add to buffer
-    ↓ Yes        ↓ No           ↓
-Split here   Add to buffer  Continue
+                              START: Processing Sentence[i]
+                                          |
+                                          v
+                    +---------------------------------------------+
+                    |  Calculate cosine similarity between       |
+                    |  Embedding[i-1] and Embedding[i]          |
+                    +---------------------------------------------+
+                                          |
+                                          v
+                    +---------------------------------------------+
+                    |  Evaluate two split conditions:             |
+                    |                                             |
+                    |  should_break = (similarity < threshold)    |
+                    |                 AND                         |
+                    |                 (current_word_count >= min) |
+                    |                                             |
+                    |  must_break = (current_word_count +         |
+                    |                word_count > max)            |
+                    +---------------------------------------------+
+                                          |
+                                          v
+                          ┌───────────────┴───────────────┐
+                          │                               │
+                          v                               v
+              ┌───────────────────┐         ┌─────────────────────┐
+              │   must_break?     │         │   should_break?     │
+              │  (size overflow)  │         │ (semantic + size)   │
+              └───────────────────┘         └─────────────────────┘
+                      │                               │
+              ┌───────┴────────┐            ┌────────┴────────┐
+              │                │            │                 │
+            YES              NO             YES              NO
+              │                │            │                 │
+              v                │            v                 │
+      +--------------+         │    +--------------+          │
+      │ FORCE SPLIT  │         │    │ SEMANTIC     │          │
+      │ (safety cap) │         │    │ SPLIT        │          │
+      +--------------+         │    +--------------+          │
+              │                │            │                 │
+              v                │            v                 │
+      +--------------+         │    +--------------+          │
+      │ Finalize     │         │    │ Finalize     │          │
+      │ current      │         │    │ current      │          │
+      │ chunk        │         │    │ chunk        │          │
+      +--------------+         │    +--------------+          │
+              │                │            │                 │
+              v                │            v                 │
+      +--------------+         │    +--------------+          │
+      │ Start new    │         │    │ Start new    │          │
+      │ chunk with   │         │    │ chunk with   │          │
+      │ sentence[i]  │         │    │ sentence[i]  │          │
+      +--------------+         │    +--------------+          │
+              │                │            │                 │
+              │                │            │                 │
+              └────────────────┴────────────┘                 │
+                               │                              │
+                               v                              │
+                    ┌──────────────────┐                      │
+                    │ Continue to next │<─────────────────────┘
+                    │ sentence         │
+                    └──────────────────┘
+                               │
+                               v
+                    ┌──────────────────┐
+                    │  CONTINUE        │
+                    │  (add to buffer) │
+                    └──────────────────┘
+                               │
+                               v
+                    +-----------------------+
+                    | current_sentences.    |
+                    | append(sentence)      |
+                    |                       |
+                    | current_word_count    |
+                    | += word_count         |
+                    +-----------------------+
+                               |
+                               v
+                    ┌──────────────────────┐
+                    │ Process next sentence │
+                    │ (loop continues)      │
+                    └──────────────────────┘
+```
+
+### Decision Outcomes Explained
+
+**1. SEMANTIC SPLIT (should_break = True)**
+```
+Conditions met:
+  ✓ similarity < threshold (e.g., 0.22 < 0.5)
+  ✓ current_word_count >= min_chunk_size (e.g., 250 >= 200)
+
+Trigger: Topic boundary detected AND sufficient context accumulated
+Example: Philosophy sentences (sim=0.78) → Carpentry sentence (sim=0.22)
+Action: Finalize chunk, start new chunk with current sentence
+```
+
+**2. FORCE SPLIT (must_break = True)**
+```
+Conditions met:
+  ✓ current_word_count + word_count > max_chunk_size
+
+Trigger: Adding sentence would exceed maximum size limit
+Example: Buffer has 1450 words, next sentence has 100 words → 1550 > 1500
+Action: Finalize chunk IMMEDIATELY (safety cap), start new chunk
+Note: Overrides similarity check (even if similarity is high)
+```
+
+**3. CONTINUE (both conditions False)**
+```
+Conditions:
+  ✗ similarity >= threshold (e.g., 0.78 >= 0.5) - same topic
+  OR
+  ✗ current_word_count < min_chunk_size (e.g., 150 < 200) - insufficient buffer
+
+Action: Add sentence to current buffer, continue accumulating
+Example: Two philosophy sentences with similarity=0.78 stay together
+```
+
+### Precedence Rules
+
+**Priority order (checked in code at line 89):**
+1. **must_break** takes precedence (checked first via OR operator)
+2. **should_break** checked second
+3. **Both false** → CONTINUE
+
+**Critical logic:**
+```python
+if should_break or must_break:  # Either condition triggers split
+    # SPLIT happens here
+else:
+    # CONTINUE happens here
+```
+
+### Real-World Examples
+
+**Example 1: Semantic Split**
+```
+Buffer: "Philosophy is the study of fundamental questions..." (250 words)
+Next sentence: "In contrast, carpentry is a skilled trade..." (18 words)
+Similarity: 0.22 (< 0.5 threshold)
+Buffer size: 250 (>= 200 min)
+
+Decision Path:
+  should_break = (0.22 < 0.5) AND (250 >= 200) = True
+  must_break = (250 + 18 > 1500) = False
+  Result: SEMANTIC SPLIT (topic boundary detected)
+```
+
+**Example 2: Force Split**
+```
+Buffer: Long homogeneous technical text (1480 words)
+Next sentence: "The normalization process continues..." (30 words)
+Similarity: 0.85 (high - same topic!)
+Buffer size: 1480
+
+Decision Path:
+  should_break = (0.85 < 0.5) AND (1480 >= 200) = False
+  must_break = (1480 + 30 > 1500) = True
+  Result: FORCE SPLIT (safety cap prevents runaway chunk)
+```
+
+**Example 3: Continue (High Similarity)**
+```
+Buffer: "Database normalization reduces redundancy." (5 words)
+Next sentence: "First normal form requires atomic values." (7 words)
+Similarity: 0.78 (high - same topic)
+Buffer size: 220 words
+
+Decision Path:
+  should_break = (0.78 < 0.5) AND (220 >= 200) = False
+  must_break = (220 + 7 > 1500) = False
+  Result: CONTINUE (similar topics stay together)
+```
+
+**Example 4: Continue (Insufficient Buffer)**
+```
+Buffer: "Nietzsche was a German philosopher." (50 words)
+Next sentence: "Renaissance art flourished in Italy." (5 words)
+Similarity: 0.15 (low - different topics!)
+Buffer size: 50 words
+
+Decision Path:
+  should_break = (0.15 < 0.5) AND (50 >= 200) = False (buffer too small!)
+  must_break = (50 + 5 > 1500) = False
+  Result: CONTINUE (min_chunk_size overrides similarity threshold)
+
+Note: This prevents fragmentary chunks even when topics differ
 ```
 
 ---

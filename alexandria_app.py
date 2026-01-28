@@ -1264,52 +1264,71 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             st.session_state[diagnostic_key] = True  # Set flag even on error
         pass  # Manifest doesn't exist yet or collection not created
 
-    # Get all formats
+    # Extract all available formats from books for filter dropdown
+    # Using set ensures each format appears only once in the filter options
     all_formats = set()
     for book in all_books:
         all_formats.update(book.formats)
 
-    # Filters
+    # Render filter controls in 4-column layout
+    # Each filter input has a unique key to preserve state across fragment reruns
     st.markdown("#### 🔍 Filters")
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
 
     with filter_col1:
+        # Text input for author name (case-insensitive partial match)
         author_search = st.text_input("Author", placeholder="e.g., Mishima", key="calibre_author_search")
 
     with filter_col2:
+        # Text input for book title (case-insensitive partial match)
         title_search = st.text_input("Title", placeholder="e.g., Steel", key="calibre_title_search")
 
     with filter_col3:
-        # Get available languages
+        # Extract unique languages from all books (filter out None/empty values)
+        # Multiselect allows filtering by multiple languages simultaneously
         available_languages = sorted(set(b.language for b in all_books if b.language))
         language_filter = st.multiselect("Language", options=available_languages, key="calibre_language_filter")
 
     with filter_col4:
-        # Get available formats
+        # Multiselect for file formats (epub, pdf, mobi, etc.)
+        # Users can select multiple formats to see books available in any of them
         format_options = sorted(all_formats)
         format_filter = st.multiselect("Format", options=format_options, key="calibre_format_filter")
 
-    # Apply filters
+    # Apply filters sequentially - each filter narrows down the result set
+    # Start with all books and progressively filter based on user input
     filtered_books = all_books
 
+    # Author filter: case-insensitive substring match
+    # Example: "mishima" matches "Yukio Mishima"
     if author_search:
         filtered_books = [b for b in filtered_books if author_search.lower() in b.author.lower()]
 
+    # Title filter: case-insensitive substring match
+    # Example: "steel" matches "The Decay of the Angel"
     if title_search:
         filtered_books = [b for b in filtered_books if title_search.lower() in b.title.lower()]
 
+    # Language filter: exact match against selected languages
+    # Only applied if user selected at least one language
     if language_filter:
         filtered_books = [b for b in filtered_books if b.language in language_filter]
 
+    # Format filter: book must have at least one of the selected formats
+    # Example: selecting ["epub", "pdf"] shows books with epub OR pdf (or both)
     if format_filter:
         filtered_books = [b for b in filtered_books if any(fmt in b.formats for fmt in format_filter)]
 
-    # Sort options
+    # Display filter results summary and sort controls
+    # Column layout: wider info panel (3 units) + narrower sort dropdown (1 unit)
     sort_col1, sort_col2 = st.columns([3, 1])
     with sort_col1:
+        # Show count of filtered vs total books (e.g., "Showing 42 of 1,234 books")
         st.info(f"📚 Showing {len(filtered_books):,} of {len(all_books):,} books")
 
     with sort_col2:
+        # Sort dropdown with common sorting options
+        # Default sort is by date added (newest first) for Calibre workflow
         sort_by = st.selectbox("Sort by", [
             "Date Added (newest)",
             "Date Added (oldest)",
@@ -1319,116 +1338,145 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             "Author (Z-A)"
         ], key="calibre_sort")
 
-    # Apply sorting
+    # Apply selected sorting to filtered book list
+    # Uses lambda for dynamic sort key extraction with case-insensitive string sorting
     if "newest" in sort_by:
+        # Most recent additions first (Calibre timestamp is ISO format, sortable as string)
         filtered_books = sorted(filtered_books, key=lambda x: x.timestamp, reverse=True)
     elif "oldest" in sort_by:
+        # Oldest additions first
         filtered_books = sorted(filtered_books, key=lambda x: x.timestamp)
     elif "Title (A-Z)" in sort_by:
+        # Alphabetical by title (case-insensitive)
         filtered_books = sorted(filtered_books, key=lambda x: x.title.lower())
     elif "Title (Z-A)" in sort_by:
+        # Reverse alphabetical by title
         filtered_books = sorted(filtered_books, key=lambda x: x.title.lower(), reverse=True)
     elif "Author (A-Z)" in sort_by:
+        # Alphabetical by author (case-insensitive)
         filtered_books = sorted(filtered_books, key=lambda x: x.author.lower())
     elif "Author (Z-A)" in sort_by:
+        # Reverse alphabetical by author
         filtered_books = sorted(filtered_books, key=lambda x: x.author.lower(), reverse=True)
 
-    # Track filter state to detect changes and show skeleton on large datasets
+    # Track filter state to detect changes and show loading skeleton
+    # Tuple is hashable and immutable, perfect for state comparison
+    # Convert lists to tuples since lists aren't hashable
     current_filter_state = (
         author_search,
         title_search,
-        tuple(language_filter) if language_filter else (),
+        tuple(language_filter) if language_filter else (),  # Empty tuple if no filters selected
         tuple(format_filter) if format_filter else (),
         sort_by
     )
 
-    # Check if filters changed (to show brief skeleton flash)
+    # Compare with previous filter state to detect user changes
+    # When filters change on large datasets, show brief skeleton for visual feedback
     previous_filter_state = st.session_state.get("calibre_filter_state")
     filters_changed = previous_filter_state != current_filter_state
     st.session_state["calibre_filter_state"] = current_filter_state
 
-    # Create table container for skeleton/actual table rendering
+    # Create empty container that will hold either skeleton or actual table
+    # Using st.empty() allows us to replace content without adding extra DOM elements
     table_container = st.empty()
 
     # Show skeleton flash for large datasets when filters change
-    # This provides visual feedback during fragment reruns
+    # Threshold of 100 books prevents skeleton flash on small datasets (where it's instant anyway)
+    # Provides visual feedback that the filter is being applied
     if filters_changed and len(filtered_books) > 100:
         with table_container.container():
             render_table_skeleton(rows=5)
 
-    # Display as DataFrame with pagination
+    # Display filtered books as paginated DataFrame
     if filtered_books:
-        # Clear skeleton before rendering actual table
+        # Clear skeleton (if shown) before rendering actual table
         table_container.empty()
 
-        # AppState already initializes calibre_selected_books, no need to reset it here
+        # calibre_selected_books already initialized in AppState, persists across reruns
+        # Don't reset it here or user selections will be lost
 
-        # Pagination controls at top
+        # Pagination controls at top - 3-column layout for rows selector, page info, and spacing
         pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
 
         with pagination_col1:
+            # Rows per page selector - default to 50 (index=1)
+            # Persisted via session_state key so selection survives page navigation
             rows_per_page = st.selectbox(
                 "Rows",
                 options=[20, 50, 100, 200],
-                index=1,  # Default to 50
+                index=1,  # Default to 50 rows
                 key="calibre_rows_per_page"
             )
 
-        # Initialize current page in session state
+        # Initialize current page to 1 on first load
+        # Check session_state directly since AppState may not have initialized this yet
         if 'calibre_current_page' not in st.session_state:
             app_state.calibre_current_page = 1
 
-        # Calculate total pages
+        # Calculate total pages using ceiling division
+        # Formula: (total + per_page - 1) // per_page handles remainder without importing math.ceil
         total_books = len(filtered_books)
         total_pages: int = (total_books + rows_per_page - 1) // rows_per_page
 
-        # Ensure current page is always an int within bounds
+        # Validate and clamp current page to valid range [1, total_pages]
+        # Defensive: handle non-int values that might get into session_state
         raw_page = st.session_state.get('calibre_current_page')
         try:
             current_page: int = int(raw_page) if raw_page is not None else 1
         except (TypeError, ValueError):
+            # Fallback to page 1 if session_state contains invalid value
             current_page = 1
 
+        # Clamp to valid range (handles edge cases like filter changes reducing total pages)
         current_page = max(1, min(current_page, total_pages))
         app_state.calibre_current_page = current_page
 
         with pagination_col2:
+            # Center-aligned page info (e.g., "Page 2 of 10 (487 total)")
             st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
 
-        # Calculate slice for current page
+        # Calculate array slice indices for current page
+        # Zero-indexed: page 1 shows [0:50], page 2 shows [50:100], etc.
         start_idx = (current_page - 1) * rows_per_page
-        end_idx = min(start_idx + rows_per_page, total_books)
+        end_idx = min(start_idx + rows_per_page, total_books)  # Clamp to avoid out-of-bounds
 
-        # Build DataFrame for current page with global row numbers
+        # Build DataFrame rows for current page slice
+        # Each row represents one book with metadata and selection state
         df_data = []
-        selected_ids = app_state.calibre_selected_books
+        selected_ids = app_state.calibre_selected_books  # Set of book IDs selected for ingestion
+
         for idx, book in enumerate(filtered_books[start_idx:end_idx]):
-            # Format icons
+            # Map file formats to visual icons for quick recognition
+            # Icons appear in unnamed column for compact visual format indicator
             format_icons = []
             if 'epub' in book.formats:
-                format_icons.append('📕')
+                format_icons.append('📕')  # EPUB = book emoji
             if 'pdf' in book.formats:
-                format_icons.append('📄')
+                format_icons.append('📄')  # PDF = document emoji
             if 'mobi' in book.formats or 'azw3' in book.formats:
-                format_icons.append('📱')
+                format_icons.append('📱')  # Kindle formats = mobile emoji
             if 'txt' in book.formats or 'md' in book.formats:
-                format_icons.append('📝')
+                format_icons.append('📝')  # Plain text formats = memo emoji
 
-            # Series info
+            # Format series information (e.g., "The Sea of Fertility #3")
+            # Empty string if book is not part of a series
             series_info = f"{book.series} #{book.series_index:.0f}" if book.series else ""
 
-            # Global row number (1-based)
+            # Calculate global row number across all pages (1-based for human readability)
+            # Example: Page 2 with 50 rows/page starts at row 51
             global_row_num = start_idx + idx + 1
 
-            # Check if this book is already ingested
-            # book.path from Calibre is the book directory: Author/Book (ID)
-            # ingested_file_paths contains directories extracted from manifest file paths
+            # Check if book already exists in Qdrant collection
+            # Match logic: normalize both paths to lowercase POSIX format and compare directories
+            # book.path from Calibre: "Author/Book (ID)" (relative directory path)
+            # ingested_file_paths: set of normalized directories from manifest
             book_path = Path(book.path).as_posix().lower()
             is_already_ingested = book_path in ingested_file_paths
 
-            # Debug: Show first 3 checks (only if we logged manifest diagnostics this render)
+            # Diagnostic logging: show first 3 book path matching operations
+            # Only logs if diagnostics enabled AND manifest diagnostics were logged this render
             if should_log_diagnostics and idx < 3:
-                if idx == 0:  # Add header before first check
+                if idx == 0:  # Add section header before first book
                     st.session_state["diagnostic_log"].append(f"\n📖 **Calibre Book Matching:**")
                 st.session_state["diagnostic_log"].append(f"  • Book {idx+1}: {book.title[:40]}")
                 st.session_state["diagnostic_log"].append(f"    → Raw path: {book.path}")
@@ -1437,72 +1485,111 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                 if is_already_ingested:
                     st.session_state["diagnostic_log"].append(f"    ✓ MATCH FOUND")
 
+            # Construct DataFrame row with all columns
+            # Select column: checkbox showing current selection state (True if book.id in selected_ids)
+            # Id column: hidden from display but needed for tracking selections
             df_data.append({
-                'Select': book.id in selected_ids,
-                'Id': book.id,
-                '#': global_row_num,
-                '': ' '.join(format_icons) if format_icons else '📄',
-                'Status': '✓ Ingested' if is_already_ingested else '',
-                'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,
-                'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,
-                'Language': book.language.upper(),
-                'Series': series_info,
-                'Formats': ', '.join(book.formats[:3]),
-                'Added': book.timestamp[:10]
+                'Select': book.id in selected_ids,  # Checkbox state
+                'Id': book.id,  # Hidden column (used in form submission handler)
+                '#': global_row_num,  # Global row number
+                '': ' '.join(format_icons) if format_icons else '📄',  # Format icons (unnamed column)
+                'Status': '✓ Ingested' if is_already_ingested else '',  # Ingestion status indicator
+                'Title': book.title[:60] + '...' if len(book.title) > 60 else book.title,  # Truncated title
+                'Author': book.author[:30] + '...' if len(book.author) > 30 else book.author,  # Truncated author
+                'Language': book.language.upper(),  # Language code in uppercase
+                'Series': series_info,  # Series name and index (or empty)
+                'Formats': ', '.join(book.formats[:3]),  # First 3 formats (comma-separated)
+                'Added': book.timestamp[:10]  # Date added (YYYY-MM-DD)
             })
 
+        # Convert list of dicts to pandas DataFrame for st.data_editor
         df = pd.DataFrame(df_data)
+
+        # Get reset token to force form re-render when needed (e.g., after clearing selections)
+        # Incrementing this token creates a new form with a different key, resetting internal state
         table_reset_token = st.session_state.get("calibre_table_reset", 0)
+
+        # Wrap data_editor in a form to batch checkbox changes
+        # Without form: each checkbox toggle causes immediate rerun (poor UX on large tables)
+        # With form: user makes multiple selections, then clicks "Update Selection" once
         with st.form(key=f"calibre_table_form_{current_page}_{table_reset_token}"):
-            row_height_px = 35
-            header_height_px = 38
-            table_padding_px = 12
-            max_table_height = 500
+            # Calculate dynamic table height based on number of rows
+            # Prevents excessive whitespace on small pages while capping max height
+            row_height_px = 35  # Height per data row
+            header_height_px = 38  # Height of column headers
+            table_padding_px = 12  # Top/bottom padding
+            max_table_height = 500  # Maximum height before scrolling
             dynamic_table_height = min(
                 max_table_height,
                 header_height_px + (row_height_px * max(len(df), 1)) + table_padding_px
             )
+
+            # Render interactive data table with checkboxes
+            # data_editor returns edited DataFrame when form is submitted
             edited_df = st.data_editor(
                 df,
-                use_container_width=True,
-                height=dynamic_table_height,
-                hide_index=True,
+                use_container_width=True,  # Expand to fill available width
+                height=dynamic_table_height,  # Dynamic height based on row count
+                hide_index=True,  # Hide pandas index column
                 column_config={
-                    "Select": st.column_config.CheckboxColumn(required=True),
-                    "Id": None,
+                    "Select": st.column_config.CheckboxColumn(required=True),  # Make Select column a checkbox
+                    "Id": None,  # Hide Id column (but keep in DataFrame for submission handler)
                     "Status": st.column_config.TextColumn(
                         "Status",
-                        width="small",
-                        help="Shows if book is already ingested to Qdrant"
+                        width="small",  # Narrow column width
+                        help="Shows if book is already ingested to Qdrant"  # Tooltip on hover
                     )
                 },
-                disabled=df.columns.drop(["Select"]),
-                key=f"calibre_table_editor_{current_page}_{table_reset_token}"
+                disabled=df.columns.drop(["Select"]),  # Only Select column is editable
+                key=f"calibre_table_editor_{current_page}_{table_reset_token}"  # Unique key per page/reset
             )
+
+            # Form submit button - triggers selection update handler
             apply_selection = st.form_submit_button("✅ Update Selection")
 
+        # Handle form submission - update global selection state with page edits
         if apply_selection:
+            # Get all book IDs on current page (regardless of selection state)
             page_ids = set(edited_df["Id"].tolist())
+
+            # Get IDs of books selected on this page (where Select checkbox is True)
             page_selected_ids = set(edited_df.loc[edited_df["Select"], "Id"].tolist())
+
+            # Merge page selections with global selection state
+            # 1. Start with existing global selections
             updated_selected_ids = set(app_state.calibre_selected_books)
+
+            # 2. Remove all IDs from current page (clear old page selections)
             updated_selected_ids.difference_update(page_ids)
+
+            # 3. Add back the newly selected IDs from current page
             updated_selected_ids.update(page_selected_ids)
+
             # CRITICAL: Write directly to session_state to ensure persistence across reruns
+            # app_state is a reference to session_state.app_state, so this persists properly
             st.session_state.app_state.calibre_selected_books = updated_selected_ids
-            st.rerun()  # Refresh to show ingestion section with updated selection
 
-        # Pagination controls
+            # Force full rerun to update ingestion section with new selection count
+            st.rerun()
+
+        # Bottom pagination navigation - Previous/Next buttons
+        # Add spacing before pagination controls
         st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
-        st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)
+        st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)  # CSS class for custom styling
 
+        # 3-column layout: narrow columns for buttons, wide center for page info
         nav_col1, nav_col2, nav_col3 = st.columns([0.3, 6, 0.3])
 
         with nav_col1:
+            # Previous page button - only shown if not on first page
+            # Decrement current_page and rerun to navigate backwards
             if current_page > 1 and st.button("←", key="calibre_prev", type="secondary"):
                 app_state.calibre_current_page -= 1
                 st.rerun()
 
         with nav_col2:
+            # Center-aligned page info showing current row range and page numbers
+            # Example: "Rows 51–100 of 487 | Page 2 of 10"
             st.markdown(
                 f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
                 f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
@@ -1511,13 +1598,16 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             )
 
         with nav_col3:
+            # Next page button - only shown if not on last page
+            # Increment current_page and rerun to navigate forward
             if current_page < total_pages and st.button("→", key="calibre_next", type="secondary"):
                 app_state.calibre_current_page += 1
                 st.rerun()
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)  # Close pagination-nav div
     else:
-        # Clear skeleton if no books match filters
+        # No books match the current filters
+        # Clear skeleton (if shown) and table_container will remain empty
         table_container.empty()
 
 # Check for archives to conditionally show the Restore tab

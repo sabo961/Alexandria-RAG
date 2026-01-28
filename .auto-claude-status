@@ -3,7 +3,7 @@
   "spec": "010-create-troubleshooting-guide-for-common-ingestion-",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 3,
     "total": 4,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 5,
     "started_at": "2026-01-28T03:02:11.115020"
   },
-  "last_update": "2026-01-28T03:13:37.853313"
+  "last_update": "2026-01-28T03:17:45.623801"
 }

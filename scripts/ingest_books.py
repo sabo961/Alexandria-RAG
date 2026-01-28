@@ -306,12 +306,39 @@ class EmbeddingGenerator:
         return cls._instance
 
     def get_model(self, model_name: str = 'all-MiniLM-L6-v2'):
+        """
+        Lazy-load and return the SentenceTransformer embedding model.
+
+        Loads the model on first call and caches it for subsequent requests.
+        This prevents redundant model loading and reduces memory overhead.
+
+        Args:
+            model_name: HuggingFace model identifier (default: 'all-MiniLM-L6-v2').
+                       Supports any model from sentence-transformers library.
+
+        Returns:
+            SentenceTransformer: Cached model instance ready for encoding text.
+        """
         if self._model is None:
             logger.info(f"Loading embedding model: {model_name}")
             self._model = SentenceTransformer(model_name)
         return self._model
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate vector embeddings for a batch of text strings.
+
+        Converts text into dense vector representations using the cached
+        SentenceTransformer model. Progress bars are disabled to prevent
+        stderr conflicts in Streamlit environments.
+
+        Args:
+            texts: List of text strings to encode (e.g., chunks, sentences).
+
+        Returns:
+            List of embedding vectors, where each vector is a list of floats
+            with dimensionality matching the model (384 for all-MiniLM-L6-v2).
+        """
         model = self.get_model()
         # Disable ALL progress bars to avoid sys.stderr issues in Streamlit environment
         # tqdm progress bar causes [Errno 22] when sys.stderr is not available

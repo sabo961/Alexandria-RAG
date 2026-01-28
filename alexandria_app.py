@@ -1197,8 +1197,34 @@ def render_calibre_filters_and_table(all_books, calibre_db):
     elif "Author (Z-A)" in sort_by:
         filtered_books = sorted(filtered_books, key=lambda x: x.author.lower(), reverse=True)
 
+    # Track filter state to detect changes and show skeleton on large datasets
+    current_filter_state = (
+        author_search,
+        title_search,
+        tuple(language_filter) if language_filter else (),
+        tuple(format_filter) if format_filter else (),
+        sort_by
+    )
+
+    # Check if filters changed (to show brief skeleton flash)
+    previous_filter_state = st.session_state.get("calibre_filter_state")
+    filters_changed = previous_filter_state != current_filter_state
+    st.session_state["calibre_filter_state"] = current_filter_state
+
+    # Create table container for skeleton/actual table rendering
+    table_container = st.empty()
+
+    # Show skeleton flash for large datasets when filters change
+    # This provides visual feedback during fragment reruns
+    if filters_changed and len(filtered_books) > 100:
+        with table_container.container():
+            render_table_skeleton(rows=5)
+
     # Display as DataFrame with pagination
     if filtered_books:
+        # Clear skeleton before rendering actual table
+        table_container.empty()
+
         # AppState already initializes calibre_selected_books, no need to reset it here
 
         # Pagination controls at top
@@ -1354,6 +1380,9 @@ def render_calibre_filters_and_table(all_books, calibre_db):
                 st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        # Clear skeleton if no books match filters
+        table_container.empty()
 
 # Check for archives to conditionally show the Restore tab
 archive_dir = Path(__file__).parent / 'logs' / 'deleted'

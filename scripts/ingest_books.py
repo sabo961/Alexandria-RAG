@@ -403,8 +403,36 @@ def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
 
 def extract_metadata_only(filepath: str) -> Dict:
     """
-    Extracts only metadata (title, author, language) from a file without processing content.
-    Returns: Dict with 'title', 'author', 'language', 'format', or 'error' if unsupported/failed.
+    Extract book metadata without processing full text content.
+
+    Efficiently retrieves metadata (title, author, language, format) from book files
+    without performing full text extraction or chunking. Supports EPUB, PDF, TXT, and
+    Markdown formats. Automatically enriches metadata from Calibre library if available.
+
+    The function performs path normalization with Windows long path support, validates
+    file accessibility, extracts basic metadata from the file format, and optionally
+    enriches it with Calibre library data when a matching book is found.
+
+    Args:
+        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
+                 Can be relative, absolute, or use ~ for home directory.
+
+    Returns:
+        Dictionary containing either metadata or error information:
+            On success:
+                - title (str): Book title from file metadata or Calibre
+                - author (str): Author name from file metadata or Calibre
+                - language (str): Standardized language code (e.g., 'en', 'hr')
+                - format (str): File format ('EPUB', 'PDF', or 'TXT')
+                - filepath (str): Normalized absolute path to the file
+            On error:
+                - error (str): Error message describing the failure
+                - filepath (str): Normalized absolute path to the file
+
+    Note:
+        This function is optimized for metadata-only extraction and does not
+        perform text chunking or embedding generation, making it suitable for
+        preview, validation, or batch metadata collection workflows.
     """
     normalized_path, display_path, _, _ = normalize_file_path(filepath)
 

@@ -1063,51 +1063,74 @@ def render_query_tab():
 @st.fragment
 def render_ingested_books_filters_and_table(books, collection_data, selected_collection):
     """Isolated Ingested Books filters and table - prevents full app rerun on filter interactions"""
-    # Filters
+    # Render filter controls in 4-column layout
+    # Each filter has a unique key to preserve state across fragment reruns
     st.markdown("#### 🔍 Filters")
     ing_filter_col1, ing_filter_col2, ing_filter_col3, ing_filter_col4 = st.columns(4)
 
     with ing_filter_col1:
+        # Text input for author name (case-insensitive partial match)
         ing_author_search = st.text_input("Author", placeholder="e.g., Mishima", key="ingested_author_search")
 
     with ing_filter_col2:
+        # Text input for book title (case-insensitive partial match)
         ing_title_search = st.text_input("Title", placeholder="e.g., Steel", key="ingested_title_search")
 
     with ing_filter_col3:
+        # Extract unique languages from ingested books (with fallback to 'unknown')
+        # Multiselect allows filtering by multiple languages simultaneously
         available_langs = sorted(set(b.get('language', 'unknown') for b in books))
         ing_language_filter = st.multiselect("Language", options=available_langs, key="ingested_language_filter")
 
     with ing_filter_col4:
+        # Extract unique domains from ingested books (e.g., 'philosophy', 'fiction')
+        # Domain is a required field in the manifest, so no fallback needed
         available_domains = sorted(set(b['domain'] for b in books))
         ing_domain_filter = st.multiselect("Domain", options=available_domains, key="ingested_domain_filter")
 
-    # Format filter (separate row)
+    # Format filter in separate row for better visual layout
+    # Covers common ebook and text formats supported by the ingestion pipeline
     ing_format_filter = st.multiselect("Format", options=['EPUB', 'PDF', 'TXT', 'MD', 'MOBI'], key="ingested_format_filter")
 
-    # Apply filters
+    # Apply filters sequentially - each filter narrows down the result set
+    # Start with all ingested books and progressively filter based on user input
     filtered_books = books
 
+    # Author filter: case-insensitive substring match
+    # Example: "mishima" matches "Yukio Mishima"
     if ing_author_search:
         filtered_books = [b for b in filtered_books if ing_author_search.lower() in b['author'].lower()]
 
+    # Title filter: case-insensitive substring match
+    # Example: "steel" matches "The Decay of the Angel"
     if ing_title_search:
         filtered_books = [b for b in filtered_books if ing_title_search.lower() in b['book_title'].lower()]
 
+    # Language filter: exact match against selected languages
+    # Only applied if user selected at least one language
     if ing_language_filter:
         filtered_books = [b for b in filtered_books if b.get('language', 'unknown') in ing_language_filter]
 
+    # Domain filter: exact match against selected domains
+    # Example: selecting ["philosophy", "science"] shows only books in those domains
     if ing_domain_filter:
         filtered_books = [b for b in filtered_books if b['domain'] in ing_domain_filter]
 
+    # Format filter: match file type from manifest or extract from filename
+    # Falls back to extracting extension if file_type field not in manifest
     if ing_format_filter:
         filtered_books = [b for b in filtered_books if b.get('file_type', PathLib(b['file_name']).suffix.upper().replace('.', '')) in ing_format_filter]
 
-    # Sort options
+    # Display filter results summary and sort controls
+    # Column layout: wider info panel (3 units) + narrower sort dropdown (1 unit)
     ing_sort_col1, ing_sort_col2 = st.columns([3, 1])
     with ing_sort_col1:
+        # Show count of filtered vs total books (e.g., "Showing 42 of 250 books")
         st.info(f"📚 Showing {len(filtered_books)} of {len(books)} books")
 
     with ing_sort_col2:
+        # Sort dropdown with common sorting options for ingested books
+        # Default sort is by ingestion date (newest first) to see recent additions
         ing_sort_by = st.selectbox("Sort by", [
             "Ingested (newest)",
             "Ingested (oldest)",
@@ -1117,62 +1140,88 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
             "Size (largest)"
         ], key="ingested_sort")
 
-    # Apply sorting
+    # Apply sorting based on selected option
+    # Uses lambda functions to extract sort keys from book dictionaries
     if "newest" in ing_sort_by:
+        # Sort by ingestion timestamp (ISO format: YYYY-MM-DDTHH:MM:SS)
+        # Reverse=True puts newest timestamps first
         filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'], reverse=True)
     elif "oldest" in ing_sort_by:
+        # Sort by ingestion timestamp, oldest first (chronological order)
         filtered_books = sorted(filtered_books, key=lambda x: x['ingested_at'])
     elif "Title" in ing_sort_by:
+        # Alphabetical sort by title (case-insensitive via .lower())
         filtered_books = sorted(filtered_books, key=lambda x: x['book_title'].lower())
     elif "Author" in ing_sort_by:
+        # Alphabetical sort by author name (case-insensitive)
         filtered_books = sorted(filtered_books, key=lambda x: x['author'].lower())
     elif "Chunks" in ing_sort_by:
+        # Sort by chunk count (higher = more granular indexing)
+        # Reverse=True shows books with most chunks first (useful for debugging chunking strategy)
         filtered_books = sorted(filtered_books, key=lambda x: x['chunks_count'], reverse=True)
     elif "Size" in ing_sort_by:
+        # Sort by file size in MB (largest first)
+        # Useful for identifying large books that may need optimization
         filtered_books = sorted(filtered_books, key=lambda x: x['file_size_mb'], reverse=True)
 
-    # Display as DataFrame
+    # Build and display DataFrame table of ingested books
+    # DataFrame provides sortable/searchable view with rich formatting
     if filtered_books:
         df_data = []
+        # Enumerate to add row numbers (starting from 1 for user-facing display)
         for idx, book in enumerate(filtered_books, start=1):
-            # Get file type
+            # Extract file type from manifest or derive from filename extension
+            # Manifest stores file_type as uppercase string (e.g., 'EPUB', 'PDF')
             file_type = book.get('file_type')
             if not file_type:
+                # Fallback: extract extension from filename (e.g., 'book.epub' → 'EPUB')
                 file_type = PathLib(book['file_name']).suffix.upper().replace('.', '')
 
-            # Icon
+            # Map file type to visual icon for quick format recognition
+            # Defaults to generic document icon (📄) for unknown formats
             icon = {'EPUB': '📕', 'PDF': '📄', 'TXT': '📝', 'MD': '📝', 'MOBI': '📱'}.get(file_type, '📄')
 
-            # Language with fallback
+            # Language display with fallback to 'unknown' (uppercase for consistency)
             language = book.get('language', 'unknown').upper()
 
+            # Build row dictionary with display-friendly formatting
             df_data.append({
-                '#': idx,
-                '': icon,
-                'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],
-                'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],
-                'Lang': language,
-                'Domain': book['domain'],
-                'Type': file_type,
-                'Chunks': book['chunks_count'],
-                'Size (MB)': f"{book['file_size_mb']:.2f}",
-                'Ingested': book['ingested_at'][:10]
+                '#': idx,  # Row number for reference
+                '': icon,  # Visual format indicator (empty column header for icon-only display)
+                'Title': book['book_title'][:50] + '...' if len(book['book_title']) > 50 else book['book_title'],  # Truncate long titles
+                'Author': book['author'][:30] + '...' if len(book['author']) > 30 else book['author'],  # Truncate long author names
+                'Lang': language,  # ISO language code or 'UNKNOWN'
+                'Domain': book['domain'],  # Knowledge domain (e.g., 'philosophy', 'science')
+                'Type': file_type,  # File format (EPUB, PDF, etc.)
+                'Chunks': book['chunks_count'],  # Number of text chunks in vector DB
+                'Size (MB)': f"{book['file_size_mb']:.2f}",  # File size formatted to 2 decimals
+                'Ingested': book['ingested_at'][:10]  # Extract date portion of ISO timestamp (YYYY-MM-DD)
             })
 
+        # Convert list of dicts to pandas DataFrame for Streamlit's dataframe component
         df = pd.DataFrame(df_data)
+        # Render as interactive table (sortable columns, scrollable)
+        # height=600 provides enough rows visible without excessive scrolling
+        # hide_index=True removes pandas' default numeric index (we have our own '#' column)
         st.dataframe(df, use_container_width=True, height=600, hide_index=True)
     else:
+        # Show warning if no books match the current filter combination
         st.warning("No books match the filters.")
 
     # Export button and Management Section
+    # Horizontal rule separates data view from management actions
     st.markdown("---")
     manage_col1, manage_col2 = st.columns([1, 3])
 
     with manage_col1:
+        # Provide CSV export of collection manifest for external analysis
+        # CSV manifest contains all book metadata in spreadsheet-friendly format
         csv_file = PathLib(f'logs/{selected_collection}_manifest.csv')
         if csv_file.exists():
+            # Read CSV file contents for download
             with open(csv_file, 'r', encoding='utf-8') as f:
                 csv_data = f.read()
+            # Download button triggers browser download (doesn't reload page)
             st.download_button(
                 label="📥 Download CSV",
                 data=csv_data,
@@ -1181,32 +1230,45 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                 use_container_width=True
             )
 
+    # Collection Management Expander - DANGER ZONE for deletion operations
+    # Collapsed by default to prevent accidental clicks
     with st.expander("⚙️ Collection Management"):
+        # Warning banner to signal destructive operations
         st.warning(f"**DANGER ZONE:** Actions performed here are permanent and cannot be undone.")
         st.markdown(
             f"You are about to delete the entire **`{selected_collection}`** collection from Qdrant. "
             "Choose whether to preserve artifacts or permanently remove them."
         )
 
+        # Radio button to choose deletion mode
+        # Default is "Preserve artifacts" (index=0) for safer default behavior
         delete_mode = st.radio(
             "Delete mode",
             options=[
-                "Preserve artifacts (move to logs/deleted)",
-                "Hard delete (remove artifacts permanently)"
+                "Preserve artifacts (move to logs/deleted)",  # Moves JSON manifests to deleted/ for potential restore
+                "Hard delete (remove artifacts permanently)"  # Deletes vector collection AND manifest files
             ],
             index=0,
             help="Preserve keeps manifests for restore; hard delete removes them permanently."
         )
 
-        # Confirmation state management
+        # Confirmation state management using two-step confirmation pattern
+        # Step 1: User clicks "Delete" button → sets confirm_delete to collection name
+        # Step 2: User must click "YES, DELETE PERMANENTLY" in confirmation UI
+        # This prevents accidental deletion from single-click mistakes
         if 'confirm_delete' not in st.session_state:
             app_state.confirm_delete = None
 
+        # Check if we're in confirmation state for this specific collection
         if app_state.confirm_delete != selected_collection:
+            # Initial state: Show "Delete Collection" button
             if st.button(f"🗑️ Delete '{selected_collection}' Collection", use_container_width=True):
+                # Set confirmation flag to trigger second confirmation step
                 app_state.confirm_delete = selected_collection
-                st.rerun()
+                st.rerun()  # Rerun to show confirmation UI
         else:
+            # Confirmation state: Show warning and final confirmation buttons
+            # Dynamic warning message based on deletion mode
             confirmation_label = (
                 "**Are you sure?** This will permanently delete the Qdrant collection. "
                 "Artifacts will be preserved in logs/deleted."
@@ -1214,16 +1276,21 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                 else "**Are you sure?** This will permanently delete the Qdrant collection and all associated artifacts. This action cannot be undone."
             )
             st.error(confirmation_label)
+
+            # Two-button layout: Confirm (left) and Cancel (right)
             confirm_col1, confirm_col2 = st.columns(2)
             with confirm_col1:
+                # Final confirmation button (red primary style for danger action)
                 if st.button("🚨 YES, DELETE PERMANENTLY", use_container_width=True, type="primary"):
+                    # Choose deletion function based on mode
                     if delete_mode.startswith("Preserve"):
                         spinner_label = f"Deleting collection '{selected_collection}' and preserving artifacts..."
-                        delete_action = delete_collection_preserve_artifacts
+                        delete_action = delete_collection_preserve_artifacts  # Moves manifests to logs/deleted/
                     else:
                         spinner_label = f"Deleting collection '{selected_collection}' and removing artifacts..."
-                        delete_action = delete_collection_and_artifacts
+                        delete_action = delete_collection_and_artifacts  # Removes everything
 
+                    # Execute deletion with loading spinner (can take several seconds for large collections)
                     with st.spinner(spinner_label):
                         delete_results = delete_action(
                             collection_name=selected_collection,
@@ -1231,7 +1298,9 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                             port=qdrant_port
                         )
 
+                    # Check deletion results and show appropriate feedback
                     if not delete_results['errors']:
+                        # Success: Show success message based on mode
                         if delete_mode.startswith("Preserve"):
                             st.success(
                                 f"✅ Collection '{selected_collection}' deleted. Artifacts preserved in logs/deleted."
@@ -1240,19 +1309,22 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                             st.success(
                                 f"✅ Collection '{selected_collection}' deleted and artifacts removed permanently."
                             )
+                        # Clear confirmation state and refresh app to update collection list
                         app_state.confirm_delete = None
                         st.info("Refreshing app...")
-                        time.sleep(2)
+                        time.sleep(2)  # Brief pause so user can read success message
                         st.rerun()
                     else:
+                        # Failure: Show error messages from deletion operation
                         st.error(f"❌ Failed to completely delete collection '{selected_collection}'.")
                         for error in delete_results['errors']:
                             st.error(f"- {error}")
-                        app_state.confirm_delete = None
+                        app_state.confirm_delete = None  # Clear confirmation state
             with confirm_col2:
+                # Cancel button to abort deletion and return to normal state
                 if st.button("Cancel", use_container_width=True):
-                    app_state.confirm_delete = None
-                    st.rerun()
+                    app_state.confirm_delete = None  # Clear confirmation state
+                    st.rerun()  # Rerun to hide confirmation UI
 
 # ============================================
 # SKELETON LOADER

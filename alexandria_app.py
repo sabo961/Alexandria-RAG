@@ -577,110 +577,180 @@ def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, s
             return False, f"Error: {error_msg[:50]}"
 
 
-# Header - logo + title
+# ============================================
+# HEADER AND BRANDING
+# ============================================
+# Display app logo and title using custom CSS classes defined in assets/style.css
+# Layout: logo (1 col width) + title (5 col width) + spacer (1 col width)
 logo_path = Path(__file__).parent / "assets" / "logo.png"
 if logo_path.exists():
+    # Three-column layout for logo + title (gracefully handles missing logo)
     logo_col, title_col, _ = st.columns([1, 5, 1])
     with logo_col:
-        st.image(str(logo_path), width=120)
+        st.image(str(logo_path), width=120)  # Fixed width for consistent branding
     with title_col:
         st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 else:
+    # Fallback if logo asset is missing (defensive design)
     st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
 
-# Get consolidated app state
+# ============================================
+# APP STATE INITIALIZATION
+# ============================================
+# Get consolidated app state (singleton pattern - initialized once per session)
+# See AppState dataclass and get_app_state() above for state management architecture
 app_state = get_app_state()
 
-# Initialize app state from GUI settings on first load
-gui_settings = load_gui_settings()
+# Initialize app state from persisted GUI settings on first load
+# Pattern: Load persisted settings → populate app state → sidebar updates both
+# This ensures user preferences survive Streamlit reruns and session restarts
+gui_settings = load_gui_settings()  # Loads from .streamlit/gui_settings.json
 if not app_state.library_dir:
+    # Set default library directory from saved settings or fallback to default path
+    # Note: This only runs if library_dir is empty (first session or cleared state)
     app_state.library_dir = gui_settings.get("library_dir", "G:\\My Drive\\alexandria")
 if app_state.show_ingestion_diagnostics is None:
+    # Initialize diagnostics toggle from saved preference (default: True for visibility)
     app_state.show_ingestion_diagnostics = gui_settings.get("show_ingestion_diagnostics", True)
 
-# Show warning banner if Qdrant is offline (set by sidebar health check)
+# ============================================
+# QDRANT STATUS WARNING BANNER
+# ============================================
+# Display persistent warning if Qdrant is offline (checked in sidebar below)
+# Why: Users may not see sidebar error if they're focused on main content
+# Placement: Top of page ensures visibility before attempting ingestion/queries
 if app_state.qdrant_healthy is False:
     st.error("⚠️ **Qdrant Vector Database is offline!** Ingestion and queries will not work. Check Qdrant server status and configuration in sidebar.")
 
-# Sidebar
+# ============================================
+# SIDEBAR CONFIGURATION
+# ============================================
+# Sidebar provides global configuration that persists across tabs and sessions
+# Organization: Library settings → Qdrant settings → OpenRouter API key → Model selection
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
 
+    # --------------------------------------------------
+    # CALIBRE LIBRARY SETTINGS
+    # --------------------------------------------------
+    # Library directory path used by Calibre ingestion tab to connect to metadata.db
+    # Pattern: text_input returns empty string if cleared, so we use "or app_state.library_dir" fallback
     library_dir = st.text_input(
         "Library Directory",
-        value=app_state.library_dir,
+        value=app_state.library_dir,  # Pre-fill from app state (loaded from saved settings)
         help="Path to Calibre library"
-    ) or app_state.library_dir
+    ) or app_state.library_dir  # Fallback prevents empty string from clearing state
 
+    # Track if ANY settings changed (to trigger single save at end)
+    # Why: Batching saves improves performance and avoids multiple file writes per rerun
     settings_changed = False
 
+    # Detect library directory change and update both app state AND gui_settings
+    # App state: ephemeral (session-only), gui_settings: persistent (saved to disk)
     if library_dir != app_state.library_dir:
         app_state.library_dir = library_dir
         gui_settings["library_dir"] = library_dir
         settings_changed = True
 
+    # Diagnostics toggle - controls visibility of ingestion debug info (file paths, chunking stats)
+    # Useful for troubleshooting ingestion issues without cluttering UI for normal users
     show_diagnostics = st.checkbox(
         "Show ingestion diagnostics",
-        value=app_state.show_ingestion_diagnostics,
+        value=app_state.show_ingestion_diagnostics,  # Pre-fill from app state
         help="Toggle diagnostics display for the latest ingestion run"
     )
 
+    # Detect diagnostics toggle change and update both state stores
     if show_diagnostics != app_state.show_ingestion_diagnostics:
         app_state.show_ingestion_diagnostics = show_diagnostics
         gui_settings["show_ingestion_diagnostics"] = show_diagnostics
         settings_changed = True
 
+    # Persist settings to disk if any changes detected (single write for all changes)
+    # Pattern: Optimistic save - show success caption immediately, warn on failure
     if settings_changed:
         try:
-            save_gui_settings(gui_settings)
+            save_gui_settings(gui_settings)  # Writes to .streamlit/gui_settings.json
             st.caption("💾 Settings saved")
         except Exception as e:
+            # Non-blocking warning - settings will still work for current session
             st.warning(f"⚠️ Could not save settings: {e}")
 
+    # --------------------------------------------------
+    # QDRANT VECTOR DATABASE CONNECTION
+    # --------------------------------------------------
+    # Qdrant stores embeddings and enables semantic search for RAG queries
+    # Host/Port configuration allows connecting to different Qdrant instances (dev/prod)
     qdrant_host = st.text_input(
         "Qdrant Host",
-        value="192.168.0.151",
+        value="192.168.0.151",  # Default to local network Qdrant server
         help="Qdrant server IP"
     )
 
     qdrant_port = st.number_input(
         "Qdrant Port",
-        value=6333,
+        value=6333,  # Qdrant's default HTTP API port
         help="Qdrant server port"
     )
 
-    # Qdrant Health Check
+    # --------------------------------------------------
+    # QDRANT HEALTH CHECK
+    # --------------------------------------------------
+    # Runs on every sidebar rerun to verify Qdrant connectivity
+    # check_qdrant_health() defined above - attempts to connect and get server version
+    # Returns: (is_healthy: bool, health_message: str)
     is_healthy, health_message = check_qdrant_health(qdrant_host, qdrant_port)
 
-    # Store health status in app state for banner display
+    # Store health status in app state for warning banner display (rendered above sidebar)
+    # Why: Banner needs to check health status even if sidebar is collapsed
     app_state.qdrant_healthy = is_healthy
 
+    # Display health status in sidebar (green success or red error)
+    # Pattern: Visual feedback + action guidance (warn user that features won't work)
     if is_healthy:
         st.success(f"✅ Qdrant: {health_message}")
     else:
         st.error(f"❌ Qdrant: {health_message}")
         st.warning("⚠️ Ingestion and queries will not work until Qdrant is available")
 
+    # --------------------------------------------------
+    # INGESTION DIAGNOSTICS DISPLAY (OPTIONAL)
+    # --------------------------------------------------
+    # Show last ingestion run's diagnostics if available and toggle is enabled
+    # Diagnostics include: file paths, chunking stats, embedding dimensions, Qdrant upload status
+    # Stored in app_state.last_ingestion_diagnostics by ingestion functions
     last_diagnostics = app_state.last_ingestion_diagnostics
     if last_diagnostics and app_state.show_ingestion_diagnostics:
         st.markdown("---")
         st.markdown("### 🔍 Latest Ingestion Diagnostics")
         st.caption(f"{last_diagnostics['context']} • {last_diagnostics['captured_at']}")
+        # Expander keeps diagnostics collapsed by default (reduce sidebar clutter)
         with st.expander("Show diagnostics"):
             st.json(last_diagnostics.get("diagnostics", {}))
 
     st.markdown("---")
     st.markdown("### 🔑 OpenRouter")
 
-    # Initialize app state for API key if not present
+    # --------------------------------------------------
+    # OPENROUTER API KEY MANAGEMENT
+    # --------------------------------------------------
+    # OpenRouter provides unified API access to multiple LLM providers (GPT-4, Claude, etc.)
+    # API key required for Speaker tab (RAG query answering)
+    # Persistence strategy: app_state (session) ← secrets.toml (disk) for survival across restarts
+
+    # Initialize app state for API key if not present (first load or cleared state)
     if not app_state.openrouter_api_key:
         # Try to load from secrets.toml first (persistent across restarts)
+        # secrets.toml is Streamlit's standard location for sensitive config
         try:
             app_state.openrouter_api_key = st.secrets.get("OPENROUTER_API_KEY", "")
         except Exception:
+            # secrets.toml doesn't exist yet or is malformed - safe to ignore
             app_state.openrouter_api_key = ""
 
+    # Password input for API key (type="password" masks input for security)
+    # Pre-filled from app state if already loaded from secrets.toml
     openrouter_api_key = st.text_input(
         "OpenRouter API Key",
         type="password",
@@ -688,16 +758,20 @@ with st.sidebar:
         help="Get your API key from https://openrouter.ai/keys"
     )
 
+    # Manual save button - writes API key to secrets.toml for persistence
+    # Why manual save? Prevents accidental auto-save of invalid/test keys
     if st.button("💾 Save Permanently", use_container_width=True):
         if openrouter_api_key:
-            # Save to app state
+            # Update session state first (immediate availability for current session)
             app_state.openrouter_api_key = openrouter_api_key
 
-            # Save to secrets.toml for persistence across restarts
+            # Write to secrets.toml for persistence across Streamlit restarts
+            # Pattern: Write with helpful comments to guide manual editing if needed
             secrets_path = Path(__file__).parent / '.streamlit' / 'secrets.toml'
             try:
-                secrets_path.parent.mkdir(exist_ok=True)
+                secrets_path.parent.mkdir(exist_ok=True)  # Create .streamlit/ if missing
                 with open(secrets_path, 'w') as f:
+                    # Write with instructional comments (secrets.toml must NOT be committed)
                     f.write('# Streamlit Secrets - DO NOT COMMIT TO GIT\n')
                     f.write('# This file stores sensitive API keys and credentials\n\n')
                     f.write('# OpenRouter API Key\n')
@@ -705,17 +779,25 @@ with st.sidebar:
                     f.write(f'OPENROUTER_API_KEY = "{openrouter_api_key}"\n')
                 st.success("✅ Saved!")
             except Exception as e:
+                # Non-critical error - key still works for current session
                 st.error(f"❌ Failed: {e}")
         else:
+            # Validation: prevent saving empty key
             st.warning("⚠️ Enter API key first")
 
-    # Model selection - Fetch from OpenRouter API
+    # --------------------------------------------------
+    # MODEL SELECTION - FETCH FROM OPENROUTER API
+    # --------------------------------------------------
+    # Fetch available models from OpenRouter API (only shown if API key is configured)
+    # Pattern: User clicks "Fetch Models" → API call → sort by pricing → store in state → dropdown
     if openrouter_api_key:
         if st.button("🔄 Fetch Models", use_container_width=True):
+            # Force switch to Speaker tab after fetching (so user sees where to use models)
             st.session_state["force_speaker_tab"] = True
             with st.spinner("Fetching..."):
                 try:
                     import requests
+                    # Call OpenRouter API to get list of available models with pricing
                     response = requests.get(
                         "https://openrouter.ai/api/v1/models",
                         headers={"Authorization": f"Bearer {openrouter_api_key}"}
@@ -724,31 +806,35 @@ with st.sidebar:
                     if response.status_code == 200:
                         models_data = response.json().get("data", [])
 
-                        # Build models dict with pricing info
+                        # Build models dict: display_name → model_id
+                        # Display name includes emoji indicator for pricing visibility
                         openrouter_models = {}
                         for model in models_data:
-                            model_id = model.get("id", "")
-                            model_name = model.get("name", model_id)
+                            model_id = model.get("id", "")  # API identifier (e.g., "openai/gpt-4")
+                            model_name = model.get("name", model_id)  # Human-readable name
 
-                            # Check if free (pricing = 0)
+                            # Check if free (pricing = 0 for both prompt and completion)
+                            # Why: Free models are ideal for testing without usage costs
                             pricing = model.get("pricing", {})
                             prompt_price = float(pricing.get("prompt", "0"))
                             completion_price = float(pricing.get("completion", "0"))
                             is_free = (prompt_price == 0 and completion_price == 0)
 
-                            # Add emoji indicator
+                            # Add emoji indicator for quick visual identification
+                            # 🆓 = Free (great for testing), 💰 = Paid (production-quality)
                             emoji = "🆓" if is_free else "💰"
                             display_name = f"{emoji} {model_name}"
 
                             openrouter_models[display_name] = model_id
 
-                        # Sort: free first, then by name
+                        # Sort models: free first (encourage testing), then alphabetically
+                        # Why: Free models should be most discoverable for new users
                         sorted_models = dict(sorted(
                             openrouter_models.items(),
                             key=lambda x: (0 if x[0].startswith("🆓") else 1, x[0])
                         ))
 
-                        # Store in session state
+                        # Store in app state (persists across sidebar interactions)
                         app_state.openrouter_models = sorted_models
                         st.success(f"✅ {len(sorted_models)} models")
                     else:
@@ -756,19 +842,26 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
-    # Use cached models or show empty state
+    # --------------------------------------------------
+    # MODEL DROPDOWN (CACHED MODELS)
+    # --------------------------------------------------
+    # Show model selector if models have been fetched (stored in session state)
+    # Pattern: Dropdown remembers last selection using default_index persistence
     if 'openrouter_models' in st.session_state and app_state.openrouter_models:
         openrouter_models = app_state.openrouter_models
         st.caption(f"🆓 = Free, 💰 = Paid")
 
-        # Find default index (last selected model if exists)
+        # Find default index from last selected model (UX: avoid forcing user to re-select)
+        # Try to match last_selected_model against current models list, fallback to index 0
         default_index = 0
         if 'last_selected_model' in st.session_state:
             try:
                 default_index = list(openrouter_models.keys()).index(app_state.last_selected_model)
             except (ValueError, KeyError):
+                # Last selected model no longer available (API changed) - use first model
                 default_index = 0
 
+        # Dropdown shows display_name (with emoji), stores model_id for API calls
         selected_model_name = st.selectbox(
             "Select Model",
             list(openrouter_models.keys()),
@@ -776,11 +869,12 @@ with st.sidebar:
             help="Free models are great for testing"
         )
 
-        # Save last selected model
+        # Save last selected model to app state (for default_index on next rerun)
         app_state.last_selected_model = selected_model_name
+        # Resolve display name to actual model ID for OpenRouter API calls
         selected_model = openrouter_models[selected_model_name]
     else:
-        # No models fetched yet
+        # No models fetched yet - empty state (user needs to click "Fetch Models" first)
         selected_model_name = None
         selected_model = None
 
@@ -1781,32 +1875,61 @@ def render_calibre_filters_and_table(all_books, calibre_db):
         # Clear skeleton (if shown) and table_container will remain empty
         table_container.empty()
 
-# Check for archives to conditionally show the Restore tab
+# ============================================
+# TAB NAVIGATION SETUP
+# ============================================
+# Dynamic tab configuration: tabs shown depend on system state (e.g., archived manifests exist)
+# Tab ordering can be programmatically changed (e.g., force Speaker tab to front after model fetch)
+
+# --------------------------------------------------
+# CONDITIONAL TAB VISIBILITY
+# --------------------------------------------------
+# Check if deleted manifest archives exist to determine if "Restore deleted" tab should show
+# Archive directory structure: logs/deleted/<collection>_manifest_<timestamp>.json
 archive_dir = Path(__file__).parent / 'logs' / 'deleted'
 archived_manifests_exist = archive_dir.exists() and any(archive_dir.glob('*_manifest_*.json'))
 
-# Main content
-speaker_tab_label = "🔍 Speaker's corner"
+# --------------------------------------------------
+# TAB CONSTRUCTION
+# --------------------------------------------------
+# Build tab list dynamically - some tabs are always shown, others are conditional
+speaker_tab_label = "🔍 Speaker's corner"  # Named separately for forced tab switching logic
 tabs_to_show = [
-    "📚 Calibre ingestion",
-    "🔄 Folder ingestion",
-    "📖 Qdrant collections",
+    "📚 Calibre ingestion",   # Always shown - browse and ingest from Calibre library
+    "🔄 Folder ingestion",    # Always shown - batch ingest from filesystem folder
+    "📖 Qdrant collections",  # Always shown - view ingested books and manage collections
 ]
 if archived_manifests_exist:
+    # Conditionally add Restore tab if deleted manifests are available
+    # Why: Don't clutter UI with empty tab when no archives exist
     tabs_to_show.append("🗄️ Restore deleted")
-tabs_to_show.append(speaker_tab_label)
+tabs_to_show.append(speaker_tab_label)  # Always shown - RAG query interface
 
+# --------------------------------------------------
+# FORCED TAB NAVIGATION
+# --------------------------------------------------
+# Programmatically switch active tab by reordering tabs_to_show list
+# Pattern: Set force_speaker_tab flag → move speaker tab to front → clear flag
+# Use case: After fetching models, switch to Speaker tab to show where models are used
 if st.session_state.get("force_speaker_tab"):
+    # Move speaker tab to front (first tab becomes active in Streamlit)
     tabs_to_show = [speaker_tab_label] + [tab for tab in tabs_to_show if tab != speaker_tab_label]
-    st.session_state["force_speaker_tab"] = False
+    st.session_state["force_speaker_tab"] = False  # Clear flag to prevent sticky behavior
 
-tabs = st.tabs(tabs_to_show)
-tabs_by_label = dict(zip(tabs_to_show, tabs))
+# --------------------------------------------------
+# TAB RENDERING
+# --------------------------------------------------
+# Create tab UI and build lookup dict for programmatic tab access
+# Pattern: tabs_by_label allows accessing tabs by string label instead of positional index
+tabs = st.tabs(tabs_to_show)  # Streamlit creates tab navigation UI
+tabs_by_label = dict(zip(tabs_to_show, tabs))  # Map: "📚 Calibre ingestion" → tab object
 
+# Extract tab references for use in "with tab_calibre:" blocks below
+# Note: tab_restore may be None if no archives exist (handled with conditional rendering)
 tab_calibre = tabs_by_label["📚 Calibre ingestion"]
 tab_ingestion = tabs_by_label["🔄 Folder ingestion"]
 tab_ingested = tabs_by_label["📖 Qdrant collections"]
-tab_restore = tabs_by_label.get("🗄️ Restore deleted")
+tab_restore = tabs_by_label.get("🗄️ Restore deleted")  # .get() returns None if key missing
 tab_query = tabs_by_label[speaker_tab_label]
 
 

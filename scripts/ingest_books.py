@@ -366,6 +366,43 @@ def upload_to_qdrant(
     qdrant_host: str,
     qdrant_port: int
 ):
+    """
+    Upload text chunks with embeddings to Qdrant vector database.
+
+    Creates or updates a Qdrant collection with text chunks and their vector embeddings.
+    Automatically creates the collection if it doesn't exist, using COSINE distance metric.
+    Uploads points in batches of 100 to optimize network performance and memory usage.
+
+    Each chunk is stored as a PointStruct with:
+        - UUID-based unique identifier
+        - Vector embedding for semantic search
+        - Payload containing text, metadata (title, author, domain, language),
+          ingestion timestamp, and chunking strategy
+
+    Args:
+        chunks: List of chunk dictionaries containing 'text' and optional metadata
+               (book_title, author, language). Each chunk represents a semantic segment
+               from the ingested book.
+        embeddings: List of embedding vectors corresponding to chunks (same length).
+                   Each embedding is a list of floats with dimensionality matching
+                   the model (384 for all-MiniLM-L6-v2).
+        domain: Domain classification for the book (e.g., 'technical', 'philosophy',
+               'literature'). Used for filtering and retrieval optimization.
+        collection_name: Name of the Qdrant collection to upload to. Created if
+                        it doesn't exist.
+        qdrant_host: Qdrant server hostname or IP address.
+        qdrant_port: Qdrant server port number.
+
+    Returns:
+        None. Logs success message upon completion with upload statistics.
+
+    Note:
+        - Early returns if chunks list is empty (no-op)
+        - Collection uses COSINE distance for similarity search
+        - Batch size is hardcoded to 100 points per upload
+        - All points receive unique UUIDs to prevent ID collisions
+        - Ingestion timestamp is stored in ISO format for audit trails
+    """
     if not chunks: return
 
     client = QdrantClient(host=qdrant_host, port=qdrant_port)

@@ -197,28 +197,70 @@ def extract_text(filepath: str) -> Tuple[str, Dict]:
 
 
 def _get_epub_metadata(book, key: str) -> str:
+    """
+    Extract metadata field from EPUB book using Dublin Core namespace.
+
+    Retrieves metadata from EPUB files using the Dublin Core (DC) metadata standard.
+    Automatically standardizes language codes to ensure consistency across the system.
+
+    Args:
+        book: EPUB book object from ebooklib (epub.EpubBook instance).
+        key: Dublin Core metadata key to extract (e.g., 'title', 'creator', 'language').
+
+    Returns:
+        Metadata value as string. For language fields, returns standardized code
+        (e.g., 'en', 'hr'). Returns 'unknown' if metadata key is not found or
+        extraction fails.
+
+    Note:
+        This is a private helper function used internally by extract_text().
+        All language values are automatically passed through standardize_language_code().
+    """
     try:
         result = book.get_metadata('DC', key)
-        if result: 
+        if result:
             return standardize_language_code(result[0][0])
     except: pass
     return "unknown"
 
 def standardize_language_code(lang: str) -> str:
-    """Standardizes common language codes to a consistent format (e.g., 'en', 'hr')."""
+    """
+    Standardize language codes to consistent format for metadata uniformity.
+
+    Converts ISO 639-2 three-letter codes and non-standard variants to their
+    canonical two-letter ISO 639-1 equivalents. Preserves regional variants
+    (e.g., 'en-us', 'en-gb') while normalizing base language codes.
+
+    Args:
+        lang: Language code string in any format (e.g., 'eng', 'en', 'hrv', 'en-US').
+              Can be None or empty string.
+
+    Returns:
+        Standardized language code in lowercase. Returns 'unknown' for None/empty input.
+
+        Common transformations:
+            - 'eng' -> 'en' (ISO 639-2 to ISO 639-1)
+            - 'hrv', 'cro' -> 'hr' (Croatian variants to standard code)
+            - 'en-US' -> 'en-us' (lowercase normalization, preserves regional variant)
+            - '' or None -> 'unknown'
+
+    Note:
+        Regional variants like 'en-us' or 'en-gb' are preserved to maintain
+        specificity while ensuring consistent lowercase formatting.
+    """
     if not lang:
         return "unknown"
-    
+
     lang = lang.lower().strip()
 
     # Standardize known problematic English indicators
     if lang == 'eng': # Only 'eng' to 'en', keep 'en-us', 'en-gb'
         return 'en'
-    
+
     # Standardize known problematic Croatian indicators
     if lang in ['hrv', 'cro']:
-        return 'hr' 
-    
+        return 'hr'
+
     # Keep other specific regional variants or unexpected codes as they are
     return lang
 

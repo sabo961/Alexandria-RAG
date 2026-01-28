@@ -104,41 +104,72 @@ def load_keyboard_shortcuts() -> None:
 # ============================================
 # APP STATE MANAGEMENT
 # ============================================
+# Streamlit reruns the entire script on every interaction, so we use
+# st.session_state to persist data across reruns. This AppState dataclass
+# consolidates all state into a single object for easier management and
+# type safety (instead of scattered st.session_state keys).
 
 @dataclass
 class AppState:
-    """Consolidated session state management for Alexandria application"""
-    # Configuration
-    library_dir: str = ""
-    openrouter_api_key: str = ""
-    qdrant_healthy: bool = None
-    show_ingestion_diagnostics: bool = True
+    """Consolidated session state management for Alexandria application
 
-    # Calibre tab state
-    calibre_selected_books: set = field(default_factory=set)
-    calibre_current_page: int = 1
-    calibre_books: list = field(default_factory=list)
-    calibre_db: object = None
-    calibre_table_reset: int = 0
+    This dataclass provides type-safe, centralized state management for the entire
+    Streamlit app. Instead of using scattered st.session_state["key"] references,
+    we group related state into logical sections and access them via app_state.field.
 
-    # Ingestion state
-    confirm_delete: str = None
-    ingest_metadata_preview: list = field(default_factory=list)
-    ingest_ready_to_confirm: bool = False
-    last_ingestion_diagnostics: dict = field(default_factory=dict)
+    Benefits:
+    - Type hints enable IDE autocomplete and catch typos early
+    - Logical grouping makes state dependencies clearer
+    - Default values documented in one place
+    - Easier to track what state exists across the app
+    """
 
-    # Query/Models state
-    last_selected_model: str = None
-    last_selected_rerank_model: str = None
-    openrouter_models: dict = field(default_factory=dict)
+    # Configuration - persisted user settings and system state
+    library_dir: str = ""  # Path to Calibre library directory (user-configured)
+    openrouter_api_key: str = ""  # API key for OpenRouter LLM access (user-configured)
+    qdrant_healthy: bool = None  # Qdrant server connectivity status (None = not checked yet)
+    show_ingestion_diagnostics: bool = True  # Whether to display ingestion debug info
 
-    # UI state
-    force_speaker_tab: bool = False
+    # Calibre tab state - manages book browsing and selection
+    # Uses set for O(1) lookup when checking if book is selected
+    calibre_selected_books: set = field(default_factory=set)  # Book IDs selected for ingestion
+    calibre_current_page: int = 1  # Current page in paginated book table
+    calibre_books: list = field(default_factory=list)  # Filtered/sorted book list for current view
+    calibre_db: object = None  # CalibreDB instance (cached to avoid reopening database)
+    calibre_table_reset: int = 0  # Increment to force Streamlit table re-render (workaround for stale UI)
+
+    # Ingestion state - tracks multi-step ingestion workflow
+    confirm_delete: str = None  # Book ID pending deletion confirmation (prevents accidental deletes)
+    ingest_metadata_preview: list = field(default_factory=list)  # Metadata extracted before ingestion confirmation
+    ingest_ready_to_confirm: bool = False  # Whether user has reviewed metadata and can proceed
+    last_ingestion_diagnostics: dict = field(default_factory=dict)  # Debug info from last ingestion run
+
+    # Query/Models state - persists user's LLM model selections across reruns
+    # Stored separately so we can pre-select last-used models in dropdowns
+    last_selected_model: str = None  # Last main LLM model selected for RAG queries
+    last_selected_rerank_model: str = None  # Last reranking model selected for query refinement
+    openrouter_models: dict = field(default_factory=dict)  # Available models from OpenRouter API
+
+    # UI state - controls tab navigation and special UI behaviors
+    force_speaker_tab: bool = False  # When True, programmatically switch to Speaker tab (e.g., after TTS generation)
 
 
 def get_app_state() -> AppState:
-    """Get or create the global app state"""
+    """Get or create the global app state
+
+    Streamlit's session_state persists across script reruns but loses type information.
+    This function ensures AppState is initialized exactly once per session and provides
+    type-safe access to state throughout the app.
+
+    Pattern: Singleton initialization within Streamlit session
+    - First call: Creates AppState() with defaults and stores in session_state
+    - Subsequent calls: Returns existing AppState instance
+
+    Returns:
+        AppState: The singleton state object for this session
+    """
     if "app_state" not in st.session_state:
+        # Initialize state on first access (Streamlit session start)
         st.session_state.app_state = AppState()
     return st.session_state.app_state
 

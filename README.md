@@ -92,7 +92,7 @@ python batch_ingest.py --directory ../ingest --domain technical
 - **[Quick Start](#quick-start)** - Get running in 5 minutes (above)
 - **[Common Workflows](docs/how-to-guides/common-workflows.md)** - Command cheat sheet
 - **[Track Ingestion Guide](docs/how-to-guides/track-ingestion.md)** - Track ingested books
-- **[PROFESSIONAL_SETUP_COMPLETE.md](docs/guides/PROFESSIONAL_SETUP_COMPLETE.md)** - Complete production guide
+- **[Professional Setup Guide](docs/tutorials/professional-setup.md)** - Complete production guide
 
 ### 🤖 For AI Agents
 - **[AGENTS.md](AGENTS.md)** - Navigation hub (start here)

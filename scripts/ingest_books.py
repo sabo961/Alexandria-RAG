@@ -95,7 +95,23 @@ def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
 
 
 def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
-    """Validate file exists and is readable."""
+    r"""
+    Validate that a file exists and is readable.
+
+    Performs a two-step validation:
+    1. Checks file existence using os.path.exists()
+    2. Verifies file accessibility by calling os.stat() and attempting to read first byte
+
+    Args:
+        path_for_open: The actual file path to use for operations (may include Windows
+                      long path prefix \\?\ for paths >= 248 characters).
+        display_path: User-friendly path for error messages (without long path prefix).
+
+    Returns:
+        Tuple containing:
+            - success (bool): True if file exists and is readable, False otherwise
+            - error_message (Optional[str]): None on success, descriptive error message on failure
+    """
     # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logger.debug(f"validate_file_access checking: {repr(path_for_open)}")
 

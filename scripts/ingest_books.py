@@ -270,6 +270,33 @@ def standardize_language_code(lang: str) -> str:
 # ============================================================================ 
 
 class EmbeddingGenerator:
+    """
+    Singleton Embedding Generator for Text Vectorization
+    =====================================================
+
+    Thread-safe singleton that manages a shared SentenceTransformer model instance
+    to generate vector embeddings for text chunks. Ensures the model is loaded only
+    once across the entire application lifecycle, reducing memory usage and startup time.
+
+    Design Pattern:
+        Singleton: Only one instance of this class exists across all imports and calls.
+        This prevents multiple copies of the 384MB+ embedding model from being loaded
+        into memory when processing multiple books or serving requests.
+
+    Usage:
+        # All instances reference the same underlying object
+        embedder1 = EmbeddingGenerator()
+        embedder2 = EmbeddingGenerator()
+        assert embedder1 is embedder2  # True
+
+        # Generate embeddings for a list of text chunks
+        texts = ["Philosophy is the study...", "Nietzsche wrote about..."]
+        vectors = embedder1.generate_embeddings(texts)
+
+    Attributes:
+        _instance (EmbeddingGenerator): Shared singleton instance.
+        _model (SentenceTransformer): Lazy-loaded embedding model (default: all-MiniLM-L6-v2).
+    """
     _instance = None
     _model = None
 

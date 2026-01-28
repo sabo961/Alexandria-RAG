@@ -134,8 +134,26 @@ def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, O
 
 def extract_text(filepath: str) -> Tuple[str, Dict]:
     """
-    Extract text from file based on extension.
-    Returns: full_text, metadata
+    Extract text content and metadata from supported book file formats.
+
+    Parses EPUB, PDF, TXT, and Markdown files to extract full text content and
+    associated metadata (title, author, language, format). EPUB files are processed
+    chapter by chapter with HTML parsing. PDF files use PyMuPDF for text extraction.
+
+    Args:
+        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
+
+    Returns:
+        Tuple containing:
+            - full_text (str): Extracted text content, chapters/pages separated by double newlines
+            - metadata (dict): Book metadata with keys:
+                - title (str): Book title or filename stem
+                - author (str): Author name or 'Unknown'
+                - language (str): Standardized language code (e.g., 'en', 'hr') or 'unknown'
+                - format (str): File format ('EPUB', 'PDF', or 'TXT')
+
+    Raises:
+        ValueError: If file extension is not supported (.epub, .pdf, .txt, .md).
     """
     ext = Path(filepath).suffix.lower()
     

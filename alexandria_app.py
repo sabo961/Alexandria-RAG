@@ -57,32 +57,48 @@ def render_ingestion_diagnostics(result: dict, context_label: str) -> None:
 @st.cache_data
 def load_gui_settings() -> dict:
     """Load persisted GUI settings (non-sensitive)."""
+    # Construct path to settings file in .streamlit directory (parallel to this script)
     settings_path = Path(__file__).parent / '.streamlit' / 'gui_settings.json'
+
+    # Return empty dict if settings file doesn't exist yet (first run)
     if not settings_path.exists():
         return {}
 
     try:
+        # Read and parse JSON settings file
         with open(settings_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception:
+        # Return empty dict if file is corrupted or unreadable (defensive programming)
         return {}
 
 
 def save_gui_settings(settings: dict) -> None:
     """Persist GUI settings to disk."""
+    # Construct path to settings file in .streamlit directory
     settings_path = Path(__file__).parent / '.streamlit' / 'gui_settings.json'
+
+    # Create .streamlit directory if it doesn't exist (exist_ok prevents error on re-creation)
     settings_path.parent.mkdir(exist_ok=True)
+
+    # Write settings dict to JSON file with pretty formatting and Unicode support
     with open(settings_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
-    # Invalidate cache when settings are saved
+
+    # Invalidate Streamlit's cache so next load_gui_settings() call reads fresh data
     load_gui_settings.clear()
 
 
 def load_css() -> None:
     """Load custom CSS from assets/style.css"""
+    # Construct path to CSS file in assets directory
     css_path = Path(__file__).parent / "assets" / "style.css"
+
+    # Only inject CSS if file exists (graceful degradation if assets missing)
     if css_path.exists():
         with open(css_path, 'r', encoding='utf-8') as f:
+            # Inject CSS into Streamlit's HTML output using markdown with <style> tag
+            # unsafe_allow_html=True required to render raw HTML/CSS
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
@@ -198,13 +214,19 @@ load_keyboard_shortcuts()
 @st.cache_data
 def load_domains():
     """Load domain list from domains.json"""
+    # Construct path to domains configuration file in scripts directory
     domains_file = Path(__file__).parent / 'scripts' / 'domains.json'
+
     try:
+        # Read domains JSON file
         with open(domains_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            # Extract just the 'id' field from each domain object (e.g., ["technical", "psychology", ...])
+            # This returns a flat list of domain IDs for dropdowns/selectors
             return [d['id'] for d in data['domains']]
     except Exception as e:
-        # Fallback to hardcoded list if file doesn't exist
+        # Fallback to hardcoded list if file doesn't exist or is corrupted
+        # Ensures app can still function without domains.json (defensive programming)
         return ["technical", "psychology", "philosophy", "history", "literature"]
 
 def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, host, port, move_files):

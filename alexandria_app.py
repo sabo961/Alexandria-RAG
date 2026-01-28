@@ -1413,9 +1413,23 @@ with tab_calibre:
                     del st.session_state.calibre_books
                 st.rerun()
 
+        # Create skeleton placeholder container
+        skeleton_placeholder = st.empty()
+
         if 'calibre_books' not in st.session_state:
-            with st.spinner("Loading books from Calibre... (this may take a moment)"):
-                st.session_state.calibre_books = calibre_db.get_all_books()
+            # Show skeleton loader while loading
+            with skeleton_placeholder.container():
+                st.info("📚 Loading books from Calibre... (this may take a moment)")
+                render_table_skeleton(rows=10)
+
+            # Load books from database
+            st.session_state.calibre_books = calibre_db.get_all_books()
+
+            # Clear skeleton once loaded
+            skeleton_placeholder.empty()
+        else:
+            # Clear placeholder if books already loaded
+            skeleton_placeholder.empty()
 
         all_books = st.session_state.calibre_books
 

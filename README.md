@@ -70,7 +70,7 @@ python batch_ingest.py --directory ../ingest --domain technical
 - Splits by semantic similarity, not word count
 - Domain-specific thresholds (philosophy vs technical)
 - Author-specific patterns (Mishima, Nietzsche, Cioran)
-- See [technical spec](docs/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)
+- See [technical spec](docs/reference/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)
 
 ---
 

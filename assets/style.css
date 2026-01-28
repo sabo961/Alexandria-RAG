@@ -89,31 +89,26 @@
 }
 
 /* Subtle pagination arrow buttons */
-.pagination-nav .stButton > button { /* Pagination buttons */
+.pagination-nav .stButton > button {
     background-color: transparent !important;
-    border: none !important; /* Remove border */
-    color: #bbb !important; /* Lighter color */
     border: none !important;
-    color: transparent !important; /* Make text invisible until hover */
-    box-shadow: none !important; /* Remove shadow */
-    padding: 0.2rem 0.5rem !important; /* Smaller padding */
-    font-size: 1rem !important; /* Slightly smaller font */
+    color: #bbb !important; /* Lighter color - visible by default */
+    box-shadow: none !important;
+    padding: 0.2rem 0.5rem !important;
+    font-size: 1rem !important;
     transition: all 0.15s ease !important;
 }
 
 .pagination-nav .stButton > button:hover {
-    background-color: #f0f0f0 !important; /* Subtle background on hover */
-    border: 1px solid #ccc !important; /* Add a subtle border on hover */
-    color: #666 !important; /* Darker color on hover */
     background-color: #f8f9fa !important; /* Very subtle background on hover */
     border: none !important;
-    color: #888 !important; /* Make text visible on hover */
-    box-shadow: none !important; /* Keep shadow removed */
+    color: #888 !important; /* Darker color on hover */
+    box-shadow: none !important;
 }
 
 .pagination-nav .stButton > button:active {
     transform: translateY(1px);
-    box-shadow: none !important; /* Keep shadow removed */
+    box-shadow: none !important;
 }
 
 /* ============================================

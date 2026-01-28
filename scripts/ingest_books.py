@@ -301,6 +301,7 @@ class EmbeddingGenerator:
     _model = None
 
     def __new__(cls):
+        """Ensure only one instance exists (singleton pattern)."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -351,6 +352,20 @@ class EmbeddingGenerator:
         return embeddings.tolist()
 
 def generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """
+    Convenience wrapper for batch embedding generation using singleton pattern.
+
+    Delegates to the shared EmbeddingGenerator instance to convert text strings
+    into vector embeddings. This function provides a simple interface without
+    requiring explicit instantiation of the EmbeddingGenerator class.
+
+    Args:
+        texts: List of text strings to encode (e.g., chunks, sentences).
+
+    Returns:
+        List of embedding vectors, where each vector is a list of floats
+        with dimensionality matching the model (384 for all-MiniLM-L6-v2).
+    """
     return EmbeddingGenerator().generate_embeddings(texts)
 
 
@@ -640,8 +655,8 @@ def ingest_book(
         filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
                  Can be relative, absolute, or use ~ for home directory. Automatically
                  handles Windows long path limitations.
-        domain: Domain classification for chunking and retrieval optimization.
-               Options: 'technical', 'philosophy', 'literature'. Philosophy uses stricter
+        domain: Domain classification for chunking and retrieval optimization
+               ('technical', 'philosophy', 'literature'). Philosophy uses stricter
                semantic threshold (0.45) for tighter conceptual coherence. Default: 'technical'.
         collection_name: Name of the Qdrant collection to upload chunks to. Created
                         automatically if it doesn't exist. Default: 'alexandria'.
@@ -649,11 +664,11 @@ def ingest_book(
         qdrant_port: Qdrant server port number. Default: 6333.
         language_override: Override extracted language metadata with specific ISO 639-1 code
                           (e.g., 'en', 'hr'). If provided, skips Calibre enrichment.
-                          Default: None (use extracted/enriched metadata).
+                          Defaults to None (use extracted/enriched metadata).
         title_override: Override extracted title metadata. If provided with author_override,
-                       skips Calibre enrichment entirely. Default: None (use extracted/enriched).
+                       skips Calibre enrichment entirely. Defaults to None (use extracted/enriched).
         author_override: Override extracted author metadata. If provided with title_override,
-                        skips Calibre enrichment entirely. Default: None (use extracted/enriched).
+                        skips Calibre enrichment entirely. Defaults to None (use extracted/enriched).
 
     Returns:
         Dictionary containing ingestion results and statistics:
@@ -770,6 +785,22 @@ def ingest_book(
     return result
 
 def main():
+    """
+    Command-line interface entry point for book ingestion.
+
+    Parses command-line arguments and invokes the ingest_book() pipeline
+    to process a single book file into the Alexandria vector database.
+
+    Command-line Arguments:
+        --file: Path to the book file (required)
+        --domain: Domain classification (default: 'technical')
+        --collection: Qdrant collection name (default: 'alexandria')
+        --host: Qdrant server hostname (default: '192.168.0.151')
+        --port: Qdrant server port (default: 6333)
+
+    Usage:
+        python ingest_books.py --file "path/to/book.epub" --domain philosophy
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('--file', required=True)
     parser.add_argument('--domain', default='technical')

@@ -1020,6 +1020,36 @@ def render_ingested_books_filters_and_table(books, collection_data, selected_col
                     st.rerun()
 
 # ============================================
+# SKELETON LOADER
+# ============================================
+def render_table_skeleton(rows=5):
+    """Render skeleton loading placeholder for Calibre book table.
+
+    Args:
+        rows: Number of skeleton rows to display (default: 5)
+    """
+    skeleton_html = '<div style="margin-top: 1rem;">'
+
+    for _ in range(rows):
+        skeleton_html += '''
+        <div class="skeleton-row">
+            <div class="skeleton-cell skeleton-cell-small"></div>
+            <div class="skeleton-cell skeleton-cell-small"></div>
+            <div class="skeleton-cell skeleton-cell-small"></div>
+            <div class="skeleton-cell skeleton-cell-large"></div>
+            <div class="skeleton-cell skeleton-cell-medium"></div>
+            <div class="skeleton-cell skeleton-cell-small"></div>
+            <div class="skeleton-cell skeleton-cell-medium"></div>
+            <div class="skeleton-cell skeleton-cell-medium"></div>
+            <div class="skeleton-cell skeleton-cell-small"></div>
+        </div>
+        '''
+
+    skeleton_html += '</div>'
+    st.markdown(skeleton_html, unsafe_allow_html=True)
+
+
+# ============================================
 # FRAGMENT: Calibre Filters and Table
 # ============================================
 @st.fragment

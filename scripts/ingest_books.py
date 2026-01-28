@@ -618,6 +618,69 @@ def ingest_book(
     title_override: Optional[str] = None,
     author_override: Optional[str] = None
 ):
+    r"""
+    Complete end-to-end pipeline for ingesting books into Alexandria vector database.
+
+    Orchestrates the full ingestion workflow: file validation, text extraction, metadata
+    enrichment from Calibre library, universal semantic chunking, embedding generation,
+    and upload to Qdrant. Supports EPUB, PDF, TXT, and Markdown formats with automatic
+    format detection. Handles Windows long paths and Streamlit compatibility.
+
+    The pipeline performs these steps:
+    1. Path normalization with Windows long path support (\\?\ prefix for paths >= 248 chars)
+    2. File access validation to ensure readability
+    3. Text extraction and metadata parsing from book file
+    4. Metadata enrichment from Calibre library (skipped if overrides provided)
+    5. Application of metadata overrides (language, title, author)
+    6. Universal semantic chunking with domain-specific thresholds
+    7. Batch embedding generation using cached SentenceTransformer model
+    8. Upload to Qdrant with semantic search optimized metadata
+
+    Args:
+        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
+                 Can be relative, absolute, or use ~ for home directory. Automatically
+                 handles Windows long path limitations.
+        domain: Domain classification for chunking and retrieval optimization.
+               Options: 'technical', 'philosophy', 'literature'. Philosophy uses stricter
+               semantic threshold (0.45) for tighter conceptual coherence. Default: 'technical'.
+        collection_name: Name of the Qdrant collection to upload chunks to. Created
+                        automatically if it doesn't exist. Default: 'alexandria'.
+        qdrant_host: Qdrant server hostname or IP address. Default: 'localhost'.
+        qdrant_port: Qdrant server port number. Default: 6333.
+        language_override: Override extracted language metadata with specific ISO 639-1 code
+                          (e.g., 'en', 'hr'). If provided, skips Calibre enrichment.
+                          Default: None (use extracted/enriched metadata).
+        title_override: Override extracted title metadata. If provided with author_override,
+                       skips Calibre enrichment entirely. Default: None (use extracted/enriched).
+        author_override: Override extracted author metadata. If provided with title_override,
+                        skips Calibre enrichment entirely. Default: None (use extracted/enriched).
+
+    Returns:
+        Dictionary containing ingestion results and statistics:
+            On success:
+                - success (bool): True
+                - title (str): Final book title (extracted, enriched, or overridden)
+                - author (str): Final author name (extracted, enriched, or overridden)
+                - language (str): Final language code (extracted, enriched, or overridden)
+                - chunks (int): Number of semantic chunks created and uploaded
+                - sentences (int): Approximate sentence count (rough estimate via '. ' splits)
+                - strategy (str): Chunking strategy used ('Universal Semantic')
+                - file_size_mb (float): Book file size in megabytes
+                - filepath (str): Normalized absolute path to the ingested file
+                - debug_author (dict): Debug information tracking author metadata through pipeline
+            On error:
+                - success (bool): False
+                - error (str): Error message describing the failure
+
+    Note:
+        - Calibre enrichment is automatically skipped when both title_override and
+          author_override are provided (indicates metadata already sourced from Calibre)
+        - Semantic chunking thresholds: philosophy (0.45), all others (0.55)
+        - Chunk size constraints: min 200 chars, max 1200 chars
+        - All chunks receive unique UUIDs and ingestion timestamps
+        - Progress bars are disabled globally (TQDM_DISABLE=1) for Streamlit compatibility
+        - Function is safe to call from Streamlit - no sys.stderr usage
+    """
     # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
 

@@ -253,6 +253,370 @@ Split here   Add to buffer  Continue
 
 ---
 
+## Worked Example: Step-by-Step Walkthrough
+
+### Input Text
+
+```
+Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches. In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels. Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.
+```
+
+### Configuration
+
+```python
+threshold = 0.5
+min_chunk_size = 15  # words (lowered for demonstration)
+max_chunk_size = 100 # words
+```
+
+### Step 1: Sentence Splitting
+
+**Regex:** `(?<=[.!?])\s+`
+
+**Result:**
+```
+S0: "Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language."
+S1: "It employs critical analysis and systematic approaches."
+S2: "In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture."
+S3: "Carpenters use tools like hammers, saws, and chisels."
+S4: "Nietzsche, the German philosopher, wrote extensively about the will to power."
+S5: "His philosophy challenged conventional morality and religious belief systems."
+```
+
+**Word counts:**
+- S0: 20 words
+- S1: 8 words
+- S2: 18 words
+- S3: 10 words
+- S4: 13 words
+- S5: 10 words
+
+---
+
+### Step 2: Generate Embeddings
+
+**Process:** Pass all sentences to `all-MiniLM-L6-v2` model
+
+**Result:** 6 embeddings, each 384-dimensional
+
+```
+E0 = [0.123, -0.456, 0.789, ...] (384 dims) - philosophy concepts
+E1 = [0.145, -0.432, 0.801, ...] (384 dims) - philosophy methods
+E2 = [-0.234, 0.567, -0.123, ...] (384 dims) - carpentry trade
+E3 = [-0.221, 0.589, -0.134, ...] (384 dims) - carpentry tools
+E4 = [0.156, -0.423, 0.756, ...] (384 dims) - Nietzsche
+E5 = [0.167, -0.411, 0.772, ...] (384 dims) - Nietzsche's philosophy
+```
+
+---
+
+### Step 3: Iterative Chunking
+
+#### Initial State
+
+```
+current_chunk = [S0]
+current_word_count = 20
+chunks = []
+```
+
+---
+
+#### Iteration 1: Processing S1
+
+**Calculate similarity:**
+```python
+similarity = cosine_similarity(E0, E1)
+→ 0.78 (high - both about philosophy)
+```
+
+**Decision logic:**
+```python
+should_break = (0.78 < 0.5) and (20 >= 15)
+             = False and True
+             = False
+
+must_break = (20 + 8 > 100)
+           = False
+
+→ CONTINUE CHUNK (similarity is high)
+```
+
+**Action:** Add S1 to current chunk
+
+**State update:**
+```
+current_chunk = [S0, S1]
+current_word_count = 20 + 8 = 28
+```
+
+---
+
+#### Iteration 2: Processing S2
+
+**Calculate similarity:**
+```python
+similarity = cosine_similarity(E1, E2)
+→ 0.22 (low - philosophy vs carpentry = topic shift!)
+```
+
+**Decision logic:**
+```python
+should_break = (0.22 < 0.5) and (28 >= 15)
+             = True and True
+             = True ✓
+
+must_break = (28 + 18 > 100)
+           = False
+
+→ SPLIT CHUNK (similarity below threshold AND buffer sufficient)
+```
+
+**Action:** Finalize Chunk 0, start new chunk with S2
+
+**State update:**
+```
+chunks = [
+  {
+    "text": "Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches.",
+    "chunk_id": 0,
+    "word_count": 28,
+    "strategy": "universal-semantic"
+  }
+]
+
+current_chunk = [S2]
+current_word_count = 18
+```
+
+**Why this split?**
+- **Semantic boundary:** Philosophy → Carpentry (completely different topic)
+- **Buffer sufficient:** 28 words >= 15-word minimum
+- **Threshold met:** 0.22 < 0.5
+
+---
+
+#### Iteration 3: Processing S3
+
+**Calculate similarity:**
+```python
+similarity = cosine_similarity(E2, E3)
+→ 0.81 (high - both about carpentry)
+```
+
+**Decision logic:**
+```python
+should_break = (0.81 < 0.5) and (18 >= 15)
+             = False and True
+             = False
+
+must_break = (18 + 10 > 100)
+           = False
+
+→ CONTINUE CHUNK (similarity is high)
+```
+
+**Action:** Add S3 to current chunk
+
+**State update:**
+```
+current_chunk = [S2, S3]
+current_word_count = 18 + 10 = 28
+```
+
+---
+
+#### Iteration 4: Processing S4
+
+**Calculate similarity:**
+```python
+similarity = cosine_similarity(E3, E4)
+→ 0.18 (low - carpentry vs Nietzsche = topic shift!)
+```
+
+**Decision logic:**
+```python
+should_break = (0.18 < 0.5) and (28 >= 15)
+             = True and True
+             = True ✓
+
+must_break = (28 + 13 > 100)
+           = False
+
+→ SPLIT CHUNK (similarity below threshold AND buffer sufficient)
+```
+
+**Action:** Finalize Chunk 1, start new chunk with S4
+
+**State update:**
+```
+chunks = [
+  { chunk_id: 0, word_count: 28, text: "Philosophy..." },
+  {
+    "text": "In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels.",
+    "chunk_id": 1,
+    "word_count": 28,
+    "strategy": "universal-semantic"
+  }
+]
+
+current_chunk = [S4]
+current_word_count = 13
+```
+
+**Why this split?**
+- **Semantic boundary:** Carpentry → Nietzsche (different topic)
+- **Buffer sufficient:** 28 words >= 15-word minimum
+- **Threshold met:** 0.18 < 0.5
+
+---
+
+#### Iteration 5: Processing S5
+
+**Calculate similarity:**
+```python
+similarity = cosine_similarity(E4, E5)
+→ 0.72 (high - both about Nietzsche's philosophy)
+```
+
+**Decision logic:**
+```python
+should_break = (0.72 < 0.5) and (13 >= 15)
+             = False and False
+             = False
+
+must_break = (13 + 10 > 100)
+           = False
+
+→ CONTINUE CHUNK (similarity is high)
+```
+
+**Action:** Add S5 to current chunk
+
+**State update:**
+```
+current_chunk = [S4, S5]
+current_word_count = 13 + 10 = 23
+```
+
+---
+
+### Step 4: Finalize Last Chunk
+
+**End of text reached:** Add final buffer to chunks
+
+```python
+chunks.append({
+  "text": "Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.",
+  "chunk_id": 2,
+  "word_count": 23,
+  "strategy": "universal-semantic"
+})
+```
+
+---
+
+### Final Output
+
+**3 Semantically Coherent Chunks:**
+
+```json
+[
+  {
+    "chunk_id": 0,
+    "text": "Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches.",
+    "word_count": 28,
+    "strategy": "universal-semantic",
+    "topic": "Philosophy (definition and methods)"
+  },
+  {
+    "chunk_id": 1,
+    "text": "In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels.",
+    "word_count": 28,
+    "strategy": "universal-semantic",
+    "topic": "Carpentry (trade and tools)"
+  },
+  {
+    "chunk_id": 2,
+    "text": "Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.",
+    "word_count": 23,
+    "strategy": "universal-semantic",
+    "topic": "Nietzsche's philosophy"
+  }
+]
+```
+
+---
+
+### Key Observations
+
+#### Semantic Boundaries
+
+✓ **Chunk 0-1 split:** Philosophy → Carpentry (similarity: 0.22)
+- Two completely different domains
+- Clear topic transition signaled by "In contrast"
+
+✓ **Chunk 1-2 split:** Carpentry → Nietzsche (similarity: 0.18)
+- Shift from trade skills to philosophical figures
+- No conceptual overlap between sentences
+
+#### Semantic Cohesion
+
+✓ **Within Chunk 0:** Philosophy sentences (similarity: 0.78)
+- S0: What philosophy is
+- S1: How philosophy works
+- Both sentences describe the same discipline
+
+✓ **Within Chunk 1:** Carpentry sentences (similarity: 0.81)
+- S2: What carpentry is
+- S3: What carpenters use
+- Both sentences describe the same trade
+
+✓ **Within Chunk 2:** Nietzsche sentences (similarity: 0.72)
+- S4: Who Nietzsche was and his main concept
+- S5: His philosophical impact
+- Both sentences describe the same philosopher
+
+#### Why Fixed-Window Would Fail
+
+**Hypothetical fixed-window (30 words):**
+```
+Chunk A: "Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches."
+→ 28 words, clean break ✓
+
+Chunk B: "In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers,"
+→ 30 words, BREAKS MID-SENTENCE ✗
+
+Chunk C: "saws, and chisels. Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality"
+→ MIX OF CARPENTRY + NIETZSCHE ✗
+```
+
+**Problems with fixed-window:**
+1. Breaks mid-sentence (destroys readability)
+2. Mixes unrelated topics (destroys semantic coherence)
+3. No awareness of topic boundaries
+
+**Universal Semantic Chunking advantage:**
+1. Respects sentence boundaries (always)
+2. Splits at topic transitions (0.22, 0.18 similarity)
+3. Keeps related content together (0.78, 0.81, 0.72 similarity)
+
+---
+
+### Decision Summary Table
+
+| Iteration | Sentences | Similarity | Buffer Size | Threshold Check | Decision | Reason |
+|-----------|-----------|------------|-------------|-----------------|----------|--------|
+| 1 | S0 → S1 | 0.78 | 28 words | 0.78 ≥ 0.5 | **CONTINUE** | Same topic (philosophy) |
+| 2 | S1 → S2 | 0.22 | 28 words | 0.22 < 0.5 ✓ | **SPLIT** | Topic shift (philosophy → carpentry) |
+| 3 | S2 → S3 | 0.81 | 28 words | 0.81 ≥ 0.5 | **CONTINUE** | Same topic (carpentry) |
+| 4 | S3 → S4 | 0.18 | 28 words | 0.18 < 0.5 ✓ | **SPLIT** | Topic shift (carpentry → Nietzsche) |
+| 5 | S4 → S5 | 0.72 | 23 words | 0.72 ≥ 0.5 | **CONTINUE** | Same topic (Nietzsche) |
+
+**Pattern:** Algorithm splits at **semantic discontinuities** (similarity drops) while preserving **semantic cohesion** (high similarity).
+
+---
+
 ## Chunk Metadata
 
 ### Structure

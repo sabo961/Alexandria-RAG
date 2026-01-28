@@ -124,8 +124,13 @@ class CalibreDB:
         ORDER BY b.timestamp DESC
         """
 
+        # Validate limit is an integer to prevent SQL injection
+        if limit is not None and not isinstance(limit, int):
+            raise TypeError(f"limit must be an integer, got {type(limit).__name__}")
+
         if limit:
-            query += f" LIMIT {limit}"
+            # SQLite doesn't support ? placeholders in LIMIT clause
+            query += f" LIMIT {int(limit)}"
 
         cursor.execute(query)
         rows = cursor.fetchall()

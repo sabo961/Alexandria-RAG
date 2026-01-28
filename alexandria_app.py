@@ -86,6 +86,21 @@ def load_css() -> None:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
+def load_keyboard_shortcuts() -> None:
+    """Load keyboard shortcuts JavaScript from assets/keyboard_shortcuts.js"""
+    js_path = Path(__file__).parent / "assets" / "keyboard_shortcuts.js"
+    if js_path.exists():
+        with open(js_path, 'r', encoding='utf-8') as f:
+            js_code = f.read()
+            # Use components.html to properly inject JavaScript
+            import streamlit.components.v1 as components
+            components.html(
+                f"<script>{js_code}</script>",
+                height=0,
+                width=0
+            )
+
+
 # ============================================
 # APP STATE MANAGEMENT
 # ============================================
@@ -141,6 +156,9 @@ st.set_page_config(
 
 # Load custom CSS from assets/style.css
 load_css()
+
+# Load keyboard shortcuts from assets/keyboard_shortcuts.js
+load_keyboard_shortcuts()
 
 # ============================================
 # HELPER FUNCTIONS

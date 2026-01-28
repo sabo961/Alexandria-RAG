@@ -25,16 +25,23 @@ With similarity threshold:
 
 ADVANCED USAGE (CLI)
 --------------------
+NOTE: LLM features (--rerank, --answer) require OPENROUTER_API_KEY environment variable.
+      Set it before running: export OPENROUTER_API_KEY="sk-or-v1-..."
+
 Enable LLM reranking (better relevance):
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "shipment patterns" --rerank
 
 Generate LLM answer (full RAG):
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "What is normalization?" --answer
 
 Use specific model:
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "cognitive load" --answer --model "gpt-4o-mini"
 
 Combine all features:
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database design patterns" \
         --domain technical \
         --threshold 0.6 \
@@ -126,8 +133,16 @@ Answer generation:
     --answer              Generate LLM answer
     --model MODEL         Model for answer (default: meta-llama/llama-3.2-3b-instruct:free)
 
-API:
-    --api-key KEY         OpenRouter API key (or set OPENROUTER_API_KEY env var)
+API Authentication:
+    OPENROUTER_API_KEY     Required for --rerank and --answer features
+                           Must be set as environment variable (NOT command-line argument)
+
+    How to set:
+        export OPENROUTER_API_KEY="sk-or-v1-..."  # Linux/Mac
+        set OPENROUTER_API_KEY=sk-or-v1-...       # Windows CMD
+        $env:OPENROUTER_API_KEY="sk-or-v1-..."    # Windows PowerShell
+
+    Get API key: https://openrouter.ai/keys
 
 Output:
     --format FORMAT       Output format: markdown, text, json (default: markdown)
@@ -168,6 +183,7 @@ EXAMPLES
     python rag_query.py "cognitive load theory" --domain psychology --limit 3
 
 3. High-quality retrieval (with reranking):
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database normalization" \
         --domain technical \
         --threshold 0.6 \
@@ -182,6 +198,7 @@ EXAMPLES
         --model "gpt-4o-mini"
 
 5. JSON output for scripting:
+    export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "data modeling patterns" \
         --domain technical \
         --answer \
@@ -222,7 +239,6 @@ TROUBLESHOOTING
 
 "API key required":
     → Set OPENROUTER_API_KEY environment variable
-    → Or pass --api-key parameter
     → Get key from https://openrouter.ai/keys
 
 "Qdrant connection error":
@@ -687,9 +703,6 @@ def main():
     parser.add_argument('--model', type=str, default='meta-llama/llama-3.2-3b-instruct:free',
                        help='Model for answer generation')
 
-    # API
-    parser.add_argument('--api-key', type=str, help='OpenRouter API key (or set OPENROUTER_API_KEY env var)')
-
     # Output
     parser.add_argument('--format', type=str, choices=['markdown', 'text', 'json'],
                        default='markdown', help='Output format')
@@ -700,8 +713,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Get API key
-    api_key = args.api_key or os.environ.get('OPENROUTER_API_KEY')
+    # Get API key from environment variable only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
 
     try:
         result = perform_rag_query(

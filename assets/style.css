@@ -110,6 +110,142 @@
 }
 
 /* ============================================
+   KEYBOARD SHORTCUTS STYLING
+   ============================================ */
+
+/* Keyboard shortcut help dialog overlay */
+.keyboard-help-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+/* Help dialog container */
+.keyboard-help-dialog {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Help dialog header */
+.keyboard-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.keyboard-help-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.keyboard-help-close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.keyboard-help-close:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+/* Help dialog content */
+.keyboard-help-content {
+    padding: 1.5rem;
+}
+
+.keyboard-help-section {
+    margin-bottom: 1.5rem;
+}
+
+.keyboard-help-section:last-child {
+    margin-bottom: 0;
+}
+
+.keyboard-help-section h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    color: #667eea;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Keyboard shortcut items */
+.keyboard-shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.keyboard-shortcut-item:last-child {
+    border-bottom: none;
+}
+
+/* Keyboard key badges */
+.keyboard-shortcut-item kbd,
+kbd {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0 0.25rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: inline-block;
+}
+
+.keyboard-shortcut-item span {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+/* ============================================
    TERMINAL / MATRIX MODE (Dark Theme)
    Activated when user selects Dark mode
    ============================================ */
@@ -117,3 +253,48 @@
 /* Matrix Terminal Mode relies on [theme.dark] config for base colors
    (monospace font, green primary color, dark backgrounds)
    No additional CSS needed - Streamlit applies the theme automatically */
+
+/* Dark mode keyboard shortcuts styling */
+@media (prefers-color-scheme: dark) {
+    .keyboard-help-dialog {
+        background: #1e1e1e;
+        color: #e0e0e0;
+    }
+
+    .keyboard-help-header {
+        border-bottom-color: #333;
+    }
+
+    .keyboard-help-header h2 {
+        background: linear-gradient(135deg, #00ff41 0%, #00cc33 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .keyboard-help-close {
+        color: #999;
+    }
+
+    .keyboard-help-close:hover {
+        background: #333;
+        color: #00ff41;
+    }
+
+    .keyboard-help-section h3 {
+        color: #00ff41;
+    }
+
+    .keyboard-shortcut-item {
+        border-bottom-color: #333;
+    }
+
+    .keyboard-shortcut-item kbd,
+    kbd {
+        background: linear-gradient(135deg, #00ff41 0%, #00cc33 100%);
+        color: #0d0d0d;
+    }
+
+    .keyboard-shortcut-item span {
+        color: #aaa;
+    }
+}

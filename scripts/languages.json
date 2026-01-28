@@ -1,0 +1,19 @@
+{
+  "languages": [
+    {
+      "id": "en",
+      "name": "English",
+      "description": "English language books and documents"
+    },
+    {
+      "id": "hr",
+      "name": "Croatian",
+      "description": "Croatian language books and documents (Hrvatski)"
+    },
+    {
+      "id": "unknown",
+      "name": "Unknown",
+      "description": "Books with unidentified or missing language metadata"
+    }
+  ]
+}

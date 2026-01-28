@@ -32,7 +32,7 @@ python rag_query.py "your question here" --limit 5
 python batch_ingest.py --directory ../ingest --domain technical
 ```
 
-**📖 For detailed guides:** See [docs/guides/QUICK_REFERENCE.md](docs/guides/QUICK_REFERENCE.md)
+**📖 For detailed guides:** See [docs/how-to-guides/common-workflows.md](docs/how-to-guides/common-workflows.md)
 
 ---
 
@@ -90,7 +90,7 @@ python batch_ingest.py --directory ../ingest --domain technical
 
 ### 🚀 For New Users
 - **[Quick Start](#quick-start)** - Get running in 5 minutes (above)
-- **[QUICK_REFERENCE.md](docs/guides/QUICK_REFERENCE.md)** - Command cheat sheet
+- **[Common Workflows](docs/how-to-guides/common-workflows.md)** - Command cheat sheet
 - **[LOGGING_GUIDE.md](docs/guides/LOGGING_GUIDE.md)** - Track ingested books
 - **[PROFESSIONAL_SETUP_COMPLETE.md](docs/guides/PROFESSIONAL_SETUP_COMPLETE.md)** - Complete production guide
 

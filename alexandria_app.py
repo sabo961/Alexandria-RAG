@@ -230,103 +230,168 @@ def load_domains():
         return ["technical", "psychology", "philosophy", "history", "literature"]
 
 def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, host, port, move_files):
-    """Run batch ingestion for selected files with dynamic chunk optimization"""
+    """Run batch ingestion for selected files with dynamic chunk optimization
+
+    Orchestrates the complete ingestion workflow: file processing, chunking, embedding,
+    Qdrant storage, manifest tracking, and optional file relocation. This function is
+    called from the Streamlit UI and provides progress feedback through st.write/st.success.
+
+    Workflow:
+    1. Resolve file paths to absolute (prevent issues after directory changes)
+    2. Change to scripts directory (so CollectionManifest finds logs folder)
+    3. Initialize manifest for tracking ingested books
+    4. Process each file: ingest_book -> manifest update -> optional file move
+    5. Restore original directory and return aggregated results
+
+    Args:
+        selected_files: List of file paths to ingest (relative or absolute)
+        ingest_dir: Directory containing files to ingest (used for move destination)
+        domain: Knowledge domain (history/science/etc) for chunking strategy selection
+        collection_name: Qdrant collection to store embeddings in
+        host: Qdrant server hostname
+        port: Qdrant server port
+        move_files: If True, move successfully ingested files to 'ingested' subfolder
+
+    Returns:
+        dict: {'total': int, 'completed': int, 'failed': int, 'errors': [{'file': str, 'error': str}]}
+    """
     import sys
     from pathlib import Path
 
-    # File format constants
+    # File format constants (currently unused but reserved for future format-specific handling)
     EPUB_EXT = '.epub'
     PDF_EXT = '.pdf'
     TXT_EXT = '.txt'
     MD_EXT = '.md'
 
-    # Import from scripts
+    # Add scripts directory to Python path so imports can find ingest_book module
+    # This allows GUI and CLI to share the same ingestion logic without code duplication
     scripts_path = Path(__file__).parent / 'scripts'
     sys.path.insert(0, str(scripts_path))
     from scripts.ingest_books import ingest_book, extract_metadata_only
 
-    # Resolve all file paths to absolute paths BEFORE changing directory
+    # Convert all paths to absolute BEFORE changing directory below
+    # Critical: After os.chdir(), relative paths will resolve incorrectly
+    # So we capture absolute paths now while still in Streamlit's working directory
     selected_files = [str(Path(f).resolve()) for f in selected_files]
     ingest_dir = str(Path(ingest_dir).resolve())
 
-    # Change to scripts directory for CollectionManifest to find logs folder
+    # Change working directory to scripts folder so CollectionManifest can find logs/ directory
+    # CollectionManifest writes ingestion metadata to logs/<collection>_manifest.json
+    # and expects logs/ to be a sibling of the current directory
     import os
-    original_cwd = os.getcwd()
+    original_cwd = os.getcwd()  # Save current directory to restore after ingestion
     os.chdir(scripts_path)
 
+    # Import CollectionManifest AFTER chdir so it initializes with correct base path
     from scripts.collection_manifest import CollectionManifest
 
+    # Initialize results tracker for batch progress reporting
+    # Streamlit UI displays these aggregated stats after batch completes
     results = {
-        'total': len(selected_files),
-        'completed': 0,
-        'failed': 0,
-        'errors': []
+        'total': len(selected_files),  # Total files in batch
+        'completed': 0,                 # Successfully ingested and added to manifest
+        'failed': 0,                    # Failed ingestion (exceptions caught)
+        'errors': []                    # List of {file, error} dicts for detailed error reporting
     }
 
-    # Initialize collection-specific manifest
+    # Initialize collection-specific manifest for tracking ingested books
+    # Manifest persists metadata (title, author, chunks, domain) to logs/<collection>_manifest.json
+    # This enables features like "Ingested Books" tab, re-ingestion prevention, and deletion tracking
     manifest = CollectionManifest(collection_name=collection_name)
 
-    # Verify collection exists in Qdrant (reset manifest if deleted)
+    # Verify collection exists in Qdrant before starting batch ingestion
+    # If collection was deleted externally (via Qdrant UI), reset manifest to prevent orphaned entries
+    # This prevents manifest showing books that no longer exist in vector database
     manifest.verify_collection_exists(collection_name, qdrant_host=host, qdrant_port=port)
 
+    # Process each selected file sequentially
+    # (Could be parallelized in future, but sequential processing simplifies progress reporting)
     for file_path in selected_files:
         try:
+            # Show file currently being processed in Streamlit UI
+            # Provides real-time feedback so users know batch is progressing
             st.write(f"📖 Processing: {Path(file_path).name}")
 
-            # Use unified ingest_book function
-            # This ensures consistency with CLI and respects domain-specific strategies
+            # Delegate to unified ingest_book function (shared with CLI)
+            # ingest_book handles: text extraction, chunking (domain-aware), embedding, Qdrant upload
+            # Using shared function ensures GUI and CLI produce identical chunking/embeddings
             result = ingest_book(
                 filepath=file_path,
-                domain=domain,
+                domain=domain,  # Selects chunking strategy (e.g., history uses narrative-aware chunking)
                 collection_name=collection_name,
                 qdrant_host=host,
                 qdrant_port=port
             )
 
+            # Check if ingestion succeeded (result contains success flag + metadata)
             if result and result.get('success'):
-                # Update manifest
+                # Add book to manifest for tracking and UI display
+                # Manifest enables "Ingested Books" tab to show what's in collection
+                # and prevents re-ingestion of same book (duplicate detection)
                 manifest.add_book(
                     collection_name=collection_name,
-                    book_path=file_path,
-                    book_title=result['title'],
-                    author=result['author'],
-                    domain=domain,
-                    chunks_count=result['chunks'],
-                    file_size_mb=result['file_size_mb'],
-                    language=result.get('language')
+                    book_path=file_path,                  # Store original path for reference
+                    book_title=result['title'],           # Extracted from metadata or filename
+                    author=result['author'],              # Extracted from metadata or 'Unknown'
+                    domain=domain,                        # Knowledge domain for filtering in UI
+                    chunks_count=result['chunks'],        # Number of chunks stored in Qdrant
+                    file_size_mb=result['file_size_mb'], # File size for storage analytics
+                    language=result.get('language')       # Detected language (optional)
                 )
 
-                # Move file if requested and show combined success message
+                # Handle optional file relocation after successful ingestion
+                # If enabled, moves ingested files to 'ingested' subfolder to keep inbox clean
                 if move_files:
                     import shutil
-                    # Ensure we are moving relative to original ingest dir if needed
-                    # But ingest_book uses absolute path, so we use that
+                    # Create 'ingested' folder as sibling to 'ingest' directory
+                    # Example: data/ingest/ -> data/ingested/
+                    # exist_ok=True prevents error if folder already exists from previous runs
                     ingested_dir = Path(ingest_dir).parent / 'ingested'
                     ingested_dir.mkdir(exist_ok=True)
-                    
+
+                    # Move file to ingested folder (preserves filename)
+                    # shutil.move handles cross-filesystem moves and overwrites existing files
                     target_path = ingested_dir / Path(file_path).name
                     shutil.move(file_path, target_path)
-                    
+
+                    # Show success message with ingestion stats AND move confirmation
+                    # Includes: chunk count, sentence count, chunking strategy, new location
                     st.success(f"✅ **{Path(file_path).name}**\n\n📊 **{result['chunks']} chunks** | {result.get('sentences', '?')} sentences\n🧠 Strategy: {result.get('strategy', 'Standard')}\n📦 Moved to: `{target_path}`")
+
+                    # Render optional diagnostics expander with chunking details
+                    # (diagnostics contain chunk size distribution, overlap stats, etc.)
                     render_ingestion_diagnostics(result, Path(file_path).name)
                 else:
+                    # Show success message without move confirmation (file stays in original location)
                     st.success(f"✅ **{Path(file_path).name}**\n\n📊 **{result['chunks']} chunks** | {result.get('sentences', '?')} sentences\n🧠 Strategy: {result.get('strategy', 'Standard')}")
                     render_ingestion_diagnostics(result, Path(file_path).name)
 
+                # Increment successful ingestion counter for batch summary
                 results['completed'] += 1
             else:
+                # ingest_book returned failure (success=False or None)
+                # Extract error message from result dict or use generic fallback
                 error_msg = result.get('error', 'Unknown error')
-                raise Exception(error_msg)
+                raise Exception(error_msg)  # Re-raise to trigger except block below
 
         except Exception as e:
+            # Ingestion failed (could be: file read error, chunking failure, Qdrant connection issue, etc.)
+            # Show error in Streamlit UI but continue processing remaining files in batch
             st.error(f"❌ Failed: {Path(file_path).name}")
             st.error(f"   Error: {str(e)}")
+
+            # Track failure in results for batch summary
             results['failed'] += 1
             results['errors'].append({'file': Path(file_path).name, 'error': str(e)})
 
-    # Restore original directory
+    # Restore original working directory after batch completes
+    # Critical: If we don't restore, subsequent Streamlit reruns will have wrong working directory
+    # which breaks relative path resolution in other parts of the app
     os.chdir(original_cwd)
 
+    # Return aggregated results for batch summary display
+    # Streamlit UI uses this to show: "Completed: X/Y, Failed: Z"
     return results
 
 

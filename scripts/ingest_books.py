@@ -352,7 +352,30 @@ def upload_to_qdrant(
 
 
 def _get_calibre_db() -> Optional[CalibreDB]:
-    """Lazy-loads and returns a CalibreDB instance."""
+    """
+    Lazy-load and return singleton CalibreDB instance for metadata enrichment.
+
+    Initializes a connection to the Calibre library database on first call and
+    caches the instance for subsequent calls to avoid repeated database connections.
+    Handles connection errors gracefully by returning None if the Calibre library
+    is unavailable or inaccessible.
+
+    The Calibre library path is read from the module-level CALIBRE_LIBRARY_PATH
+    constant. If the database connection fails, appropriate warnings/errors are
+    logged and metadata enrichment will be skipped for the current ingestion session.
+
+    Returns:
+        CalibreDB instance if connection successful, None if connection fails.
+        Returns None in these cases:
+            - Calibre library path does not exist (FileNotFoundError)
+            - Database file is corrupted or inaccessible (generic Exception)
+            - metadata.db file is missing from the library path
+
+    Note:
+        This is a private helper function that implements the singleton pattern.
+        The global calibre_db_instance is initialized once and reused across
+        multiple book ingestion operations to improve performance.
+    """
     global calibre_db_instance
     if calibre_db_instance is None:
         try:
@@ -367,8 +390,43 @@ def _get_calibre_db() -> Optional[CalibreDB]:
 
 def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
     """
-    Attempts to enrich metadata from Calibre DB if a match is found.
-    Prioritizes Calibre data for title, author, and language if current metadata is 'Unknown' or 'unknown'.
+    Enrich book metadata with high-quality data from Calibre library if available.
+
+    Attempts to match the book file against the Calibre library database using
+    filename matching. If a match is found, enriches the metadata dictionary with
+    Calibre's curated metadata (title, author, language, format), but only overwrites
+    fields that contain 'Unknown' or 'unknown' values to preserve higher-quality
+    metadata from other sources.
+
+    The function performs a non-destructive merge: existing valid metadata values
+    are retained, while missing or low-quality values are replaced with Calibre data.
+    Language codes from Calibre are automatically standardized using the
+    standardize_language_code() function to ensure consistency.
+
+    Args:
+        filepath: Path to the book file (used for filename-based matching).
+                 Only the filename component is used for matching, not the full path.
+        metadata: Dictionary containing current book metadata with keys:
+                 title, author, language, format. Values may be 'Unknown' or 'unknown'
+                 if not extracted from the book file.
+
+    Returns:
+        Dictionary with enriched metadata. Returns the original metadata unchanged if:
+            - Calibre database connection is unavailable
+            - No matching book is found in Calibre library
+            - Calibre book record lacks the requested metadata fields
+
+        Modified metadata fields (only if current value is 'Unknown' or 'unknown'):
+            - title (str): Book title from Calibre
+            - author (str): Author name(s) from Calibre (handles multiple authors)
+            - language (str): Standardized language code from Calibre
+            - format (str): Uppercase file format from Calibre's format list
+
+    Note:
+        This is a private helper function used during book ingestion. It does not
+        modify the original metadata dictionary - a new dictionary is returned.
+        The function gracefully handles missing Calibre database connections by
+        returning the original metadata without raising exceptions.
     """
     db = _get_calibre_db()
     if not db:
@@ -390,7 +448,7 @@ def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
         if metadata.get('language', 'unknown') == 'unknown':
             # Use standardized language from Calibre if available and current is 'unknown'
             metadata['language'] = standardize_language_code(calibre_book.language)
-        
+
         # Also ensure format is consistent (take first format from Calibre and uppercase it)
         if calibre_book.formats and metadata.get('format', 'unknown') == 'unknown':
              metadata['format'] = calibre_book.formats[0].upper()

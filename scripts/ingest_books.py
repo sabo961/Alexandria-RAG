@@ -57,7 +57,22 @@ calibre_db_instance = None # Lazy load
 # ============================================================================ 
 
 def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
-    """Normalize paths for cross-platform file access."""
+    r"""
+    Normalize file paths for cross-platform access with Windows long path support.
+
+    Expands user home directory (~), converts to absolute path, and applies Windows
+    long path prefix (\\?\) for paths >= 248 characters to avoid MAX_PATH limitations.
+
+    Args:
+        filepath: Input file path (relative, absolute, or with ~ prefix).
+
+    Returns:
+        Tuple containing:
+            - path_for_open (str): Path to use with open() - includes long path prefix if needed
+            - abs_path (str): Standard absolute path without long path prefix
+            - used_long_path (bool): True if Windows long path prefix was applied
+            - path_length (int): Length of the absolute path in characters
+    """
     logger.debug(f"normalize_file_path input: {repr(filepath)}")
     expanded = os.path.expanduser(filepath)
     logger.debug(f"After expanduser: {repr(expanded)}")

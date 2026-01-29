@@ -28,6 +28,7 @@ from scripts.collection_manifest import CollectionManifest
 
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
 from scripts.rag_query import perform_rag_query
+from scripts.html_sanitizer import sanitize_html
 
 # Force reload of calibre_db to pick up DISTINCT changes
 import importlib
@@ -1122,7 +1123,8 @@ def render_query_tab():
                     if result.answer:
                         st.markdown("---")
                         st.markdown("### 💡 Answer")
-                        st.markdown(result.answer)
+                        # Sanitize AI-generated answer to prevent XSS attacks
+                        st.markdown(sanitize_html(result.answer))
 
                     # ==================================================
                     # DISPLAY SOURCE CHUNKS (PROVENANCE)
@@ -1134,10 +1136,12 @@ def render_query_tab():
                     for idx, source in enumerate(result.sources, 1):
                         # Expander keeps UI clean - users can inspect sources if needed
                         # Header shows book title and relevance score for quick scanning
-                        with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
-                            st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
-                            st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
-                            st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
+                        # Sanitize book_title in expander header to prevent XSS
+                        with st.expander(f"📖 Source {idx}: {sanitize_html(source.get('book_title', 'Unknown'))} (Relevance: {source.get('score', 0):.3f})"):
+                            # Sanitize all metadata fields to prevent XSS attacks
+                            st.markdown(f"**Author:** {sanitize_html(source.get('author', 'Unknown'))}")
+                            st.markdown(f"**Domain:** {sanitize_html(source.get('domain', 'Unknown'))}")
+                            st.markdown(f"**Section:** {sanitize_html(source.get('section_name', 'Unknown'))}")
                             st.markdown("**Content:**")
                             # Truncate long chunks to prevent UI overload
                             # Users can click into book if they need full context

@@ -1,0 +1,111 @@
+# ALEXANDRIA KNJIŽNIČARI
+## Backlog Brief v0.1
+
+### VIZIJA
+Specijalizirani BMad agenti koji služe kao interface između 
+Alexandria knowledge base i vanjskih korisnika (ljudskih i AI).
+"Sys odjel knjižnice" - raja dolazi, dobije što treba.
+
+---
+
+### AGENTI
+
+#### 📚 LIBRARIAN
+**Odgovornost:** Katalogizacija, metadata integritet, taksonomija
+**Input:** Nova knjiga, nekategorizirani content
+**Output:** Čisti metadata, tagovi, klasifikacija
+**Alati:** Qdrant, Calibre API, embedding model
+**Trigger:** Upload nove knjige, batch import, quality flag
+
+#### 🔍 RESEARCHER
+**Odgovornost:** Deep semantic search, cross-referencing, sinteza
+**Input:** Kompleksni upit, tema za istraživanje
+**Output:** Curated findings, povezani izvori, summary
+**Alati:** Qdrant semantic search, hierarchical chunks, LLM sinteza
+**Trigger:** Upit koji traži dubinu, "sve o X", "poveži A i B"
+
+#### 🎯 CURATOR
+**Odgovornost:** Personalizirane preporuke, reading paths
+**Input:** Kontekst projekta/problema, user profil
+**Output:** Ranked preporuke, "počni ovdje" paths
+**Alati:** User history, similarity matching, project context
+**Trigger:** "Što da čitam o X?", "inspiracija za problem Y"
+
+#### 🗄️ ARCHIVIST
+**Odgovornost:** Održavanje, kvaliteta, health checks
+**Input:** Scheduled triggers, anomaly detection
+**Output:** Quality reports, cleanup actions, refresh tasks
+**Alati:** Embedding staleness check, duplicate detection, stats
+**Trigger:** Cron, manual audit, quality threshold breach
+
+---
+
+### ORKESTRACIJA
+```
+[UPIT] 
+   │
+   ▼
+[DISPATCHER] ──► Klasifikacija upita
+   │
+   ├──► Simple lookup ──► LIBRARIAN
+   ├──► Deep research ──► RESEARCHER  
+   ├──► Recommendation ──► CURATOR
+   └──► Maintenance ──► ARCHIVIST
+   
+[ESCALATION PATH]
+LIBRARIAN ◄──► RESEARCHER (kad metadata nije dovoljan)
+CURATOR ◄──► RESEARCHER (kad preporuka traži deep dive)
+ARCHIVIST ──► LIBRARIAN (kad nađe probleme)
+```
+
+---
+
+### FAZE
+
+**F0: Infrastruktura**
+- [ ] Auto-Claude setup
+- [ ] BMad Builder instalacija
+- [ ] MCP connector Alexandria ◄► Auto-Claude
+
+**F1: LIBRARIAN (MVP)**
+- [ ] Agent persona definicija
+- [ ] Calibre sync workflow
+- [ ] Basic metadata extraction
+- [ ] Qdrant upsert pipeline
+
+**F2: RESEARCHER**
+- [ ] Semantic search wrapper
+- [ ] Cross-reference logic
+- [ ] Synthesis prompt engineering
+- [ ] Citation/source tracking
+
+**F3: CURATOR**
+- [ ] User context ingestion
+- [ ] Recommendation algorithm
+- [ ] Reading path generation
+
+**F4: ARCHIVIST**
+- [ ] Health check suite
+- [ ] Scheduled maintenance
+- [ ] Quality metrics dashboard
+
+**F5: Integracija**
+- [ ] Dispatcher logic
+- [ ] Inter-agent communication
+- [ ] External API (za "raju")
+
+---
+
+### OVISNOSTI
+- Alexandria Qdrant instance (postojeća)
+- Auto-Claude (instalacija u tijeku)
+- BMad Builder modul
+- MCP server za external access
+
+---
+
+### OPEN QUESTIONS
+1. Auth model za "raju" - tko smije pristupiti?
+2. Rate limiting - koliko upita po agentu?
+3. Prioriteti - koji agent prvi?
+4. Logging - što sve pratimo?

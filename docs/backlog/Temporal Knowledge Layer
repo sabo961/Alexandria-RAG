@@ -1,0 +1,305 @@
+# ALEXANDRIA TEMPORAL KNOWLEDGE LAYER
+## Backlog Brief v0.1
+
+### VIZIJA
+Vremenska dimenzija znanja. Alexandria prestaje biti "baza knjiga" 
+i postaje MAPA INTELEKTUALNOG PUTOVANJA kroz prostor znanja.
+Svaki upit ima kontekst: odakle dolaziš, što znaš, kamo ideš.
+
+Powered by Graphiti + Neo4j.
+
+---
+
+### PROBLEM
+
+Klasični RAG je AMNEZIČAN:
+- "Nađi slično" → evo 5 chunkova
+- Nema povijesti interakcija
+- Nema evolucije razumijevanja
+- Svaki upit je "prvi put"
+
+Znanje nije snapshot. Znanje je PUTOVANJE.
+
+---
+
+### ARHITEKTURA
+```
+┌─────────────────────────────────────────────────────┐
+│           GRAPHITI KNOWLEDGE GRAPH                  │
+│  ═══════════════════════════════════════════════    │
+│                                                     │
+│  ENTITETI:                                          │
+│  ├── 📚 Knjige                                      │
+│  ├── 👤 Autori                                      │
+│  ├── 💡 Koncepti                                    │
+│  ├── 🏛️ Škole mišljenja                            │
+│  ├── 📅 Periode                                     │
+│  └── 🧑 Korisnici                                   │
+│                                                     │
+│  RELACIJE (temporalne):                             │
+│  ├── NAPISAO (autor → knjiga)                       │
+│  ├── CITIRA (knjiga → knjiga)                       │
+│  ├── POVEZAN_S (koncept ↔ koncept)                  │
+│  ├── PRIPADA (knjiga → škola)                       │
+│  ├── ČITAO (korisnik → knjiga) [KADA]               │
+│  ├── TRAŽIO (korisnik → koncept) [KADA]             │
+│  └── NAŠAO_KORISNIM (korisnik → chunk) [KADA]       │
+│                                                     │
+│  BI-TEMPORALNI MODEL:                               │
+│  ├── t_event: Kad se DOGODILO                       │
+│  └── t_ingested: Kad smo SAZNALI                    │
+└─────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│              QDRANT VECTOR LAYER                    │
+│  ═══════════════════════════════════════════════    │
+│  • Chunk embeddinzi                                 │
+│  • Semantic similarity                              │
+│  • Full-text search                                 │
+│  • Brzi content retrieval                           │
+└─────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│              9000 KNJIGA (Calibre)                  │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+### QUERY FLOW
+```
+UPIT: "Knjige o consciousness koje koriste matematiku"
+
+KORAK 1: GRAPHITI - Graph Traversal
+─────────────────────────────────────
+- consciousness ──► linked_concepts ──► mathematics
+- Rezultat: [GEB, Strange Loop, Emperor's New Mind...]
+- PLUS: "Sabo je već čitao GEB"
+- PLUS: "Zadnji put tražio consciousness: 2024-09"
+
+KORAK 2: PERSONALIZACIJA
+─────────────────────────────────────
+- Filter: izbaci već pročitano (ili stavi niže)
+- Boost: autori koje je već čitao (Hofstadter)
+- Suggest: "Sljedeći logični korak na tvom putu"
+
+KORAK 3: QDRANT - Content Retrieval
+─────────────────────────────────────
+- Deep dive u specifične chunkove
+- Relevantni pasusi iz odabranih knjiga
+
+KORAK 4: RESPONSE + GRAPH UPDATE
+─────────────────────────────────────
+- Vrati rezultate
+- ZAPIŠI: Sabo tražio X, dobio Y, u vrijeme Z
+```
+
+---
+
+### GRAF ENTITETA - DETALJI
+
+#### 📚 BOOK NODE
+```yaml
+Book:
+  id: uuid
+  title: string
+  calibre_id: int
+  
+  # Relacije
+  written_by: -> Author
+  cites: -> Book[]
+  cited_by: -> Book[]
+  covers_concepts: -> Concept[]
+  belongs_to_school: -> School
+  from_period: -> Period
+```
+
+#### 👤 AUTHOR NODE
+```yaml
+Author:
+  id: uuid
+  name: string
+  
+  # Relacije
+  wrote: -> Book[]
+  influenced_by: -> Author[]
+  influences: -> Author[]
+  associated_with: -> School[]
+```
+
+#### 💡 CONCEPT NODE
+```yaml
+Concept:
+  id: uuid
+  name: string
+  description: string
+  
+  # Relacije
+  related_to: -> Concept[]
+  parent_concept: -> Concept
+  child_concepts: -> Concept[]
+  appears_in: -> Book[]
+```
+
+#### 🧑 USER JOURNEY NODE
+```yaml
+UserJourney:
+  user_id: uuid
+  
+  # Temporalne relacije
+  read: -> Book[] [timestamp, completion%]
+  searched: -> Concept[] [timestamp, found_useful: bool]
+  bookmarked: -> Chunk[] [timestamp]
+  path: -> ReadingPath[] [created, active]
+```
+
+---
+
+### TEMPORALNI UPITI
+```cypher
+// Što je Sabo čitao o consciousness PRIJE nego je otkrio Hofstadtera?
+MATCH (u:User {name: "Sabo"})-[r:READ]->(b:Book)-[:COVERS]->(c:Concept {name: "consciousness"})
+WHERE r.timestamp < date("2024-06-01")
+RETURN b.title, r.timestamp
+ORDER BY r.timestamp
+
+// Kako je evoluiralo razumijevanje "recursion"?
+MATCH path = (u:User)-[r:SEARCHED*]->(c:Concept {name: "recursion"})
+RETURN r.timestamp, r.context, r.found_useful
+ORDER BY r.timestamp
+
+// Preporuči SLJEDEĆU knjigu na putu
+MATCH (u:User)-[:READ]->(read:Book)-[:CITES]->(next:Book)
+WHERE NOT (u)-[:READ]->(next)
+AND (next)-[:COVERS]->(c:Concept)<-[:SEARCHED]-(u)
+RETURN next, count(*) as relevance
+ORDER BY relevance DESC
+LIMIT 5
+```
+
+---
+
+### SYNC PIPELINE
+```
+CALIBRE LIBRARY          GRAPHITI              QDRANT
+     │                      │                     │
+     │  [Nova knjiga]       │                     │
+     ├─────────────────────►│                     │
+     │                      │                     │
+     │          [Extract entities]                │
+     │          [Create nodes]                    │
+     │          [Detect relationships]            │
+     │                      │                     │
+     │                      │  [Chunk + Embed]    │
+     │                      ├────────────────────►│
+     │                      │                     │
+     │          [Link book → chunks]              │
+     │                      │                     │
+     
+ENTITY EXTRACTION (per book):
+├── Autori (NER + metadata)
+├── Citirane knjige (bibliography parsing)
+├── Koncepti (LLM extraction)
+├── Osobe (NER)
+├── Vremenska razdoblja
+└── Škole mišljenja (LLM classification)
+```
+
+---
+
+### FAZE IMPLEMENTACIJE
+
+**F0: Infrastruktura**
+- [ ] Neo4j instance (Docker)
+- [ ] Graphiti setup
+- [ ] Povezati s postojećim Qdrant
+- [ ] Basic MCP connector
+
+**F1: Book Graph (statični)**
+- [ ] Book nodes iz Calibre
+- [ ] Author nodes + WROTE relacije
+- [ ] Concept extraction pipeline
+- [ ] CITES relacije (bibliography parsing)
+
+**F2: Relationship Discovery**
+- [ ] Concept linking (RELATED_TO)
+- [ ] Author influence mapping
+- [ ] School/Period classification
+- [ ] Cross-book concept mapping
+
+**F3: User Journey Tracking**
+- [ ] User node
+- [ ] READ relacije s timestamp
+- [ ] SEARCHED log
+- [ ] FOUND_USEFUL feedback loop
+
+**F4: Personalized Retrieval**
+- [ ] "Sljedeća knjiga" recommendation
+- [ ] "Već znaš" context injection
+- [ ] Reading path generation
+- [ ] Knowledge gap detection
+
+**F5: Temporal Queries**
+- [ ] "Kako je evoluiralo moje razumijevanje X?"
+- [ ] "Što sam znao o Y prije datuma Z?"
+- [ ] "Path od knjige A do knjige B kroz koncepte"
+
+---
+
+### INTEGRACIJA S KNJIŽNIČARIMA
+```
+┌─────────────────────────────────────────────┐
+│  KNJIŽNIČARI (BMad agenti)                  │
+├─────────────────────────────────────────────┤
+│                                             │
+│  LIBRARIAN ──► Entity extraction            │
+│               ──► Graph node creation       │
+│               ──► Relationship detection    │
+│                                             │
+│  RESEARCHER ──► Graph traversal             │
+│              ──► Temporal queries           │
+│              ──► Path finding               │
+│                                             │
+│  CURATOR ────► User journey analysis        │
+│             ──► Personalized recommendations│
+│             ──► Reading path generation     │
+│                                             │
+│  ARCHIVIST ──► Graph health checks          │
+│             ──► Orphan node detection       │
+│             ──► Relationship validation     │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+### METRIKE
+
+| Metrika | Opis | Target |
+|---------|------|--------|
+| Graph coverage | % knjiga s extracted entities | >90% |
+| Concept linkage | Avg relacija po konceptu | >5 |
+| Path findability | % uspješnih "A→B" upita | >80% |
+| Recommendation relevance | User feedback score | >4/5 |
+| Query latency | Graph traversal vrijeme | <500ms |
+
+---
+
+### OPEN QUESTIONS
+
+1. **Entity extraction model** - LLM ili specializirani NER?
+2. **Concept taxonomy** - Flat ili hierarchical?
+3. **User privacy** - Journey data lokalno ili sync?
+4. **Graph size** - Skaliranje za 50k+ knjiga?
+5. **Feedback loop** - Kako korisnik označava "korisno"?
+
+---
+
+### REFERENCE
+
+- [Graphiti GitHub](https://github.com/getzep/graphiti)
+- [Zep Paper](https://arxiv.org/abs/2501.13956)
+- [Neo4j + Graphiti Blog](https://neo4j.com/blog/developer/graphiti-knowledge-graph-memory/)
+- Alexandria existing Qdrant setup

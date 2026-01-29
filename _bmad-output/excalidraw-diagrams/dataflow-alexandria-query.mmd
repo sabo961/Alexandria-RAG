@@ -1,0 +1,37 @@
+%% Alexandria RAG Query Pipeline - Level 2 DFD
+%% Mermaid Diagram
+
+graph LR
+    %% External Entities
+    User["👤 User<br/>(Streamlit GUI)<br/>(External Entity)"]
+    OpenRouter["🤖 OpenRouter API<br/>(External Entity)"]
+
+    %% Processes
+    P1(("1.0<br/>Receive<br/>Query"))
+    P2(("2.0<br/>Generate Query<br/>Embedding"))
+    P3(("3.0<br/>Search<br/>Vector DB"))
+    P4(("4.0<br/>Retrieve & Rank<br/>Chunks"))
+    P5(("5.0<br/>Generate<br/>Response"))
+
+    %% Data Stores
+    D1[("D1: Qdrant<br/>Collections")]
+
+    %% Data Flows
+    User -->|User Query| P1
+    P1 -->|Query Text| P2
+    P2 -->|Query Vector| P3
+    P3 -->|Search Request| D1
+    D1 -->|Matching Chunks| P4
+    P4 -->|Ranked Context| P5
+    P5 -->|Prompt + Context| OpenRouter
+    OpenRouter -->|LLM Response| P5
+    P5 -->|Final Answer| User
+
+    %% Styling
+    classDef external fill:#ffccbc,stroke:#f57c00,stroke-width:3px,color:#1e1e1e
+    classDef process fill:#fff9c4,stroke:#f57c00,stroke-width:2px,color:#1e1e1e
+    classDef datastore fill:#c5e1a5,stroke:#f57c00,stroke-width:2px,color:#1e1e1e
+
+    class User,OpenRouter external
+    class P1,P2,P3,P4,P5 process
+    class D1 datastore

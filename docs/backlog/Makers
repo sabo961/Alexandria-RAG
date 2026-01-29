@@ -1,0 +1,201 @@
+# ALEXANDRIA MAKER LAYER
+## Backlog Brief v0.1
+
+### VIZIJA
+Voting/konsenzus mehanizam za kritične odluke unutar Alexandria sustava.
+Inspiriran MAKER metodologijom (Cognizant AI Lab) - atomski koraci, 
+paralelni agenti, konsenzus validacija. Zero-error na bitnim stvarima.
+
+---
+
+### PROBLEM
+
+Knjižničari rade autonomno. Većina odluka je OK ako je 80% točna.
+Ali neke odluke su KRITIČNE:
+
+- Pogrešna klasifikacija rijetke knjige
+- Krivi cross-reference koji širi dezinformaciju
+- Preporuka koja vodi u pogrešnom smjeru
+- Brisanje "duplicata" koji nije duplikat
+
+Cijena greške: zagađena baza, izgubljeno povjerenje, sati popravljanja.
+
+---
+
+### MAKER PRINCIPI (adaptirano)
+
+#### 1. ATOMSKA DEKOMPOZICIJA
+Razbij odluku na najmanje moguće korake.
+Ne: "Klasificiraj ovu knjigu"
+Da: "Je li ovo fiction?" → "Je li ovo 20. stoljeće?" → "Je li ovo Europa?"
+
+#### 2. PARALELNO IZVRŠENJE
+Više instanci radi isti korak istovremeno.
+3x LIBRARIAN dobije isti task, rade neovisno.
+
+#### 3. K-THRESHOLD VOTING
+Prihvati odluku kad K agenata više od konkurencije.
+k=2: treba 2 glasa prednosti za konsenzus.
+
+#### 4. RED-FLAGGING
+Odbaci sumnjive odgovore PRIJE glasanja:
+- Predugački (agent "filozofira" umjesto da odluči)
+- Krivo formatirani
+- Sadrže "nisam siguran", "možda", hedging
+
+---
+
+### KADA AKTIVIRATI MAKER
+```
+DECISION CRITICALITY MATRIX
+═══════════════════════════════════════════════════
+
+                    LOW COST        HIGH COST
+                    of error        of error
+                ┌───────────────┬───────────────┐
+   REVERSIBLE   │   YOLO        │   REVIEW      │
+                │   Single agent│   Human check │
+                ├───────────────┼───────────────┤
+   IRREVERSIBLE │   CAREFUL     │   MAKER       │
+                │   Double-check│   Full voting │
+                └───────────────┴───────────────┘
+
+MAKER TRIGGERS:
+- DELETE operacije
+- Metadata override na verified entries  
+- Cross-reference koji utječe na >10 dokumenata
+- Preporuka za "mission critical" projekt
+- Bilo što flaggano kao "rare" ili "valuable"
+```
+
+---
+
+### IMPLEMENTACIJA
+
+#### MAKER WRAPPER
+```
+[KRITIČNA ODLUKA]
+       │
+       ▼
+┌─────────────────────────────────┐
+│         MAKER WRAPPER           │
+├─────────────────────────────────┤
+│ 1. Decompose → atomski koraci   │
+│ 2. Spawn → N paralenih agenata  │
+│ 3. Collect → odgovori           │
+│ 4. Filter → red-flag removal    │
+│ 5. Vote → k-threshold           │
+│ 6. Decide → konsenzus ili ESC   │
+└─────────────────────────────────┘
+       │
+       ├──► KONSENZUS ──► Execute
+       │
+       └──► NO KONSENZUS ──► Escalate to human
+```
+
+#### KONFIGURACIJA
+```yaml
+maker_config:
+  default_k: 2           # glasova prednosti za pobjedu
+  default_n: 3           # paralelnih agenata
+  timeout_ms: 5000       # max vrijeme po agentu
+  
+  red_flags:
+    max_response_length: 200
+    banned_phrases: 
+      - "nisam siguran"
+      - "možda"
+      - "vjerojatno"
+      - "I think"
+    require_format: "DECISION: X | CONFIDENCE: Y"
+    
+  escalation:
+    max_rounds: 3        # retry prije eskalacije
+    notify: ["human_admin"]
+```
+
+---
+
+### AGENTI U MAKER MODU
+
+Isti knjižničari, ali s MAKER wrapperom:
+```
+LIBRARIAN (standard)
+  "Klasificiraj ovu knjigu"
+  → 1 agent, 1 odgovor, done
+
+LIBRARIAN (MAKER mode)  
+  "Klasificiraj ovu RIJETKU knjigu"
+  → 3 agenta, voting, konsenzus required
+```
+
+Agent ne zna da je u MAKER modu. 
+Wrapper orkestrira izvana.
+
+---
+
+### FAZE
+
+**F0: Proof of Concept**
+- [ ] MAKER wrapper skeleton
+- [ ] Hardcoded 3-agent voting
+- [ ] Simple majority rule
+- [ ] Manual trigger only
+
+**F1: Red-flagging**
+- [ ] Response length filter
+- [ ] Phrase detection
+- [ ] Format validation
+- [ ] Resample logic
+
+**F2: K-threshold**
+- [ ] Configurable K
+- [ ] Race-to-K implementation
+- [ ] Early termination (kad je konsenzus jasan)
+
+**F3: Atomska dekompozicija**
+- [ ] Decision tree templates
+- [ ] Auto-decompose za poznate task types
+- [ ] Step dependency tracking
+
+**F4: Integracija**
+- [ ] Trigger rules engine
+- [ ] Criticality auto-detection
+- [ ] Seamless wrapper za knjižničare
+
+**F5: Observability**
+- [ ] Voting logs
+- [ ] Consensus metrics
+- [ ] Error rate tracking
+- [ ] Cost analysis
+
+---
+
+### METRIKE USPJEHA
+
+| Metrika | Bez MAKER | S MAKER | Target |
+|---------|-----------|---------|--------|
+| Critical error rate | ~5%? | <0.1% | Zero |
+| Decision latency | 1x | ~3x | <5x |
+| Cost per decision | 1x | ~3x | <5x |
+| Human escalations | 0 | Some | <5% |
+
+Trade-off: sporije i skuplje, ali POUZDANO.
+
+---
+
+### OPEN QUESTIONS
+
+1. **Scope:** Samo knjižničari ili svi BMad agenti?
+2. **Cost model:** Tko plaća 3x API calls?
+3. **Disagreement logging:** Što radimo s "interesting" disagreements?
+4. **Learning:** Može li sustav naučiti koje odluke trebaju MAKER?
+5. **Hybrid:** MAKER za dio odluke, standard za ostatak?
+
+---
+
+### REFERENCE
+
+- [MAKER Paper](https://arxiv.org/abs/2511.09030)
+- [Cognizant Blog](https://www.cognizant.com/us/en/ai-lab/blog/maker)
+- Apple "Illusion of Thinking" studija

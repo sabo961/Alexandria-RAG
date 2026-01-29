@@ -183,8 +183,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "eea6dceb38f727c2",
+  "active": "60b6d1c8635de37c",
   "lastOpenFiles": [
+    "_bmad-output/excalidraw-diagrams/dataflow-alexandria-query.mmd",
+    "_bmad-output/excalidraw-diagrams/dataflow-alexandria-ingestion.mmd",
+    "_bmad-output/excalidraw-diagrams/dataflow-alexandria-query.excalidraw",
+    "_bmad-output/excalidraw-diagrams/dataflow-alexandria-ingestion.excalidraw",
+    "_bmad-output/excalidraw-diagrams/theme.json",
+    "_bmad-output/excalidraw-diagrams",
     "docs/tutorials/getting-started.md",
     "docs/tutorials/index.md",
     "docs/how-to-guides/index.md",
@@ -197,11 +203,6 @@
     "docs/reference/architecture/diagrams/structurizr-RAGQueryFlow.puml",
     "docs/reference/architecture/diagrams/structurizr-RAGQueryFlow-key.puml",
     "docs/reference/architecture/diagrams/structurizr-ComponentIngestionFlow.puml",
-    "docs/reference/architecture/diagrams/structurizr-Containers.puml",
-    "docs/reference/architecture/diagrams/structurizr-Components.puml",
-    "docs/reference/architecture/diagrams/structurizr-Containers-key.puml",
-    "docs/reference/architecture/diagrams/structurizr-Components-key.puml",
-    "docs/reference/architecture/diagrams/structurizr-ComponentQueryFlow.puml",
     "docs/reference/architecture/README.md",
     "docs/explanation/index.md",
     "docs/reference/index.md",
@@ -219,7 +220,6 @@
     "docs/reference/architecture/technical/PDF_vs_EPUB_COMPARISON.md",
     "docs/reference/architecture/decisions/0007-universal-semantic-chunking.md",
     "docs/reference/architecture/decisions/template.md",
-    "docs/reference/architecture/decisions/README.md",
-    "docs/reference/architecture/decisions/0005-philosophical-argument-chunking.md"
+    "docs/reference/architecture/decisions/README.md"
   ]
 }

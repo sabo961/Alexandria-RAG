@@ -1,0 +1,39 @@
+%% Alexandria Book Ingestion Pipeline - Level 2 DFD
+%% Mermaid Diagram
+
+graph LR
+    %% External Entities
+    CalibreLib["📚 Calibre Library<br/>(External Entity)"]
+    FileSystem["💾 File System<br/>(External Entity)"]
+
+    %% Processes
+    P1(("1.0<br/>Extract Text<br/>from Book"))
+    P2(("2.0<br/>Apply Semantic<br/>Chunking"))
+    P3(("3.0<br/>Generate<br/>Embeddings"))
+    P4(("4.0<br/>Upload to<br/>Qdrant"))
+    P5(("5.0<br/>Log to<br/>Manifest"))
+
+    %% Data Stores
+    D1[("D1: Calibre<br/>Metadata")]
+    D2[("D2: Qdrant<br/>Collections")]
+    D3[("D3: Manifest<br/>Files")]
+
+    %% Data Flows
+    CalibreLib -->|Book File| P1
+    D1 -->|Book Metadata| P1
+    P1 -->|Extracted Text| P2
+    P2 -->|Text Chunks| P3
+    P3 -->|Embedded Chunks| P4
+    P4 -->|Vector Data| D2
+    P4 -->|Ingestion Status| P5
+    P5 -->|Manifest Entry| D3
+    P1 -->|Processed Book| FileSystem
+
+    %% Styling
+    classDef external fill:#ffccbc,stroke:#f57c00,stroke-width:3px,color:#1e1e1e
+    classDef process fill:#fff9c4,stroke:#f57c00,stroke-width:2px,color:#1e1e1e
+    classDef datastore fill:#c5e1a5,stroke:#f57c00,stroke-width:2px,color:#1e1e1e
+
+    class CalibreLib,FileSystem external
+    class P1,P2,P3,P4,P5 process
+    class D1,D2,D3 datastore

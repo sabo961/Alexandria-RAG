@@ -17,7 +17,7 @@ For stable reference documentation, see [AGENTS.md](AGENTS.md) and [_bmad-output
 - [ ] **Chunk Fingerprint** - Add `chunk_fingerprint = sha1(book_id + section + order + text)` for diff and selective re-index
 - [ ] **Retrieval Explain Mode** - Add `--explain` flag to show score, distance, chunk_id, book for debugging
 - [ ] **Manual Chunking Parameters vs Automatic Optimization** - Design decision: Keep automatic-only or add manual override controls? (⏸️ ON HOLD - awaiting real-world usage feedback)
-
+- [ ] **Multiple API Keys (not only OpenRouter)** - multiple AI API keys!!
 ---
 
 ## 🟡 MEDIUM PRIORITY

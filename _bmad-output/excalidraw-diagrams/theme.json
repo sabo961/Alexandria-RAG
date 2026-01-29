@@ -1,0 +1,23 @@
+{
+  "name": "Colorful DFD",
+  "colors": {
+    "process": {
+      "fill": "#fff9c4",
+      "stroke": "#f57c00"
+    },
+    "datastore": {
+      "fill": "#c5e1a5",
+      "stroke": "#f57c00"
+    },
+    "external": {
+      "fill": "#ffccbc",
+      "stroke": "#f57c00"
+    },
+    "arrow": {
+      "stroke": "#f57c00"
+    },
+    "text": {
+      "stroke": "#1e1e1e"
+    }
+  }
+}

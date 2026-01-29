@@ -42,5 +42,6 @@ streamlit>=1.29.0  # Web interface (binds to 0.0.0.0:8501)
 # Development (Recommended - Not Yet Implemented)
 pytest==7.4.3  # Testing framework
 pytest-cov==4.1.0  # Coverage reports
+pytest-playwright>=0.4.0  # Browser/UI testing with Playwright
 black==23.12.1  # Code formatter
 flake8==7.0.0  # Linter

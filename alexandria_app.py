@@ -27,7 +27,8 @@ from scripts.count_file_types import count_file_types
 from scripts.collection_manifest import CollectionManifest
 
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
-from scripts.rag_query import perform_rag_query, RAGResult
+from scripts.rag_query import perform_rag_query
+from scripts.html_sanitizer import sanitize_html
 
 # Force reload of calibre_db to pick up DISTINCT changes
 import importlib
@@ -117,57 +118,62 @@ def load_keyboard_shortcuts() -> None:
             )
 
 
-def format_rag_result_as_json(result: RAGResult) -> str:
-    """Format RAG result as JSON string
+def render_section_header(text: str, icon: str = "") -> None:
+    """Render a section header with consistent styling.
+
+    Centralizes section header rendering to reduce unsafe HTML usage and
+    maintain consistent visual styling across the application.
 
     Args:
-        result: RAGResult object to format
+        text: Header text to display
+        icon: Optional emoji icon to prepend to header
 
-    Returns:
-        JSON string with query, filtered_count, reranked, results, answer fields
+    Example:
+        render_section_header("Query Interface", "🔍")
     """
-    output = {
-        'query': result.query,
-        'filtered_count': result.filtered_count,
-        'reranked': result.reranked,
-        'results': result.results,
-        'answer': result.answer
-    }
-    return json.dumps(output, indent=2, ensure_ascii=False)
+    header_text = f"{icon} {text}" if icon else text
+    # Use container + header for semantic structure, apply custom class via markdown
+    st.markdown(f'<div class="section-header">{header_text}</div>', unsafe_allow_html=True)
 
 
-def format_rag_result_as_markdown(result: RAGResult) -> str:
-    """Format RAG result as markdown string
+def render_main_title(title: str) -> None:
+    """Render the main application title with gradient styling.
+
+    Centralizes main title rendering to maintain consistent branding.
+    Note: Uses unsafe_allow_html for gradient styling (static content only).
 
     Args:
-        result: RAGResult object to format
-
-    Returns:
-        Markdown string with headers, answer section, and sources with metadata
+        title: Main title text (should be static/hardcoded)
     """
-    lines = []
-    lines.append("=" * 80)
-    lines.append("# Alexandria RAG Results")
-    lines.append("=" * 80)
-    lines.append(f"\n**Query:** {result.query}")
-    lines.append(f"**Retrieved:** {len(result.results)} chunks (filtered from {result.filtered_count})")
-    lines.append(f"**Reranked:** {'Yes' if result.reranked else 'No'}")
+    st.markdown(f'<div class="main-title">{title}</div>', unsafe_allow_html=True)
 
-    if result.answer:
-        lines.append("\n## 💡 Answer\n")
-        lines.append(result.answer)
 
-    lines.append("\n## 📚 Sources\n")
-    for idx, r in enumerate(result.results, 1):
-        lines.append(f"### Source {idx} (Relevance: {r['score']:.4f})")
-        lines.append(f"- **Book:** {r['book_title']}")
-        lines.append(f"- **Author:** {r['author']}")
-        lines.append(f"- **Domain:** {r['domain']}")
-        lines.append(f"- **Section:** {r['section_name']}")
-        lines.append(f"\n> {r['text'][:500]}{'...' if len(r['text']) > 500 else ''}\n")
-        lines.append("---\n")
+def render_subtitle(subtitle: str) -> None:
+    """Render the application subtitle.
 
-    return "\n".join(lines)
+    Centralizes subtitle rendering to maintain consistent styling.
+    Note: Uses unsafe_allow_html for custom styling (static content only).
+
+    Args:
+        subtitle: Subtitle text (should be static/hardcoded)
+    """
+    st.markdown(f'<div class="subtitle">{subtitle}</div>', unsafe_allow_html=True)
+
+
+def render_footer() -> None:
+    """Render the application footer with branding.
+
+    Centralizes footer rendering to maintain consistent styling.
+    Note: Uses unsafe_allow_html for custom styling (static content only).
+    """
+    st.markdown("---")
+    st.markdown(
+        '<div style="text-align: center; color: #666; font-style: italic;">'
+        '𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤 • '
+        'Built with ❤️ by 137 Team • 2026'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
 
 # ============================================
@@ -611,30 +617,23 @@ def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, s
     Returns:
         Tuple of (is_healthy, message)
         - is_healthy: True if Qdrant is reachable, False otherwise
-        - message: Status message ("Connected" or error description with debugging hints)
+        - message: Status message ("Connected" or error description)
     """
     try:
         from qdrant_client import QdrantClient
-        import requests.exceptions
-
         client = QdrantClient(host=host, port=port, timeout=timeout)
         # Test connection by fetching collections
         client.get_collections()
         return True, "Connected"
-    except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
-        error_msg = f"""❌ Cannot connect to Qdrant server at {host}:{port}
-
-Possible causes:
-  1. VPN not connected - Verify VPN connection if server is remote
-  2. Firewall blocking port {port} - Check firewall rules
-  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
-  4. Network timeout ({timeout}s) - Server may be slow or unreachable
-
-Connection error: {str(e)}"""
-        return False, error_msg
     except Exception as e:
-        error_msg = f"Unexpected error connecting to Qdrant at {host}:{port}: {str(e)}"
-        return False, error_msg
+        error_msg = str(e)
+        # Simplify common error messages
+        if "Connection refused" in error_msg or "Failed to connect" in error_msg:
+            return False, f"Cannot reach {host}:{port}"
+        elif "timeout" in error_msg.lower():
+            return False, f"Timeout connecting to {host}:{port}"
+        else:
+            return False, f"Error: {error_msg[:50]}"
 
 
 # ============================================
@@ -649,11 +648,11 @@ if logo_path.exists():
     with logo_col:
         st.image(str(logo_path), width=120)  # Fixed width for consistent branding
     with title_col:
-        st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
+        render_main_title("ALEXANDRIA OF TEMENOS")
 else:
     # Fallback if logo asset is missing (defensive design)
-    st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
+    render_main_title("ALEXANDRIA OF TEMENOS")
+render_subtitle("The Great Library Reborn")
 
 # ============================================
 # APP STATE INITIALIZATION
@@ -728,11 +727,11 @@ with st.sidebar:
         settings_changed = True
 
     # Persist settings to disk if any changes detected (single write for all changes)
-    # Pattern: Optimistic save - show success toast immediately, warn on failure
+    # Pattern: Optimistic save - show success caption immediately, warn on failure
     if settings_changed:
         try:
             save_gui_settings(gui_settings)  # Writes to .streamlit/gui_settings.json
-            st.toast("💾 Settings saved", icon="✅")
+            st.caption("💾 Settings saved")
         except Exception as e:
             # Non-blocking warning - settings will still work for current session
             st.warning(f"⚠️ Could not save settings: {e}")
@@ -957,7 +956,7 @@ def render_query_tab():
     6. LLM generates answer based on retrieved context
     7. Sources displayed with metadata for provenance tracking
     """
-    st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
+    render_section_header("Query Interface", "🔍")
 
     # ==================================================
     # RETRIEVE MODEL CONFIGURATION FROM APP STATE
@@ -995,10 +994,6 @@ def render_query_tab():
         # Limit final results returned to user (after filtering/reranking)
         # Max 20 to prevent UI overload and excessive token usage
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
-
-    # Author filter - narrow search to specific book authors (case-insensitive partial match)
-    # Follows pattern from Calibre tab text inputs (line 1545)
-    author_filter = st.text_input("Author Filter", placeholder="e.g., Martin Fowler", key="query_author_filter")
 
     # ==================================================
     # ADVANCED SETTINGS (COLLAPSIBLE)
@@ -1139,8 +1134,6 @@ def render_query_tab():
                     limit=query_limit,
                     # Convert "all" to None for qdrant_utils filter logic
                     domain_filter=query_domain if query_domain != "all" else None,
-                    # Convert empty string to None for author filter
-                    author_filter=author_filter.strip() if author_filter.strip() else None,
                     threshold=similarity_threshold,
                     enable_reranking=enable_reranking,
                     rerank_model=rerank_model if enable_reranking else None,
@@ -1188,7 +1181,8 @@ def render_query_tab():
                     if result.answer:
                         st.markdown("---")
                         st.markdown("### 💡 Answer")
-                        st.markdown(result.answer)
+                        # Sanitize AI-generated answer to prevent XSS attacks
+                        st.markdown(sanitize_html(result.answer))
 
                     # ==================================================
                     # DISPLAY SOURCE CHUNKS (PROVENANCE)
@@ -1200,47 +1194,17 @@ def render_query_tab():
                     for idx, source in enumerate(result.sources, 1):
                         # Expander keeps UI clean - users can inspect sources if needed
                         # Header shows book title and relevance score for quick scanning
-                        with st.expander(f"📖 Source {idx}: {source.get('book_title', 'Unknown')} (Relevance: {source.get('score', 0):.3f})"):
-                            st.markdown(f"**Author:** {source.get('author', 'Unknown')}")
-                            st.markdown(f"**Domain:** {source.get('domain', 'Unknown')}")
-                            st.markdown(f"**Section:** {source.get('section_name', 'Unknown')}")
+                        # Sanitize book_title in expander header to prevent XSS
+                        with st.expander(f"📖 Source {idx}: {sanitize_html(source.get('book_title', 'Unknown'))} (Relevance: {source.get('score', 0):.3f})"):
+                            # Sanitize all metadata fields to prevent XSS attacks
+                            st.markdown(f"**Author:** {sanitize_html(source.get('author', 'Unknown'))}")
+                            st.markdown(f"**Domain:** {sanitize_html(source.get('domain', 'Unknown'))}")
+                            st.markdown(f"**Section:** {sanitize_html(source.get('section_name', 'Unknown'))}")
                             st.markdown("**Content:**")
                             # Truncate long chunks to prevent UI overload
                             # Users can click into book if they need full context
                             text = source.get('text', '')
                             st.text(text[:500] + "..." if len(text) > 500 else text)
-
-                    # ==================================================
-                    # DOWNLOAD BUTTONS FOR EXPORT
-                    # ==================================================
-                    # Allow users to export results in JSON or Markdown format
-                    st.markdown("---")
-                    st.markdown("### 📥 Export Results")
-
-                    # Create two-column layout for download buttons
-                    download_col1, download_col2 = st.columns(2)
-
-                    with download_col1:
-                        # JSON export - structured data with all metadata
-                        json_data = format_rag_result_as_json(result)
-                        st.download_button(
-                            label="📄 Download JSON",
-                            data=json_data,
-                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                            mime="application/json",
-                            use_container_width=True
-                        )
-
-                    with download_col2:
-                        # Markdown export - human-readable format for documentation
-                        markdown_data = format_rag_result_as_markdown(result)
-                        st.download_button(
-                            label="📝 Download Markdown",
-                            data=markdown_data,
-                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                            mime="text/markdown",
-                            use_container_width=True
-                        )
 
             except Exception as e:
                 # Catch-all for unexpected errors (e.g., Qdrant connection loss mid-query)
@@ -1796,7 +1760,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         with pagination_col2:
             # Center-aligned page info (e.g., "Page 2 of 10 (487 total)")
-            st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
+            # Sanitize numeric values to prevent XSS if values are manipulated
+            st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {sanitize_html(str(current_page))} of {sanitize_html(str(total_pages))} ({sanitize_html(f'{total_books:,}')} total)</div>", unsafe_allow_html=True)
 
         # Calculate array slice indices for current page
         # Zero-indexed: page 1 shows [0:50], page 2 shows [50:100], etc.
@@ -1936,8 +1901,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             st.rerun()
 
         # Bottom pagination navigation - Previous/Next buttons
-        # Add spacing before pagination controls
-        st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+        # Add spacing before pagination controls using native Streamlit spacing
+        st.write("")  # Empty write creates vertical spacing
         st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)  # CSS class for custom styling
 
         # 3-column layout: narrow columns for buttons, wide center for page info
@@ -1953,9 +1918,10 @@ def render_calibre_filters_and_table(all_books, calibre_db):
         with nav_col2:
             # Center-aligned page info showing current row range and page numbers
             # Example: "Rows 51–100 of 487 | Page 2 of 10"
+            # Sanitize all numeric values to prevent XSS if values are manipulated
             st.markdown(
                 f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
-                f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
+                f"Rows {sanitize_html(str(start_idx + 1))}–{sanitize_html(str(end_idx))} of {sanitize_html(f'{total_books:,}')} &nbsp;|&nbsp; Page {sanitize_html(str(current_page))} of {sanitize_html(str(total_pages))}"
                 f"</div>",
                 unsafe_allow_html=True
             )
@@ -2035,7 +2001,7 @@ tab_query = tabs_by_label[speaker_tab_label]
 # TAB 0: Calibre Library Browser
 # ============================================
 with tab_calibre:
-    st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
+    render_section_header("Calibre Library", "📚")
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
@@ -2299,22 +2265,9 @@ with tab_calibre:
                         # Verify ingestion by checking collection
                         try:
                             from qdrant_client import QdrantClient
-                            import requests.exceptions
-
                             client = QdrantClient(host=qdrant_host, port=qdrant_port)
                             collection_info = client.get_collection(calibre_collection)
                             st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
-                        except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
-                            error_msg = f"""❌ Cannot verify collection - Qdrant server at {qdrant_host}:{qdrant_port} is unreachable
-
-Possible causes:
-  1. VPN not connected - Verify VPN connection if server is remote
-  2. Firewall blocking port {qdrant_port} - Check firewall rules
-  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
-  4. Network timeout - Server may be slow or unreachable
-
-Connection error: {str(e)}"""
-                            st.warning(error_msg)
                         except Exception as e:
                             st.warning(f"⚠️ Could not verify collection: {e}")
 
@@ -2372,7 +2325,7 @@ Connection error: {str(e)}"""
 # TAB 1: Ingested Books
 # ============================================
 with tab_ingested:
-    st.markdown('<div class="section-header">📖 Ingested Books</div>', unsafe_allow_html=True)
+    render_section_header("Ingested Books", "📖")
 
     # Collection selector
     manifest_col1, manifest_col2 = st.columns([2, 2])
@@ -2429,7 +2382,7 @@ with tab_ingested:
 # TAB 2: Ingestion
 # ============================================
 with tab_ingestion:
-    st.markdown('<div class="section-header">🔄 Ingestion Pipeline</div>', unsafe_allow_html=True)
+    render_section_header("Ingestion Pipeline", "🔄")
 
     col1, col2 = st.columns([2, 1])
 
@@ -2475,8 +2428,6 @@ with tab_ingestion:
             collection_model_locked = False
             try:
                 from qdrant_client import QdrantClient
-                import requests.exceptions
-
                 client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
                 # Try to get collection info
@@ -2489,19 +2440,8 @@ with tab_ingestion:
                 except Exception:
                     # Collection doesn't exist yet
                     collection_is_empty = True
-            except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
-                error_msg = f"""❌ Cannot connect to Qdrant server at {qdrant_host}:{qdrant_port}
-
-Possible causes:
-  1. VPN not connected - Verify VPN connection if server is remote
-  2. Firewall blocking port {qdrant_port} - Check firewall rules
-  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
-  4. Network timeout - Server may be slow or unreachable
-
-Connection error: {str(e)}"""
-                st.warning(error_msg)
             except Exception as e:
-                st.warning(f"⚠️ Unexpected error checking collection: {e}")
+                st.warning(f"⚠️ Cannot connect to Qdrant: {e}")
 
             embedding_models = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"]
             embedding_model_default = st.session_state.get('embedding_model', "all-MiniLM-L6-v2")
@@ -2824,7 +2764,7 @@ Connection error: {str(e)}"""
 # ============================================
 if tab_restore:
     with tab_restore:
-        st.markdown('<div class="section-header">🗄️ Restore deleted</div>', unsafe_allow_html=True)
+        render_section_header("Restore deleted", "🗄️")
         st.info("Restore books from a deleted collection's manifest back into a new or existing collection.")
 
         archive_files = list(archive_dir.glob('*_manifest_*.json'))
@@ -3131,11 +3071,4 @@ with tab_query:
     render_query_tab()
 
 # Footer
-st.markdown("---")
-st.markdown(
-    '<div style="text-align: center; color: #666; font-style: italic;">'
-    '𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤 • '
-    'Built with ❤️ by 137 Team • 2026'
-    '</div>',
-    unsafe_allow_html=True
-)
+render_footer()

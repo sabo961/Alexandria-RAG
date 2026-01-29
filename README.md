@@ -98,6 +98,10 @@ python batch_ingest.py --directory ../ingest --domain technical
 - **[AGENTS.md](AGENTS.md)** - Navigation hub (start here)
 - **[_bmad-output/project-context.md](_bmad-output/project-context.md)** - Critical rules & patterns (implementation bible)
 
+### 🔒 Security
+- **[SECURITY.md](docs/SECURITY.md)** - XSS prevention, HTML sanitization, safe coding guidelines
+- **[Unsafe HTML Audit](docs/unsafe_html_audit.md)** - Complete audit of unsafe_allow_html usage
+
 ### 👨‍💻 For Contributors
 - **[TODO.md](TODO.md)** - Prioritized backlog (P0-P3)
 - **[CHANGELOG.md](CHANGELOG.md)** - Completed work archive

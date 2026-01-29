@@ -118,6 +118,64 @@ def load_keyboard_shortcuts() -> None:
             )
 
 
+def render_section_header(text: str, icon: str = "") -> None:
+    """Render a section header with consistent styling.
+
+    Centralizes section header rendering to reduce unsafe HTML usage and
+    maintain consistent visual styling across the application.
+
+    Args:
+        text: Header text to display
+        icon: Optional emoji icon to prepend to header
+
+    Example:
+        render_section_header("Query Interface", "🔍")
+    """
+    header_text = f"{icon} {text}" if icon else text
+    # Use container + header for semantic structure, apply custom class via markdown
+    st.markdown(f'<div class="section-header">{header_text}</div>', unsafe_allow_html=True)
+
+
+def render_main_title(title: str) -> None:
+    """Render the main application title with gradient styling.
+
+    Centralizes main title rendering to maintain consistent branding.
+    Note: Uses unsafe_allow_html for gradient styling (static content only).
+
+    Args:
+        title: Main title text (should be static/hardcoded)
+    """
+    st.markdown(f'<div class="main-title">{title}</div>', unsafe_allow_html=True)
+
+
+def render_subtitle(subtitle: str) -> None:
+    """Render the application subtitle.
+
+    Centralizes subtitle rendering to maintain consistent styling.
+    Note: Uses unsafe_allow_html for custom styling (static content only).
+
+    Args:
+        subtitle: Subtitle text (should be static/hardcoded)
+    """
+    st.markdown(f'<div class="subtitle">{subtitle}</div>', unsafe_allow_html=True)
+
+
+def render_footer() -> None:
+    """Render the application footer with branding.
+
+    Centralizes footer rendering to maintain consistent styling.
+    Note: Uses unsafe_allow_html for custom styling (static content only).
+    """
+    st.markdown("---")
+    st.markdown(
+        '<div style="text-align: center; color: #666; font-style: italic;">'
+        '𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤 • '
+        'Built with ❤️ by 137 Team • 2026'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
 # ============================================
 # APP STATE MANAGEMENT
 # ============================================
@@ -590,11 +648,11 @@ if logo_path.exists():
     with logo_col:
         st.image(str(logo_path), width=120)  # Fixed width for consistent branding
     with title_col:
-        st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
+        render_main_title("ALEXANDRIA OF TEMENOS")
 else:
     # Fallback if logo asset is missing (defensive design)
-    st.markdown('<div class="main-title">ALEXANDRIA OF TEMENOS</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">The Great Library Reborn</div>', unsafe_allow_html=True)
+    render_main_title("ALEXANDRIA OF TEMENOS")
+render_subtitle("The Great Library Reborn")
 
 # ============================================
 # APP STATE INITIALIZATION
@@ -898,7 +956,7 @@ def render_query_tab():
     6. LLM generates answer based on retrieved context
     7. Sources displayed with metadata for provenance tracking
     """
-    st.markdown('<div class="section-header">🔍 Query Interface</div>', unsafe_allow_html=True)
+    render_section_header("Query Interface", "🔍")
 
     # ==================================================
     # RETRIEVE MODEL CONFIGURATION FROM APP STATE
@@ -1843,8 +1901,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
             st.rerun()
 
         # Bottom pagination navigation - Previous/Next buttons
-        # Add spacing before pagination controls
-        st.markdown("<div style='margin: 10px 0;'></div>", unsafe_allow_html=True)
+        # Add spacing before pagination controls using native Streamlit spacing
+        st.write("")  # Empty write creates vertical spacing
         st.markdown('<div class="pagination-nav">', unsafe_allow_html=True)  # CSS class for custom styling
 
         # 3-column layout: narrow columns for buttons, wide center for page info
@@ -1943,7 +2001,7 @@ tab_query = tabs_by_label[speaker_tab_label]
 # TAB 0: Calibre Library Browser
 # ============================================
 with tab_calibre:
-    st.markdown('<div class="section-header">📚 Calibre Library</div>', unsafe_allow_html=True)
+    render_section_header("Calibre Library", "📚")
 
     # Initialize Calibre DB (Simple initialization, uses sidebar library_dir)
     try:
@@ -2267,7 +2325,7 @@ with tab_calibre:
 # TAB 1: Ingested Books
 # ============================================
 with tab_ingested:
-    st.markdown('<div class="section-header">📖 Ingested Books</div>', unsafe_allow_html=True)
+    render_section_header("Ingested Books", "📖")
 
     # Collection selector
     manifest_col1, manifest_col2 = st.columns([2, 2])
@@ -2324,7 +2382,7 @@ with tab_ingested:
 # TAB 2: Ingestion
 # ============================================
 with tab_ingestion:
-    st.markdown('<div class="section-header">🔄 Ingestion Pipeline</div>', unsafe_allow_html=True)
+    render_section_header("Ingestion Pipeline", "🔄")
 
     col1, col2 = st.columns([2, 1])
 
@@ -2706,7 +2764,7 @@ with tab_ingestion:
 # ============================================
 if tab_restore:
     with tab_restore:
-        st.markdown('<div class="section-header">🗄️ Restore deleted</div>', unsafe_allow_html=True)
+        render_section_header("Restore deleted", "🗄️")
         st.info("Restore books from a deleted collection's manifest back into a new or existing collection.")
 
         archive_files = list(archive_dir.glob('*_manifest_*.json'))
@@ -3013,11 +3071,4 @@ with tab_query:
     render_query_tab()
 
 # Footer
-st.markdown("---")
-st.markdown(
-    '<div style="text-align: center; color: #666; font-style: italic;">'
-    '𝔸𝕝𝕖𝕩𝕒𝕟𝕕𝕣𝕚𝕒 𝕠𝕗 𝕋𝕖𝕞𝕖𝕟𝕠𝕤 • '
-    'Built with ❤️ by 137 Team • 2026'
-    '</div>',
-    unsafe_allow_html=True
-)
+render_footer()

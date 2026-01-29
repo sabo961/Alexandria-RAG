@@ -1123,8 +1123,85 @@ Then:
 
 ---
 
-**Priority**: P2 (after current semantic chunking stabilizes)
+---
+
+## Implementation Phasing (Recommended)
+
+### Strategy: Clean Slate Approach
+**Decision:** Delete existing indexes and re-ingest from scratch with hierarchical chunking enabled. Avoids mixed collection complexity and migration overhead.
+
+### Phase 0: Basic Hierarchy (2 days)
+**Goal:** Prove the concept with minimal GUI changes
+- [ ] Implement parent/child data schema in Qdrant
+- [ ] Add chapter detection logic (EPUB NCX/TOC + fallback)
+- [ ] Modify ingestion pipeline to create parent chunks
+- [ ] Implement `fetch_parent_chunks()` function
+- [ ] Basic contextual retrieval (no GUI yet)
+- [ ] Test with 5 books (Nietzsche, psychology classics)
+
+**Success Criteria:**
+- Parent chunks created with valid chapter boundaries
+- Child chunks have correct parent_id references
+- No orphan chunks or broken links
+
+### Phase 1: Contextual Mode + GUI (1 day)
+**Goal:** Make it usable in Speaker's Corner
+- [ ] Add context mode selector to Streamlit sidebar
+- [ ] Modify `perform_rag_query()` to support `context_mode` parameter
+- [ ] Display parent context in results (expandable section)
+- [ ] Update session state management
+
+**Success Criteria:**
+- Users can toggle contextual mode in GUI
+- Parent chapter context visible in query results
+- Latency <250ms p95 for contextual mode
+
+### Phase 2: Evaluation (0.5 days)
+**Goal:** Validate approach before full implementation
+- [ ] Test 20 "why/how" questions (manual quality scoring)
+- [ ] Compare answer quality: precise vs contextual
+- [ ] Measure latency impact
+- [ ] Collect user feedback
+
+**Go/No-Go Decision:**
+- ✅ GO if: answer quality +20%, latency acceptable, positive feedback
+- ❌ NO-GO if: no improvement or major issues → rollback
+
+### Phase 3: Comprehensive Mode (1 day)
+**Goal:** Add sibling context for deep research queries
+- [ ] Implement `fetch_sibling_chunks()` function
+- [ ] Add sibling window slider to GUI
+- [ ] Display surrounding passages in results
+- [ ] Token budget enforcement
+
+**Success Criteria:**
+- Comprehensive mode shows ±N sibling chunks
+- Total context stays within token budget
+- Latency <500ms p95
+
+### Phase 4: Full Re-ingestion (2-3 days)
+**Goal:** Re-ingest entire library with hierarchical chunking
+- [ ] Delete existing Qdrant collections
+- [ ] Batch re-ingest all 9,000 books
+- [ ] Resume capability if interrupted
+- [ ] Update all manifests with hierarchy metadata
+
+**Success Criteria:**
+- All books successfully re-ingested
+- Manifest tracking shows parent_count + child_count
+- No data loss
+
+### Phase 5: Production Hardening (1 day)
+**Goal:** Monitoring, docs, optimization
+- [ ] Add hierarchy metrics to health checks
+- [ ] Document new API parameters
+- [ ] Performance optimization (if needed)
+- [ ] Update README and user guides
+
+---
+
+**Priority**: P1 (promoted from P2 - implement before Librarians)
 
 **Owner**: TBD
 
-**Last Updated**: 2026-01-25
+**Last Updated**: 2026-01-29

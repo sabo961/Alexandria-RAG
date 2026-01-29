@@ -27,7 +27,7 @@ from scripts.count_file_types import count_file_types
 from scripts.collection_manifest import CollectionManifest
 
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
-from scripts.rag_query import perform_rag_query
+from scripts.rag_query import perform_rag_query, RAGResult
 
 # Force reload of calibre_db to pick up DISTINCT changes
 import importlib
@@ -115,6 +115,59 @@ def load_keyboard_shortcuts() -> None:
                 height=0,
                 width=0
             )
+
+
+def format_rag_result_as_json(result: RAGResult) -> str:
+    """Format RAG result as JSON string
+
+    Args:
+        result: RAGResult object to format
+
+    Returns:
+        JSON string with query, filtered_count, reranked, results, answer fields
+    """
+    output = {
+        'query': result.query,
+        'filtered_count': result.filtered_count,
+        'reranked': result.reranked,
+        'results': result.results,
+        'answer': result.answer
+    }
+    return json.dumps(output, indent=2, ensure_ascii=False)
+
+
+def format_rag_result_as_markdown(result: RAGResult) -> str:
+    """Format RAG result as markdown string
+
+    Args:
+        result: RAGResult object to format
+
+    Returns:
+        Markdown string with headers, answer section, and sources with metadata
+    """
+    lines = []
+    lines.append("=" * 80)
+    lines.append("# Alexandria RAG Results")
+    lines.append("=" * 80)
+    lines.append(f"\n**Query:** {result.query}")
+    lines.append(f"**Retrieved:** {len(result.results)} chunks (filtered from {result.filtered_count})")
+    lines.append(f"**Reranked:** {'Yes' if result.reranked else 'No'}")
+
+    if result.answer:
+        lines.append("\n## 💡 Answer\n")
+        lines.append(result.answer)
+
+    lines.append("\n## 📚 Sources\n")
+    for idx, r in enumerate(result.results, 1):
+        lines.append(f"### Source {idx} (Relevance: {r['score']:.4f})")
+        lines.append(f"- **Book:** {r['book_title']}")
+        lines.append(f"- **Author:** {r['author']}")
+        lines.append(f"- **Domain:** {r['domain']}")
+        lines.append(f"- **Section:** {r['section_name']}")
+        lines.append(f"\n> {r['text'][:500]}{'...' if len(r['text']) > 500 else ''}\n")
+        lines.append("---\n")
+
+    return "\n".join(lines)
 
 
 # ============================================
@@ -1149,6 +1202,38 @@ def render_query_tab():
                             # Users can click into book if they need full context
                             text = source.get('text', '')
                             st.text(text[:500] + "..." if len(text) > 500 else text)
+
+                    # ==================================================
+                    # DOWNLOAD BUTTONS FOR EXPORT
+                    # ==================================================
+                    # Allow users to export results in JSON or Markdown format
+                    st.markdown("---")
+                    st.markdown("### 📥 Export Results")
+
+                    # Create two-column layout for download buttons
+                    download_col1, download_col2 = st.columns(2)
+
+                    with download_col1:
+                        # JSON export - structured data with all metadata
+                        json_data = format_rag_result_as_json(result)
+                        st.download_button(
+                            label="📄 Download JSON",
+                            data=json_data,
+                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                            use_container_width=True
+                        )
+
+                    with download_col2:
+                        # Markdown export - human-readable format for documentation
+                        markdown_data = format_rag_result_as_markdown(result)
+                        st.download_button(
+                            label="📝 Download Markdown",
+                            data=markdown_data,
+                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                            mime="text/markdown",
+                            use_container_width=True
+                        )
 
             except Exception as e:
                 # Catch-all for unexpected errors (e.g., Qdrant connection loss mid-query)

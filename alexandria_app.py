@@ -1079,6 +1079,8 @@ def render_query_tab():
                     limit=query_limit,
                     # Convert "all" to None for qdrant_utils filter logic
                     domain_filter=query_domain if query_domain != "all" else None,
+                    # Convert empty string to None for author filter
+                    author_filter=author_filter.strip() if author_filter.strip() else None,
                     threshold=similarity_threshold,
                     enable_reranking=enable_reranking,
                     rerank_model=rerank_model if enable_reranking else None,

@@ -700,6 +700,7 @@ def main():
     parser.add_argument('--collection', type=str, default='alexandria', help='Qdrant collection')
     parser.add_argument('--limit', type=int, default=5, help='Number of results')
     parser.add_argument('--domain', type=str, help='Filter by domain')
+    parser.add_argument('--author', type=str, help='Filter by author')
     parser.add_argument('--threshold', type=float, default=0.5, help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--fetch-multiplier', type=int, default=3,
                        help='Fetch limit*N results from Qdrant for better filtering (default: 3)')

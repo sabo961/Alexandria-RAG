@@ -558,23 +558,30 @@ def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, s
     Returns:
         Tuple of (is_healthy, message)
         - is_healthy: True if Qdrant is reachable, False otherwise
-        - message: Status message ("Connected" or error description)
+        - message: Status message ("Connected" or error description with debugging hints)
     """
     try:
         from qdrant_client import QdrantClient
+        import requests.exceptions
+
         client = QdrantClient(host=host, port=port, timeout=timeout)
         # Test connection by fetching collections
         client.get_collections()
         return True, "Connected"
+    except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+        error_msg = f"""❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network timeout ({timeout}s) - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+        return False, error_msg
     except Exception as e:
-        error_msg = str(e)
-        # Simplify common error messages
-        if "Connection refused" in error_msg or "Failed to connect" in error_msg:
-            return False, f"Cannot reach {host}:{port}"
-        elif "timeout" in error_msg.lower():
-            return False, f"Timeout connecting to {host}:{port}"
-        else:
-            return False, f"Error: {error_msg[:50]}"
+        error_msg = f"Unexpected error connecting to Qdrant at {host}:{port}: {str(e)}"
+        return False, error_msg
 
 
 # ============================================

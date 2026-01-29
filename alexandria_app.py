@@ -936,6 +936,10 @@ def render_query_tab():
         # Max 20 to prevent UI overload and excessive token usage
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
 
+    # Author filter - narrow search to specific book authors (case-insensitive partial match)
+    # Follows pattern from Calibre tab text inputs (line 1545)
+    author_filter = st.text_input("Author Filter", placeholder="e.g., Martin Fowler", key="query_author_filter")
+
     # ==================================================
     # ADVANCED SETTINGS (COLLAPSIBLE)
     # ==================================================

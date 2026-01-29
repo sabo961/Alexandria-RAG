@@ -16,18 +16,59 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
+import requests.exceptions
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# CONNECTION HELPERS
+# ============================================================================
+
+def check_qdrant_connection(host: str, port: int, timeout: int = 5) -> Tuple[bool, Optional[str]]:
+    """
+    Check if Qdrant server is reachable.
+
+    Args:
+        host: Qdrant server hostname or IP address
+        port: Qdrant server port
+        timeout: Connection timeout in seconds (default: 5)
+
+    Returns:
+        Tuple of (is_connected, error_message):
+            - (True, None) if connection successful
+            - (False, error_msg) if connection failed with helpful debugging hints
+    """
+    try:
+        client = QdrantClient(host=host, port=port, timeout=timeout)
+        client.get_collections()  # Simple operation to test connectivity
+        return True, None
+    except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+        error_msg = f"""
+❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network timeout ({timeout}s) - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Unexpected error connecting to Qdrant at {host}:{port}: {str(e)}"
+        return False, error_msg
 
 
 # ============================================================================

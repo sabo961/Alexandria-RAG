@@ -20,9 +20,6 @@ Simple query:
 With domain filter:
     python rag_query.py "cognitive load" --domain psychology
 
-With author filter:
-    python rag_query.py "database patterns" --author "Len Silverston"
-
 With similarity threshold:
     python rag_query.py "database design" --threshold 0.6
 
@@ -125,7 +122,6 @@ Search options:
     --collection NAME     Qdrant collection (default: alexandria)
     --limit N             Number of results (default: 5)
     --domain DOMAIN       Filter by domain: technical, psychology, philosophy, history, literature
-    --author AUTHOR       Filter by author (e.g., "Len Silverston", "Haruki Murakami")
     --threshold FLOAT     Similarity threshold 0.0-1.0 (default: 0.5)
     --fetch-multiplier N  Fetch limit×N results for filtering (default: 3, min fetch: 20)
 
@@ -186,15 +182,7 @@ EXAMPLES
 2. Domain-filtered search:
     python rag_query.py "cognitive load theory" --domain psychology --limit 3
 
-3. Author-filtered search:
-    python rag_query.py "data modeling patterns" --author "Len Silverston"
-
-4. Combined domain and author filters:
-    python rag_query.py "existentialism and death" \
-        --domain literature \
-        --author "Yukio Mishima"
-
-5. High-quality retrieval (with reranking):
+3. High-quality retrieval (with reranking):
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database normalization" \
         --domain technical \
@@ -202,14 +190,14 @@ EXAMPLES
         --rerank \
         --limit 5
 
-6. Full RAG answer with author filter:
+4. Full RAG answer:
     export OPENROUTER_API_KEY="sk-or-v1-..."
-    python rag_query.py "What are the key patterns for shipments?" \
-        --author "Len Silverston" \
+    python rag_query.py "Explain Mishima's philosophy" \
+        --domain literature \
         --answer \
         --model "gpt-4o-mini"
 
-7. JSON output for scripting:
+5. JSON output for scripting:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "data modeling patterns" \
         --domain technical \
@@ -277,7 +265,6 @@ from dataclasses import dataclass
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from ingest_books import generate_embeddings
-from qdrant_utils import check_qdrant_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -308,7 +295,7 @@ def search_qdrant(
     collection_name: str,
     limit: int,
     domain_filter: Optional[str],
-    author_filter: Optional[str],
+    book_filter: Optional[str],
     threshold: float,
     host: str,
     port: int,
@@ -320,12 +307,6 @@ def search_qdrant(
     Returns:
         (filtered_results, initial_count)
     """
-    # Check connection before attempting search
-    is_connected, error_msg = check_qdrant_connection(host, port)
-    if not is_connected:
-        logger.error(f"Qdrant connection check failed: {error_msg}")
-        raise ConnectionError(error_msg)
-
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding
@@ -333,19 +314,18 @@ def search_qdrant(
     query_vector = generate_embeddings([query])[0]
 
     # Build filter
-    query_filter = None
-    filter_conditions = []
-
+    conditions = []
     if domain_filter and domain_filter != "all":
-        filter_conditions.append(FieldCondition(key="domain", match=MatchValue(value=domain_filter)))
+        conditions.append(
+            FieldCondition(key="domain", match=MatchValue(value=domain_filter))
+        )
         logger.info(f"📚 Filtering by domain: {domain_filter}")
-
-    if author_filter and author_filter != "all":
-        filter_conditions.append(FieldCondition(key="author", match=MatchValue(value=author_filter)))
-        logger.info(f"✍️ Filtering by author: {author_filter}")
-
-    if filter_conditions:
-        query_filter = Filter(must=filter_conditions)
+    if book_filter:
+        conditions.append(
+            FieldCondition(key="book_title", match=MatchValue(value=book_filter))
+        )
+        logger.info(f"📖 Filtering by book: {book_filter}")
+    query_filter = Filter(must=conditions) if conditions else None
 
     # Fetch more results than needed for better filtering/reranking
     # fetch_multiplier controls how many extra results to retrieve
@@ -516,7 +496,7 @@ def perform_rag_query(
     collection_name: str = 'alexandria',
     limit: int = 5,
     domain_filter: Optional[str] = None,
-    author_filter: Optional[str] = None,
+    book_filter: Optional[str] = None,
     threshold: float = 0.5,
     enable_reranking: bool = False,
     rerank_model: Optional[str] = None,
@@ -536,7 +516,6 @@ def perform_rag_query(
         collection_name: Qdrant collection to search
         limit: Number of final results to return
         domain_filter: Optional domain filter (technical, psychology, etc.)
-        author_filter: Optional author filter (e.g., "Len Silverston", "Haruki Murakami")
         threshold: Similarity score threshold (0.0-1.0)
         enable_reranking: Whether to rerank with LLM
         rerank_model: Model for reranking (required if enable_reranking=True)
@@ -567,25 +546,13 @@ def perform_rag_query(
             collection_name=collection_name,
             limit=limit,
             domain_filter=domain_filter,
-            author_filter=author_filter,
+            book_filter=book_filter,
             threshold=threshold,
             host=host,
             port=port,
             fetch_multiplier=fetch_multiplier
         )
     except Exception as e:
-        # Create detailed error message with debugging hints
-        error_detail = f"""
-❌ Cannot connect to Qdrant server at {host}:{port}
-
-Possible causes:
-  1. VPN not connected - Verify VPN connection if server is remote
-  2. Firewall blocking port {port} - Check firewall rules
-  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
-  4. Network issue - Server may be slow or unreachable
-
-Connection error: {str(e)}
-"""
         logger.error(f"Qdrant search failed: {str(e)}")
         return RAGResult(
             query=query,
@@ -593,7 +560,7 @@ Connection error: {str(e)}
             filtered_count=0,
             initial_count=0,
             reranked=False,
-            error=error_detail.strip()
+            error=f"Qdrant search failed: {str(e)}"
         )
 
     if len(filtered_results) == 0:
@@ -731,7 +698,7 @@ def main():
     parser.add_argument('--collection', type=str, default='alexandria', help='Qdrant collection')
     parser.add_argument('--limit', type=int, default=5, help='Number of results')
     parser.add_argument('--domain', type=str, help='Filter by domain')
-    parser.add_argument('--author', type=str, help='Filter by author')
+    parser.add_argument('--book', type=str, help='Filter by book title')
     parser.add_argument('--threshold', type=float, default=0.5, help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--fetch-multiplier', type=int, default=3,
                        help='Fetch limit*N results from Qdrant for better filtering (default: 3)')
@@ -765,7 +732,7 @@ def main():
             collection_name=args.collection,
             limit=args.limit,
             domain_filter=args.domain,
-            author_filter=args.author,
+            book_filter=args.book,
             threshold=args.threshold,
             enable_reranking=args.rerank,
             rerank_model=args.rerank_model if args.rerank else None,

@@ -288,6 +288,37 @@ def load_domains():
         # Ensures app can still function without domains.json (defensive programming)
         return ["technical", "psychology", "philosophy", "history", "literature"]
 
+def load_books(collection_name: str):
+    """Load book list from collection manifest
+
+    Args:
+        collection_name: Name of the collection to load books from
+
+    Returns:
+        Sorted list of unique book titles from the collection manifest
+    """
+    try:
+        # Load collection manifest to access book metadata
+        manifest = CollectionManifest(collection_name=collection_name)
+
+        # Check if collection exists in manifest
+        if collection_name not in manifest.manifest.get('collections', {}):
+            return []
+
+        # Extract book titles from the books array
+        collection = manifest.manifest['collections'][collection_name]
+        books = collection.get('books', [])
+
+        # Extract unique book titles and sort them alphabetically
+        # Using set to eliminate duplicates, then sorting for consistent UI ordering
+        book_titles = sorted(set(book['book_title'] for book in books if 'book_title' in book))
+
+        return book_titles
+    except Exception as e:
+        # Fallback to empty list if manifest doesn't exist or is corrupted
+        # Ensures app can still function without manifest (defensive programming)
+        return []
+
 def run_batch_ingestion(selected_files, ingest_dir, domain, collection_name, host, port, move_files):
     """Run batch ingestion for selected files with dynamic chunk optimization
 
@@ -980,9 +1011,9 @@ def render_query_tab():
     # ==================================================
     st.markdown("#### 💬 Query")
 
-    # Three-column layout for basic query configuration
-    # Column widths [2, 1, 1] give more space to collection selector
-    col1, col2, col3 = st.columns([2, 1, 1])
+    # Four-column layout for basic query configuration
+    # Column widths [1, 1, 1, 1] for equal spacing
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     with col1:
         # Collection selection - allows switching between prod and test without restarting app
         query_collection = st.selectbox("Collection", ["alexandria", "alexandria_test"])
@@ -991,6 +1022,10 @@ def render_query_tab():
         # load_domains() reads from data/domains/ directory structure
         query_domain = st.selectbox("Domain Filter", ["all"] + load_domains())
     with col3:
+        # Book filtering - narrow search to specific book titles
+        # load_books() reads from collection manifest
+        query_book_filter = st.selectbox("Book", ["all"] + load_books(query_collection), key="query_book_filter")
+    with col4:
         # Limit final results returned to user (after filtering/reranking)
         # Max 20 to prevent UI overload and excessive token usage
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
@@ -1134,6 +1169,7 @@ def render_query_tab():
                     limit=query_limit,
                     # Convert "all" to None for qdrant_utils filter logic
                     domain_filter=query_domain if query_domain != "all" else None,
+                    book_filter=query_book_filter if query_book_filter != "all" else None,
                     threshold=similarity_threshold,
                     enable_reranking=enable_reranking,
                     rerank_model=rerank_model if enable_reranking else None,

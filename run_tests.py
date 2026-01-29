@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-"""Test runner script for HTML sanitizer tests"""
+"""Wrapper script to run pytest with user site-packages"""
 import sys
 import os
 
 # Add user site-packages to path
-sys.path.insert(0, os.path.expanduser(r'~\AppData\Roaming\Python\Python314\site-packages'))
+user_site = r'C:\Users\goran\AppData\Roaming\Python\Python314\site-packages'
+if user_site not in sys.path:
+    sys.path.insert(0, user_site)
 
-try:
-    import pytest
-    sys.exit(pytest.main(['tests/test_html_sanitizer.py', '-v']))
-except ImportError:
-    print("pytest not found, falling back to verification script")
-    import subprocess
-    sys.exit(subprocess.call([sys.executable, 'verify_sanitizer_tests.py']))
+# Now import and run pytest
+import pytest
+
+if __name__ == '__main__':
+    sys.exit(pytest.main(['-v', 'tests/']))

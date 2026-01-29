@@ -11,7 +11,7 @@
   "phase": {
     "current": "Backend: RAG Query Author Filter",
     "id": null,
-    "total": 3
+    "total": 5
   },
   "workers": {
     "active": 0,

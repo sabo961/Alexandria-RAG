@@ -27,7 +27,7 @@ from scripts.count_file_types import count_file_types
 from scripts.collection_manifest import CollectionManifest
 
 from scripts.qdrant_utils import delete_collection_preserve_artifacts, delete_collection_and_artifacts
-from scripts.rag_query import perform_rag_query
+from scripts.rag_query import perform_rag_query, RAGResult
 
 # Force reload of calibre_db to pick up DISTINCT changes
 import importlib
@@ -115,6 +115,25 @@ def load_keyboard_shortcuts() -> None:
                 height=0,
                 width=0
             )
+
+
+def format_rag_result_as_json(result: RAGResult) -> str:
+    """Format RAG result as JSON string
+
+    Args:
+        result: RAGResult object to format
+
+    Returns:
+        JSON string with query, filtered_count, reranked, results, answer fields
+    """
+    output = {
+        'query': result.query,
+        'filtered_count': result.filtered_count,
+        'reranked': result.reranked,
+        'results': result.results,
+        'answer': result.answer
+    }
+    return json.dumps(output, indent=2, ensure_ascii=False)
 
 
 # ============================================

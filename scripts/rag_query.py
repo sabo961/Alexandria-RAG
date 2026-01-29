@@ -20,6 +20,9 @@ Simple query:
 With domain filter:
     python rag_query.py "cognitive load" --domain psychology
 
+With author filter:
+    python rag_query.py "database patterns" --author "Len Silverston"
+
 With similarity threshold:
     python rag_query.py "database design" --threshold 0.6
 
@@ -122,6 +125,7 @@ Search options:
     --collection NAME     Qdrant collection (default: alexandria)
     --limit N             Number of results (default: 5)
     --domain DOMAIN       Filter by domain: technical, psychology, philosophy, history, literature
+    --author AUTHOR       Filter by author (e.g., "Len Silverston", "Haruki Murakami")
     --threshold FLOAT     Similarity threshold 0.0-1.0 (default: 0.5)
     --fetch-multiplier N  Fetch limit×N results for filtering (default: 3, min fetch: 20)
 
@@ -182,7 +186,15 @@ EXAMPLES
 2. Domain-filtered search:
     python rag_query.py "cognitive load theory" --domain psychology --limit 3
 
-3. High-quality retrieval (with reranking):
+3. Author-filtered search:
+    python rag_query.py "data modeling patterns" --author "Len Silverston"
+
+4. Combined domain and author filters:
+    python rag_query.py "existentialism and death" \
+        --domain literature \
+        --author "Yukio Mishima"
+
+5. High-quality retrieval (with reranking):
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database normalization" \
         --domain technical \
@@ -190,14 +202,14 @@ EXAMPLES
         --rerank \
         --limit 5
 
-4. Full RAG answer:
+6. Full RAG answer with author filter:
     export OPENROUTER_API_KEY="sk-or-v1-..."
-    python rag_query.py "Explain Mishima's philosophy" \
-        --domain literature \
+    python rag_query.py "What are the key patterns for shipments?" \
+        --author "Len Silverston" \
         --answer \
         --model "gpt-4o-mini"
 
-5. JSON output for scripting:
+7. JSON output for scripting:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "data modeling patterns" \
         --domain technical \

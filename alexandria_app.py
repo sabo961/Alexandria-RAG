@@ -668,11 +668,11 @@ with st.sidebar:
         settings_changed = True
 
     # Persist settings to disk if any changes detected (single write for all changes)
-    # Pattern: Optimistic save - show success caption immediately, warn on failure
+    # Pattern: Optimistic save - show success toast immediately, warn on failure
     if settings_changed:
         try:
             save_gui_settings(gui_settings)  # Writes to .streamlit/gui_settings.json
-            st.caption("💾 Settings saved")
+            st.toast("💾 Settings saved", icon="✅")
         except Exception as e:
             # Non-blocking warning - settings will still work for current session
             st.warning(f"⚠️ Could not save settings: {e}")

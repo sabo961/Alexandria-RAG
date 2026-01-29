@@ -1702,7 +1702,8 @@ def render_calibre_filters_and_table(all_books, calibre_db):
 
         with pagination_col2:
             # Center-aligned page info (e.g., "Page 2 of 10 (487 total)")
-            st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {current_page} of {total_pages} ({total_books:,} total)</div>", unsafe_allow_html=True)
+            # Sanitize numeric values to prevent XSS if values are manipulated
+            st.markdown(f"<div style='text-align: center; padding-top: 8px;'>Page {sanitize_html(str(current_page))} of {sanitize_html(str(total_pages))} ({sanitize_html(f'{total_books:,}')} total)</div>", unsafe_allow_html=True)
 
         # Calculate array slice indices for current page
         # Zero-indexed: page 1 shows [0:50], page 2 shows [50:100], etc.
@@ -1859,9 +1860,10 @@ def render_calibre_filters_and_table(all_books, calibre_db):
         with nav_col2:
             # Center-aligned page info showing current row range and page numbers
             # Example: "Rows 51–100 of 487 | Page 2 of 10"
+            # Sanitize all numeric values to prevent XSS if values are manipulated
             st.markdown(
                 f"<div style='text-align: center; padding-top: 8px; color: #666; font-size: 13px;'>"
-                f"Rows {start_idx + 1}–{end_idx} of {total_books:,} &nbsp;|&nbsp; Page {current_page} of {total_pages}"
+                f"Rows {sanitize_html(str(start_idx + 1))}–{sanitize_html(str(end_idx))} of {sanitize_html(f'{total_books:,}')} &nbsp;|&nbsp; Page {sanitize_html(str(current_page))} of {sanitize_html(str(total_pages))}"
                 f"</div>",
                 unsafe_allow_html=True
             )

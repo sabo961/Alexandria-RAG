@@ -221,25 +221,64 @@ def upload_to_qdrant(
     collection_name: str,
     qdrant_host: str,
     qdrant_port: int
-):
-    if not chunks: return
+) -> Dict:
+    """
+    Upload chunks to Qdrant vector database.
+
+    Returns:
+        Dict with 'success' (bool) and 'error' (str) if failed
+    """
+    if not chunks:
+        return {'success': True, 'uploaded': 0}
 
     # Check connection first
     is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
     if not is_connected:
         logger.error(error_msg)
-        raise ConnectionError(f"Cannot connect to Qdrant at {qdrant_host}:{qdrant_port}")
+        return {'success': False, 'error': error_msg}
 
-    client = QdrantClient(host=qdrant_host, port=qdrant_port)
-    
-    # Ensure collection
-    collections = [c.name for c in client.get_collections().collections]
-    if collection_name not in collections:
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=len(embeddings[0]), distance=Distance.COSINE)
-        )
+    try:
+        # Wrap QdrantClient instantiation
+        client = QdrantClient(host=qdrant_host, port=qdrant_port)
+    except Exception as e:
+        error_detail = f"""
+❌ Cannot instantiate Qdrant client at {qdrant_host}:{qdrant_port}
 
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network issue - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
+        logger.error(f"QdrantClient instantiation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
+    try:
+        # Wrap collection operations
+        collections = [c.name for c in client.get_collections().collections]
+        if collection_name not in collections:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=len(embeddings[0]), distance=Distance.COSINE)
+            )
+    except Exception as e:
+        error_detail = f"""
+❌ Failed to check/create collection '{collection_name}' at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. Network connection lost mid-operation - Check network stability
+  2. Insufficient permissions - Verify Qdrant server permissions
+  3. Server overloaded - Check Qdrant server resources
+  4. Invalid collection configuration - Verify vector dimensions
+
+Collection error: {str(e)}
+"""
+        logger.error(f"Qdrant collection operation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
+    # Build points
     points = []
     for chunk, embedding in zip(chunks, embeddings):
         points.append(PointStruct(
@@ -260,11 +299,27 @@ def upload_to_qdrant(
             }
         ))
 
-    # Batch upload
-    for i in range(0, len(points), 100):
-        client.upsert(collection_name=collection_name, points=points[i:i+100])
-    
+    try:
+        # Wrap batch upload operations
+        for i in range(0, len(points), 100):
+            client.upsert(collection_name=collection_name, points=points[i:i+100])
+    except Exception as e:
+        error_detail = f"""
+❌ Failed to upload points to '{collection_name}' at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. Network connection lost during upload - Check network stability
+  2. Server timeout - Large batch may exceed timeout limits
+  3. Insufficient disk space on Qdrant server - Check server storage
+  4. Server crashed mid-operation - Verify server status
+
+Upload error: {str(e)}
+"""
+        logger.error(f"Qdrant upsert operation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
     logger.info(f"✅ Uploaded {len(points)} semantic chunks to '{collection_name}'")
+    return {'success': True, 'uploaded': len(points)}
 
 
 def _get_calibre_db() -> Optional[CalibreDB]:
@@ -426,7 +481,17 @@ def ingest_book(
 
     # 3. Embed & Upload
     embeddings = generate_embeddings([c['text'] for c in chunks])
-    upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
+    upload_result = upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
+
+    # Check if upload failed
+    if not upload_result.get('success'):
+        logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
+        return {
+            'success': False,
+            'error': upload_result.get('error'),
+            'title': metadata.get('title', 'Unknown'),
+            'filepath': display_path
+        }
 
     result = {
         'success': True,

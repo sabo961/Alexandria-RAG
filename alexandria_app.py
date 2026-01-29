@@ -136,6 +136,40 @@ def format_rag_result_as_json(result: RAGResult) -> str:
     return json.dumps(output, indent=2, ensure_ascii=False)
 
 
+def format_rag_result_as_markdown(result: RAGResult) -> str:
+    """Format RAG result as markdown string
+
+    Args:
+        result: RAGResult object to format
+
+    Returns:
+        Markdown string with headers, answer section, and sources with metadata
+    """
+    lines = []
+    lines.append("=" * 80)
+    lines.append("# Alexandria RAG Results")
+    lines.append("=" * 80)
+    lines.append(f"\n**Query:** {result.query}")
+    lines.append(f"**Retrieved:** {len(result.results)} chunks (filtered from {result.filtered_count})")
+    lines.append(f"**Reranked:** {'Yes' if result.reranked else 'No'}")
+
+    if result.answer:
+        lines.append("\n## 💡 Answer\n")
+        lines.append(result.answer)
+
+    lines.append("\n## 📚 Sources\n")
+    for idx, r in enumerate(result.results, 1):
+        lines.append(f"### Source {idx} (Relevance: {r['score']:.4f})")
+        lines.append(f"- **Book:** {r['book_title']}")
+        lines.append(f"- **Author:** {r['author']}")
+        lines.append(f"- **Domain:** {r['domain']}")
+        lines.append(f"- **Section:** {r['section_name']}")
+        lines.append(f"\n> {r['text'][:500]}{'...' if len(r['text']) > 500 else ''}\n")
+        lines.append("---\n")
+
+    return "\n".join(lines)
+
+
 # ============================================
 # APP STATE MANAGEMENT
 # ============================================

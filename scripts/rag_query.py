@@ -295,6 +295,7 @@ def search_qdrant(
     collection_name: str,
     limit: int,
     domain_filter: Optional[str],
+    book_filter: Optional[str],
     threshold: float,
     host: str,
     port: int,
@@ -313,12 +314,18 @@ def search_qdrant(
     query_vector = generate_embeddings([query])[0]
 
     # Build filter
-    query_filter = None
+    conditions = []
     if domain_filter and domain_filter != "all":
-        query_filter = Filter(
-            must=[FieldCondition(key="domain", match=MatchValue(value=domain_filter))]
+        conditions.append(
+            FieldCondition(key="domain", match=MatchValue(value=domain_filter))
         )
         logger.info(f"📚 Filtering by domain: {domain_filter}")
+    if book_filter:
+        conditions.append(
+            FieldCondition(key="book_title", match=MatchValue(value=book_filter))
+        )
+        logger.info(f"📖 Filtering by book: {book_filter}")
+    query_filter = Filter(must=conditions) if conditions else None
 
     # Fetch more results than needed for better filtering/reranking
     # fetch_multiplier controls how many extra results to retrieve
@@ -489,6 +496,7 @@ def perform_rag_query(
     collection_name: str = 'alexandria',
     limit: int = 5,
     domain_filter: Optional[str] = None,
+    book_filter: Optional[str] = None,
     threshold: float = 0.5,
     enable_reranking: bool = False,
     rerank_model: Optional[str] = None,
@@ -538,6 +546,7 @@ def perform_rag_query(
             collection_name=collection_name,
             limit=limit,
             domain_filter=domain_filter,
+            book_filter=book_filter,
             threshold=threshold,
             host=host,
             port=port,
@@ -689,6 +698,7 @@ def main():
     parser.add_argument('--collection', type=str, default='alexandria', help='Qdrant collection')
     parser.add_argument('--limit', type=int, default=5, help='Number of results')
     parser.add_argument('--domain', type=str, help='Filter by domain')
+    parser.add_argument('--book', type=str, help='Filter by book title')
     parser.add_argument('--threshold', type=float, default=0.5, help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--fetch-multiplier', type=int, default=3,
                        help='Fetch limit*N results from Qdrant for better filtering (default: 3)')
@@ -722,6 +732,7 @@ def main():
             collection_name=args.collection,
             limit=args.limit,
             domain_filter=args.domain,
+            book_filter=args.book,
             threshold=args.threshold,
             enable_reranking=args.rerank,
             rerank_model=args.rerank_model if args.rerank else None,

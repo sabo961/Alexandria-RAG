@@ -2208,9 +2208,22 @@ with tab_calibre:
                         # Verify ingestion by checking collection
                         try:
                             from qdrant_client import QdrantClient
+                            import requests.exceptions
+
                             client = QdrantClient(host=qdrant_host, port=qdrant_port)
                             collection_info = client.get_collection(calibre_collection)
                             st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                        except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+                            error_msg = f"""❌ Cannot verify collection - Qdrant server at {qdrant_host}:{qdrant_port} is unreachable
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network timeout - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+                            st.warning(error_msg)
                         except Exception as e:
                             st.warning(f"⚠️ Could not verify collection: {e}")
 

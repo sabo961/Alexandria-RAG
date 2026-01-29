@@ -32,6 +32,7 @@ from sentence_transformers import SentenceTransformer
 # Qdrant
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
+from scripts.qdrant_utils import check_qdrant_connection
 
 # Universal Semantic Chunking
 from universal_chunking import UniversalChunker
@@ -222,6 +223,12 @@ def upload_to_qdrant(
     qdrant_port: int
 ):
     if not chunks: return
+
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
+    if not is_connected:
+        logger.error(error_msg)
+        raise ConnectionError(f"Cannot connect to Qdrant at {qdrant_host}:{qdrant_port}")
 
     client = QdrantClient(host=qdrant_host, port=qdrant_port)
     

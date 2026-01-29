@@ -66,6 +66,12 @@ pytest tests/                    # All tests
 pytest tests/ui/ -v --headed     # UI tests with browser visible
 ```
 
+**Explore Calibre database:**
+```bash
+datasette "G:/My Drive/alexandria/metadata.db" --port 8002
+# Open http://localhost:8002 - visual SQL explorer for Calibre metadata
+```
+
 ---
 
 ## Where to Find What

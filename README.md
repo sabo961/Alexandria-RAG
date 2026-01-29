@@ -81,6 +81,7 @@ python batch_ingest.py --directory ../ingest --domain technical
 - **Embeddings:** sentence-transformers (all-MiniLM-L6-v2, 384-dim)
 - **LLM:** OpenRouter API (configurable models)
 - **Testing:** pytest + Playwright (unit tests + browser UI tests)
+- **DB Explorer:** Datasette (web UI for Calibre SQLite exploration)
 - **Python:** 3.14+
 
 **For complete technology details:** See [_bmad-output/project-context.md](_bmad-output/project-context.md)
@@ -110,6 +111,31 @@ playwright install
 ```
 
 **For complete testing documentation:** See [_bmad-output/project-context.md](_bmad-output/project-context.md#testing-rules)
+
+---
+
+## Calibre Database Explorer (Datasette)
+
+Explore the Calibre library metadata through a web interface:
+
+```bash
+# Start Datasette on Calibre database
+datasette "G:/My Drive/alexandria/metadata.db" --port 8002
+
+# Open http://localhost:8002 in browser
+```
+
+Features:
+- Browse all tables (books, authors, tags, publishers, series...)
+- SQL editor for custom queries
+- Faceted search and filtering
+- Export to CSV/JSON
+- Automatic REST API for every table
+
+```bash
+# Example: JSON API access
+curl "http://localhost:8002/metadata/books.json?_limit=10"
+```
 
 ---
 

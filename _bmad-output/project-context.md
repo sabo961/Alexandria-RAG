@@ -30,8 +30,21 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **lxml 4.9.3** - XML parser for BeautifulSoup
 - **tqdm 4.66.1** - Progress bars (DISABLED globally via `TQDM_DISABLE=1`)
 - **pytest 7.4.3** - Testing framework
+- **pytest-playwright >=0.4.0** - Browser/UI testing
 - **black 23.12.1** - Code formatter
 - **flake8 7.0.0** - Linter
+
+### Development Tools (Optional but Useful)
+- **Datasette** - Web UI for exploring Calibre SQLite database
+  ```bash
+  datasette "G:/My Drive/alexandria/metadata.db" --port 8002
+  # Open http://localhost:8002 - browse tables, run SQL, export data
+  # JSON API: curl "http://localhost:8002/metadata/books.json?_limit=10"
+  ```
+- **Playwright codegen** - Record browser actions, generate test code
+  ```bash
+  playwright codegen http://localhost:8501
+  ```
 
 ### Critical Version Constraints
 - **Embedding model**: `all-MiniLM-L6-v2` (384-dimensional vectors) - DO NOT change without re-ingesting all collections

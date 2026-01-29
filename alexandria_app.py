@@ -936,6 +936,10 @@ def render_query_tab():
         # Max 20 to prevent UI overload and excessive token usage
         query_limit = st.number_input("Results", min_value=1, max_value=20, value=5)
 
+    # Author filter - narrow search to specific book authors (case-insensitive partial match)
+    # Follows pattern from Calibre tab text inputs (line 1545)
+    author_filter = st.text_input("Author Filter", placeholder="e.g., Martin Fowler", key="query_author_filter")
+
     # ==================================================
     # ADVANCED SETTINGS (COLLAPSIBLE)
     # ==================================================
@@ -1075,6 +1079,8 @@ def render_query_tab():
                     limit=query_limit,
                     # Convert "all" to None for qdrant_utils filter logic
                     domain_filter=query_domain if query_domain != "all" else None,
+                    # Convert empty string to None for author filter
+                    author_filter=author_filter.strip() if author_filter.strip() else None,
                     threshold=similarity_threshold,
                     enable_reranking=enable_reranking,
                     rerank_model=rerank_model if enable_reranking else None,

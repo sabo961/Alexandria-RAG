@@ -20,6 +20,9 @@ Simple query:
 With domain filter:
     python rag_query.py "cognitive load" --domain psychology
 
+With author filter:
+    python rag_query.py "database patterns" --author "Len Silverston"
+
 With similarity threshold:
     python rag_query.py "database design" --threshold 0.6
 
@@ -122,6 +125,7 @@ Search options:
     --collection NAME     Qdrant collection (default: alexandria)
     --limit N             Number of results (default: 5)
     --domain DOMAIN       Filter by domain: technical, psychology, philosophy, history, literature
+    --author AUTHOR       Filter by author (e.g., "Len Silverston", "Haruki Murakami")
     --threshold FLOAT     Similarity threshold 0.0-1.0 (default: 0.5)
     --fetch-multiplier N  Fetch limit×N results for filtering (default: 3, min fetch: 20)
 
@@ -182,7 +186,15 @@ EXAMPLES
 2. Domain-filtered search:
     python rag_query.py "cognitive load theory" --domain psychology --limit 3
 
-3. High-quality retrieval (with reranking):
+3. Author-filtered search:
+    python rag_query.py "data modeling patterns" --author "Len Silverston"
+
+4. Combined domain and author filters:
+    python rag_query.py "existentialism and death" \
+        --domain literature \
+        --author "Yukio Mishima"
+
+5. High-quality retrieval (with reranking):
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database normalization" \
         --domain technical \
@@ -190,14 +202,14 @@ EXAMPLES
         --rerank \
         --limit 5
 
-4. Full RAG answer:
+6. Full RAG answer with author filter:
     export OPENROUTER_API_KEY="sk-or-v1-..."
-    python rag_query.py "Explain Mishima's philosophy" \
-        --domain literature \
+    python rag_query.py "What are the key patterns for shipments?" \
+        --author "Len Silverston" \
         --answer \
         --model "gpt-4o-mini"
 
-5. JSON output for scripting:
+7. JSON output for scripting:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "data modeling patterns" \
         --domain technical \
@@ -295,6 +307,7 @@ def search_qdrant(
     collection_name: str,
     limit: int,
     domain_filter: Optional[str],
+    author_filter: Optional[str],
     threshold: float,
     host: str,
     port: int,
@@ -314,11 +327,18 @@ def search_qdrant(
 
     # Build filter
     query_filter = None
+    filter_conditions = []
+
     if domain_filter and domain_filter != "all":
-        query_filter = Filter(
-            must=[FieldCondition(key="domain", match=MatchValue(value=domain_filter))]
-        )
+        filter_conditions.append(FieldCondition(key="domain", match=MatchValue(value=domain_filter)))
         logger.info(f"📚 Filtering by domain: {domain_filter}")
+
+    if author_filter and author_filter != "all":
+        filter_conditions.append(FieldCondition(key="author", match=MatchValue(value=author_filter)))
+        logger.info(f"✍️ Filtering by author: {author_filter}")
+
+    if filter_conditions:
+        query_filter = Filter(must=filter_conditions)
 
     # Fetch more results than needed for better filtering/reranking
     # fetch_multiplier controls how many extra results to retrieve
@@ -489,6 +509,7 @@ def perform_rag_query(
     collection_name: str = 'alexandria',
     limit: int = 5,
     domain_filter: Optional[str] = None,
+    author_filter: Optional[str] = None,
     threshold: float = 0.5,
     enable_reranking: bool = False,
     rerank_model: Optional[str] = None,
@@ -508,6 +529,7 @@ def perform_rag_query(
         collection_name: Qdrant collection to search
         limit: Number of final results to return
         domain_filter: Optional domain filter (technical, psychology, etc.)
+        author_filter: Optional author filter (e.g., "Len Silverston", "Haruki Murakami")
         threshold: Similarity score threshold (0.0-1.0)
         enable_reranking: Whether to rerank with LLM
         rerank_model: Model for reranking (required if enable_reranking=True)
@@ -538,6 +560,7 @@ def perform_rag_query(
             collection_name=collection_name,
             limit=limit,
             domain_filter=domain_filter,
+            author_filter=author_filter,
             threshold=threshold,
             host=host,
             port=port,
@@ -689,6 +712,7 @@ def main():
     parser.add_argument('--collection', type=str, default='alexandria', help='Qdrant collection')
     parser.add_argument('--limit', type=int, default=5, help='Number of results')
     parser.add_argument('--domain', type=str, help='Filter by domain')
+    parser.add_argument('--author', type=str, help='Filter by author')
     parser.add_argument('--threshold', type=float, default=0.5, help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--fetch-multiplier', type=int, default=3,
                        help='Fetch limit*N results from Qdrant for better filtering (default: 3)')
@@ -722,6 +746,7 @@ def main():
             collection_name=args.collection,
             limit=args.limit,
             domain_filter=args.domain,
+            author_filter=args.author,
             threshold=args.threshold,
             enable_reranking=args.rerank,
             rerank_model=args.rerank_model if args.rerank else None,

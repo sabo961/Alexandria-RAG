@@ -1197,6 +1197,38 @@ def render_query_tab():
                             text = source.get('text', '')
                             st.text(text[:500] + "..." if len(text) > 500 else text)
 
+                    # ==================================================
+                    # DOWNLOAD BUTTONS FOR EXPORT
+                    # ==================================================
+                    # Allow users to export results in JSON or Markdown format
+                    st.markdown("---")
+                    st.markdown("### 📥 Export Results")
+
+                    # Create two-column layout for download buttons
+                    download_col1, download_col2 = st.columns(2)
+
+                    with download_col1:
+                        # JSON export - structured data with all metadata
+                        json_data = format_rag_result_as_json(result)
+                        st.download_button(
+                            label="📄 Download JSON",
+                            data=json_data,
+                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                            use_container_width=True
+                        )
+
+                    with download_col2:
+                        # Markdown export - human-readable format for documentation
+                        markdown_data = format_rag_result_as_markdown(result)
+                        st.download_button(
+                            label="📝 Download Markdown",
+                            data=markdown_data,
+                            file_name=f"rag_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                            mime="text/markdown",
+                            use_container_width=True
+                        )
+
             except Exception as e:
                 # Catch-all for unexpected errors (e.g., Qdrant connection loss mid-query)
                 st.error(f"❌ Error: {str(e)}")

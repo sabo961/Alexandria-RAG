@@ -295,6 +295,7 @@ def search_qdrant(
     collection_name: str,
     limit: int,
     domain_filter: Optional[str],
+    author_filter: Optional[str],
     threshold: float,
     host: str,
     port: int,
@@ -314,11 +315,18 @@ def search_qdrant(
 
     # Build filter
     query_filter = None
+    filter_conditions = []
+
     if domain_filter and domain_filter != "all":
-        query_filter = Filter(
-            must=[FieldCondition(key="domain", match=MatchValue(value=domain_filter))]
-        )
+        filter_conditions.append(FieldCondition(key="domain", match=MatchValue(value=domain_filter)))
         logger.info(f"📚 Filtering by domain: {domain_filter}")
+
+    if author_filter and author_filter != "all":
+        filter_conditions.append(FieldCondition(key="author", match=MatchValue(value=author_filter)))
+        logger.info(f"✍️ Filtering by author: {author_filter}")
+
+    if filter_conditions:
+        query_filter = Filter(must=filter_conditions)
 
     # Fetch more results than needed for better filtering/reranking
     # fetch_multiplier controls how many extra results to retrieve
@@ -538,6 +546,7 @@ def perform_rag_query(
             collection_name=collection_name,
             limit=limit,
             domain_filter=domain_filter,
+            author_filter=None,
             threshold=threshold,
             host=host,
             port=port,

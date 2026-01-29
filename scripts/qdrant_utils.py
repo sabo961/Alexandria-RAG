@@ -77,6 +77,12 @@ Connection error: {str(e)}
 
 def list_collections(host: str = 'localhost', port: int = 6333):
     """List all Qdrant collections with basic stats"""
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     collections = client.get_collections().collections

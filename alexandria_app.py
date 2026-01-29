@@ -2384,6 +2384,8 @@ with tab_ingestion:
             collection_model_locked = False
             try:
                 from qdrant_client import QdrantClient
+                import requests.exceptions
+
                 client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
                 # Try to get collection info
@@ -2396,8 +2398,19 @@ with tab_ingestion:
                 except Exception:
                     # Collection doesn't exist yet
                     collection_is_empty = True
+            except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+                error_msg = f"""❌ Cannot connect to Qdrant server at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network timeout - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+                st.warning(error_msg)
             except Exception as e:
-                st.warning(f"⚠️ Cannot connect to Qdrant: {e}")
+                st.warning(f"⚠️ Unexpected error checking collection: {e}")
 
             embedding_models = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"]
             embedding_model_default = st.session_state.get('embedding_model', "all-MiniLM-L6-v2")

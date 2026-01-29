@@ -60,6 +60,12 @@ cd scripts
 python rag_query.py "your question here" --limit 5
 ```
 
+**Run tests:**
+```bash
+pytest tests/                    # All tests
+pytest tests/ui/ -v --headed     # UI tests with browser visible
+```
+
 ---
 
 ## Where to Find What

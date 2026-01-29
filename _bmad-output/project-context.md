@@ -131,18 +131,19 @@ def function(arg: str) -> Dict:
 - **No sys.stderr**: Causes `[Errno 22]` errors - use `logging` instead
 - **Rerun behavior**: Every interaction reruns entire script (use fragments to isolate)
 
-### Testing Rules (Recommended - Not Yet Implemented)
+### Testing Rules
 
 **Directory Structure:**
 ```
 Alexandria/
 ├── scripts/          # Business logic (testable)
-├── tests/            # Test files (mirror scripts/ structure)
-│   ├── test_ingest_books.py
-│   ├── test_rag_query.py
-│   ├── test_collection_manifest.py
-│   └── test_calibre_db.py
-└── alexandria_app.py # GUI (thin layer, minimal testing needed)
+├── tests/            # Test files
+│   ├── conftest.py   # Root pytest config (path setup for scripts/)
+│   ├── test_*.py     # Unit tests (mirror scripts/ structure)
+│   └── ui/           # Playwright browser tests
+│       ├── conftest.py          # Playwright fixtures (server, browser)
+│       └── test_app_startup.py  # Smoke tests for Streamlit GUI
+└── alexandria_app.py # GUI (thin layer, tested via Playwright)
 ```
 
 **File Naming:**
@@ -151,13 +152,41 @@ Alexandria/
 
 **Testing Focus:**
 - **Priority**: Test `scripts/` modules (business logic)
-- **Low priority**: GUI testing (thin layer calls scripts)
+- **UI testing**: Playwright for Streamlit GUI (smoke tests, navigation)
 - **External dependencies**: Mock Qdrant, OpenRouter API, file system
 
 **Pytest Configuration:**
-- Run tests: `pytest tests/`
+- Run all tests: `pytest tests/`
+- Run unit tests only: `pytest tests/ --ignore=tests/ui/`
+- Run UI tests only: `pytest tests/ui/`
 - Coverage: `pytest --cov=scripts tests/`
-- Framework: pytest 7.4.3 (already in requirements.txt)
+- Framework: pytest 7.4.3 + pytest-playwright 0.4.0+
+
+**Playwright UI Testing (IMPORTANT):**
+```bash
+# Install browsers (one-time setup after pip install)
+playwright install
+
+# Run UI tests (headless - default)
+pytest tests/ui/ -v
+
+# Run with visible browser (debugging)
+pytest tests/ui/ -v --headed
+
+# Run with slow motion (demos, watching)
+pytest tests/ui/ -v --headed --slowmo=500
+
+# Record video of tests
+pytest tests/ui/ --video=on
+
+# Generate test code by recording actions
+playwright codegen http://localhost:8501
+```
+
+**Playwright Fixtures (tests/ui/conftest.py):**
+- `streamlit_server` - Auto-starts Streamlit on port 8501, stops after tests
+- `app_page` - Pre-navigated page with Streamlit app loaded
+- Server detection: Reuses existing server if already running (dev workflow)
 
 **Mock Pattern for External Services:**
 ```python
@@ -173,6 +202,7 @@ test_file = Path("tests/fixtures/sample.epub")
 **Test Categories:**
 - **Unit tests**: Individual functions (e.g., `extract_text()`, `chunk()`)
 - **Integration tests**: End-to-end workflows (e.g., ingest EPUB → Qdrant upload)
+- **UI smoke tests**: App loads, tabs visible, navigation works (Playwright)
 - **Fixture data**: Store sample books in `tests/fixtures/` (small EPUB/PDF for testing)
 
 ### Code Quality & Style Rules

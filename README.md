@@ -80,9 +80,36 @@ python batch_ingest.py --directory ../ingest --domain technical
 - **Vector DB:** Qdrant (192.168.0.151:6333)
 - **Embeddings:** sentence-transformers (all-MiniLM-L6-v2, 384-dim)
 - **LLM:** OpenRouter API (configurable models)
+- **Testing:** pytest + Playwright (unit tests + browser UI tests)
 - **Python:** 3.14+
 
 **For complete technology details:** See [_bmad-output/project-context.md](_bmad-output/project-context.md)
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run unit tests only
+pytest tests/ --ignore=tests/ui/
+
+# Run UI tests (Playwright - headless)
+pytest tests/ui/ -v
+
+# Run UI tests with visible browser
+pytest tests/ui/ -v --headed
+
+# Slow motion for demos
+pytest tests/ui/ -v --headed --slowmo=500
+
+# First-time setup: install browsers
+playwright install
+```
+
+**For complete testing documentation:** See [_bmad-output/project-context.md](_bmad-output/project-context.md#testing-rules)
 
 ---
 

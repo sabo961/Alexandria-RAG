@@ -265,6 +265,7 @@ from dataclasses import dataclass
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from ingest_books import generate_embeddings
+from qdrant_utils import check_qdrant_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -306,6 +307,12 @@ def search_qdrant(
     Returns:
         (filtered_results, initial_count)
     """
+    # Check connection before attempting search
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(f"Qdrant connection check failed: {error_msg}")
+        raise ConnectionError(error_msg)
+
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding

@@ -734,6 +734,7 @@ def main():
             collection_name=args.collection,
             limit=args.limit,
             domain_filter=args.domain,
+            author_filter=args.author,
             threshold=args.threshold,
             enable_reranking=args.rerank,
             rerank_model=args.rerank_model if args.rerank else None,

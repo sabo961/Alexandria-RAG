@@ -672,7 +672,7 @@ with st.sidebar:
     if settings_changed:
         try:
             save_gui_settings(gui_settings)  # Writes to .streamlit/gui_settings.json
-            st.toast("💾 Settings saved")
+            st.toast("💾 Settings saved", icon="✅")
         except Exception as e:
             # Non-blocking warning - settings will still work for current session
             st.warning(f"⚠️ Could not save settings: {e}")

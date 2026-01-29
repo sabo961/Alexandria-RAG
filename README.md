@@ -4,7 +4,7 @@
 >
 > The Library of Alexandria was the largest library of the ancient world.
 
-Semantička RAG knjižnica koja povezuje 9000 multidisciplinarnih knjiga (tehnika, psihologija, filozofija, povijest) za sintezu znanja preko domena.
+Semantic RAG library that connects 9000 multidisciplinary books (technical, psychology, philosophy, history) for knowledge synthesis across domains.
 
 **Status:** Phase 1 - Production Ready ✅
 
@@ -105,6 +105,10 @@ python batch_ingest.py --directory ../ingest --domain technical
 ### 👨‍💻 For Contributors
 - **[TODO.md](TODO.md)** - Prioritized backlog (P0-P3)
 - **[CHANGELOG.md](CHANGELOG.md)** - Completed work archive
+
+### 🛠️ Developer Tools
+- **[PowerShell Setup](docs/development/powershell-setup.md)** - Git/dotnet/npm/docker aliases + enhanced prompt
+- **[Git Workflow](docs/development/git-workflow.md)** - Branching strategy & Auto-Claude integration
 
 ### 🏗️ For Architecture
 - **[Architecture Overview](docs/architecture/README.md)** - C4 diagrams + ADRs

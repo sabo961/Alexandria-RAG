@@ -1,10 +1,10 @@
 # ALEXANDRIA TEMPORAL KNOWLEDGE LAYER
 ## Backlog Brief v0.1
 
-### VIZIJA
-Vremenska dimenzija znanja. Alexandria prestaje biti "baza knjiga" 
-i postaje MAPA INTELEKTUALNOG PUTOVANJA kroz prostor znanja.
-Svaki upit ima kontekst: odakle dolaziš, što znaš, kamo ideš.
+### VISION
+Temporal dimension of knowledge. Alexandria stops being a "book database"
+and becomes a MAP OF INTELLECTUAL JOURNEY through knowledge space.
+Every query has context: where you're coming from, what you know, where you're going.
 
 Powered by Graphiti + Neo4j.
 
@@ -12,57 +12,57 @@ Powered by Graphiti + Neo4j.
 
 ### PROBLEM
 
-Klasični RAG je AMNEZIČAN:
-- "Nađi slično" → evo 5 chunkova
-- Nema povijesti interakcija
-- Nema evolucije razumijevanja
-- Svaki upit je "prvi put"
+Classic RAG is AMNESIC:
+- "Find similar" → here's 5 chunks
+- No interaction history
+- No evolution of understanding
+- Every query is "first time"
 
-Znanje nije snapshot. Znanje je PUTOVANJE.
+Knowledge is not a snapshot. Knowledge is a JOURNEY.
 
 ---
 
-### ARHITEKTURA
+### ARCHITECTURE
 ```
 ┌─────────────────────────────────────────────────────┐
 │           GRAPHITI KNOWLEDGE GRAPH                  │
 │  ═══════════════════════════════════════════════    │
 │                                                     │
-│  ENTITETI:                                          │
-│  ├── 📚 Knjige                                      │
-│  ├── 👤 Autori                                      │
-│  ├── 💡 Koncepti                                    │
-│  ├── 🏛️ Škole mišljenja                            │
-│  ├── 📅 Periode                                     │
-│  └── 🧑 Korisnici                                   │
+│  ENTITIES:                                          │
+│  ├── 📚 Books                                       │
+│  ├── 👤 Authors                                     │
+│  ├── 💡 Concepts                                    │
+│  ├── 🏛️ Schools of thought                         │
+│  ├── 📅 Periods                                     │
+│  └── 🧑 Users                                       │
 │                                                     │
-│  RELACIJE (temporalne):                             │
-│  ├── NAPISAO (autor → knjiga)                       │
-│  ├── CITIRA (knjiga → knjiga)                       │
-│  ├── POVEZAN_S (koncept ↔ koncept)                  │
-│  ├── PRIPADA (knjiga → škola)                       │
-│  ├── ČITAO (korisnik → knjiga) [KADA]               │
-│  ├── TRAŽIO (korisnik → koncept) [KADA]             │
-│  └── NAŠAO_KORISNIM (korisnik → chunk) [KADA]       │
+│  RELATIONSHIPS (temporal):                          │
+│  ├── WROTE (author → book)                          │
+│  ├── CITES (book → book)                            │
+│  ├── RELATED_TO (concept ↔ concept)                 │
+│  ├── BELONGS_TO (book → school)                     │
+│  ├── READ (user → book) [WHEN]                      │
+│  ├── SEARCHED (user → concept) [WHEN]               │
+│  └── FOUND_USEFUL (user → chunk) [WHEN]             │
 │                                                     │
-│  BI-TEMPORALNI MODEL:                               │
-│  ├── t_event: Kad se DOGODILO                       │
-│  └── t_ingested: Kad smo SAZNALI                    │
+│  BI-TEMPORAL MODEL:                                 │
+│  ├── t_event: When it HAPPENED                      │
+│  └── t_ingested: When we LEARNED                    │
 └─────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
 │              QDRANT VECTOR LAYER                    │
 │  ═══════════════════════════════════════════════    │
-│  • Chunk embeddinzi                                 │
+│  • Chunk embeddings                                 │
 │  • Semantic similarity                              │
 │  • Full-text search                                 │
-│  • Brzi content retrieval                           │
+│  • Fast content retrieval                           │
 └─────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│              9000 KNJIGA (Calibre)                  │
+│              9000 BOOKS (Calibre)                   │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -70,35 +70,35 @@ Znanje nije snapshot. Znanje je PUTOVANJE.
 
 ### QUERY FLOW
 ```
-UPIT: "Knjige o consciousness koje koriste matematiku"
+QUERY: "Books about consciousness that use mathematics"
 
-KORAK 1: GRAPHITI - Graph Traversal
+STEP 1: GRAPHITI - Graph Traversal
 ─────────────────────────────────────
 - consciousness ──► linked_concepts ──► mathematics
-- Rezultat: [GEB, Strange Loop, Emperor's New Mind...]
-- PLUS: "Sabo je već čitao GEB"
-- PLUS: "Zadnji put tražio consciousness: 2024-09"
+- Result: [GEB, Strange Loop, Emperor's New Mind...]
+- PLUS: "Sabo already read GEB"
+- PLUS: "Last searched consciousness: 2024-09"
 
-KORAK 2: PERSONALIZACIJA
+STEP 2: PERSONALIZATION
 ─────────────────────────────────────
-- Filter: izbaci već pročitano (ili stavi niže)
-- Boost: autori koje je već čitao (Hofstadter)
-- Suggest: "Sljedeći logični korak na tvom putu"
+- Filter: remove already read (or rank lower)
+- Boost: authors already read (Hofstadter)
+- Suggest: "Next logical step on your journey"
 
-KORAK 3: QDRANT - Content Retrieval
+STEP 3: QDRANT - Content Retrieval
 ─────────────────────────────────────
-- Deep dive u specifične chunkove
-- Relevantni pasusi iz odabranih knjiga
+- Deep dive into specific chunks
+- Relevant passages from selected books
 
-KORAK 4: RESPONSE + GRAPH UPDATE
+STEP 4: RESPONSE + GRAPH UPDATE
 ─────────────────────────────────────
-- Vrati rezultate
-- ZAPIŠI: Sabo tražio X, dobio Y, u vrijeme Z
+- Return results
+- RECORD: Sabo searched X, got Y, at time Z
 ```
 
 ---
 
-### GRAF ENTITETA - DETALJI
+### GRAPH ENTITIES - DETAILS
 
 #### 📚 BOOK NODE
 ```yaml
@@ -106,8 +106,8 @@ Book:
   id: uuid
   title: string
   calibre_id: int
-  
-  # Relacije
+
+  # Relationships
   written_by: -> Author
   cites: -> Book[]
   cited_by: -> Book[]
@@ -121,8 +121,8 @@ Book:
 Author:
   id: uuid
   name: string
-  
-  # Relacije
+
+  # Relationships
   wrote: -> Book[]
   influenced_by: -> Author[]
   influences: -> Author[]
@@ -135,8 +135,8 @@ Concept:
   id: uuid
   name: string
   description: string
-  
-  # Relacije
+
+  # Relationships
   related_to: -> Concept[]
   parent_concept: -> Concept
   child_concepts: -> Concept[]
@@ -147,8 +147,8 @@ Concept:
 ```yaml
 UserJourney:
   user_id: uuid
-  
-  # Temporalne relacije
+
+  # Temporal relationships
   read: -> Book[] [timestamp, completion%]
   searched: -> Concept[] [timestamp, found_useful: bool]
   bookmarked: -> Chunk[] [timestamp]
@@ -157,20 +157,20 @@ UserJourney:
 
 ---
 
-### TEMPORALNI UPITI
+### TEMPORAL QUERIES
 ```cypher
-// Što je Sabo čitao o consciousness PRIJE nego je otkrio Hofstadtera?
+// What did Sabo read about consciousness BEFORE discovering Hofstadter?
 MATCH (u:User {name: "Sabo"})-[r:READ]->(b:Book)-[:COVERS]->(c:Concept {name: "consciousness"})
 WHERE r.timestamp < date("2024-06-01")
 RETURN b.title, r.timestamp
 ORDER BY r.timestamp
 
-// Kako je evoluiralo razumijevanje "recursion"?
+// How did understanding of "recursion" evolve?
 MATCH path = (u:User)-[r:SEARCHED*]->(c:Concept {name: "recursion"})
 RETURN r.timestamp, r.context, r.found_useful
 ORDER BY r.timestamp
 
-// Preporuči SLJEDEĆU knjigu na putu
+// Recommend NEXT book on the path
 MATCH (u:User)-[:READ]->(read:Book)-[:CITES]->(next:Book)
 WHERE NOT (u)-[:READ]->(next)
 AND (next)-[:COVERS]->(c:Concept)<-[:SEARCHED]-(u)
@@ -185,7 +185,7 @@ LIMIT 5
 ```
 CALIBRE LIBRARY          GRAPHITI              QDRANT
      │                      │                     │
-     │  [Nova knjiga]       │                     │
+     │  [New book]          │                     │
      ├─────────────────────►│                     │
      │                      │                     │
      │          [Extract entities]                │
@@ -197,31 +197,31 @@ CALIBRE LIBRARY          GRAPHITI              QDRANT
      │                      │                     │
      │          [Link book → chunks]              │
      │                      │                     │
-     
+
 ENTITY EXTRACTION (per book):
-├── Autori (NER + metadata)
-├── Citirane knjige (bibliography parsing)
-├── Koncepti (LLM extraction)
-├── Osobe (NER)
-├── Vremenska razdoblja
-└── Škole mišljenja (LLM classification)
+├── Authors (NER + metadata)
+├── Cited books (bibliography parsing)
+├── Concepts (LLM extraction)
+├── People (NER)
+├── Time periods
+└── Schools of thought (LLM classification)
 ```
 
 ---
 
-### FAZE IMPLEMENTACIJE
+### IMPLEMENTATION PHASES
 
-**F0: Infrastruktura**
+**F0: Infrastructure**
 - [ ] Neo4j instance (Docker)
 - [ ] Graphiti setup
-- [ ] Povezati s postojećim Qdrant
+- [ ] Connect to existing Qdrant
 - [ ] Basic MCP connector
 
-**F1: Book Graph (statični)**
-- [ ] Book nodes iz Calibre
-- [ ] Author nodes + WROTE relacije
+**F1: Book Graph (static)**
+- [ ] Book nodes from Calibre
+- [ ] Author nodes + WROTE relationships
 - [ ] Concept extraction pipeline
-- [ ] CITES relacije (bibliography parsing)
+- [ ] CITES relationships (bibliography parsing)
 
 **F2: Relationship Discovery**
 - [ ] Concept linking (RELATED_TO)
@@ -231,27 +231,27 @@ ENTITY EXTRACTION (per book):
 
 **F3: User Journey Tracking**
 - [ ] User node
-- [ ] READ relacije s timestamp
+- [ ] READ relationships with timestamp
 - [ ] SEARCHED log
 - [ ] FOUND_USEFUL feedback loop
 
 **F4: Personalized Retrieval**
-- [ ] "Sljedeća knjiga" recommendation
-- [ ] "Već znaš" context injection
+- [ ] "Next book" recommendation
+- [ ] "Already know" context injection
 - [ ] Reading path generation
 - [ ] Knowledge gap detection
 
 **F5: Temporal Queries**
-- [ ] "Kako je evoluiralo moje razumijevanje X?"
-- [ ] "Što sam znao o Y prije datuma Z?"
-- [ ] "Path od knjige A do knjige B kroz koncepte"
+- [ ] "How did my understanding of X evolve?"
+- [ ] "What did I know about Y before date Z?"
+- [ ] "Path from book A to book B through concepts"
 
 ---
 
-### INTEGRACIJA S KNJIŽNIČARIMA
+### INTEGRATION WITH LIBRARIANS
 ```
 ┌─────────────────────────────────────────────┐
-│  KNJIŽNIČARI (BMad agenti)                  │
+│  LIBRARIANS (BMad agents)                   │
 ├─────────────────────────────────────────────┤
 │                                             │
 │  LIBRARIAN ──► Entity extraction            │
@@ -275,25 +275,25 @@ ENTITY EXTRACTION (per book):
 
 ---
 
-### METRIKE
+### METRICS
 
-| Metrika | Opis | Target |
-|---------|------|--------|
-| Graph coverage | % knjiga s extracted entities | >90% |
-| Concept linkage | Avg relacija po konceptu | >5 |
-| Path findability | % uspješnih "A→B" upita | >80% |
+| Metric | Description | Target |
+|---------|-------------|--------|
+| Graph coverage | % books with extracted entities | >90% |
+| Concept linkage | Avg relationships per concept | >5 |
+| Path findability | % successful "A→B" queries | >80% |
 | Recommendation relevance | User feedback score | >4/5 |
-| Query latency | Graph traversal vrijeme | <500ms |
+| Query latency | Graph traversal time | <500ms |
 
 ---
 
 ### OPEN QUESTIONS
 
-1. **Entity extraction model** - LLM ili specializirani NER?
-2. **Concept taxonomy** - Flat ili hierarchical?
-3. **User privacy** - Journey data lokalno ili sync?
-4. **Graph size** - Skaliranje za 50k+ knjiga?
-5. **Feedback loop** - Kako korisnik označava "korisno"?
+1. **Entity extraction model** - LLM or specialized NER?
+2. **Concept taxonomy** - Flat or hierarchical?
+3. **User privacy** - Journey data local or sync?
+4. **Graph size** - Scaling for 50k+ books?
+5. **Feedback loop** - How does user mark "useful"?
 
 ---
 

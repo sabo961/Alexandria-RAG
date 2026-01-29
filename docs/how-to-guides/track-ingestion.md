@@ -1,41 +1,41 @@
 # Alexandria Logging & Tracking System
 
-**Problem Solved:** "Kako ću znati što sam obradio nakon par dana?"
+**Problem Solved:** "How will I know what I processed after a few days?"
 
 ---
 
 ## Overview
 
-Alexandria ima **dva tracking sistema**:
+Alexandria has **two tracking systems**:
 
-1. **Collection Manifest** (`logs/collection_manifest.json`) - Što je u kojem Qdrant collection-u
-2. **Batch Progress Tracker** (`scripts/batch_ingest_progress.json`) - Resume funkcionalnost za batch ingestion
+1. **Collection Manifest** (`logs/collection_manifest.json`) - What's in which Qdrant collection
+2. **Batch Progress Tracker** (`scripts/batch_ingest_progress.json`) - Resume functionality for batch ingestion
 
 ---
 
-## 1. Collection Manifest (Glavna Evidencija)
+## 1. Collection Manifest (Main Registry)
 
-### Što Logira
+### What It Logs
 
-Za svaki collection čuva:
-- **Popis svih knjiga** (file path, title, author)
-- **Broj chunks-a** po knjizi
-- **Veličinu datoteke** (MB)
-- **Timestamp** kada je ingestan
-- **Domain** kategoriju
-- **Ukupne statistike** (total chunks, total size)
+For each collection stores:
+- **List of all books** (file path, title, author)
+- **Number of chunks** per book
+- **File size** (MB)
+- **Timestamp** when ingested
+- **Domain** category
+- **Total statistics** (total chunks, total size)
 
-### Kako Koristiti
+### How to Use
 
-#### Provjeri Što Imaš u Collection-u
+#### Check What's in Your Collection
 
 ```bash
 cd scripts
 
-# Brzi pregled svih collection-a
+# Quick overview of all collections
 python collection_manifest.py list
 
-# Detaljni prikaz specifičnog collection-a
+# Detailed view of specific collection
 python collection_manifest.py show alexandria_test
 ```
 
@@ -62,16 +62,16 @@ Books:
    Ingested: 2026-01-21
 ```
 
-#### Automatsko Logiranje
+#### Automatic Logging
 
-`batch_ingest.py` **automatski** ažurira manifest:
+`batch_ingest.py` **automatically** updates manifest:
 
 ```bash
-# Ovo će automatski zapisati sve ingestirane knjige u manifest
+# This will automatically record all ingested books in the manifest
 python batch_ingest.py --directory ../ingest --domain technical --collection alexandria
 ```
 
-Nema potrebe za dodatnim koracima - sve se automatski logira!
+No need for additional steps - everything is automatically logged!
 
 #### Export / Backup
 
@@ -87,28 +87,28 @@ python collection_manifest.py export alexandria --output ../logs/backups/alexand
 
 ## 2. Batch Progress Tracker
 
-### Što Logira
+### What It Logs
 
-- **Processed files** - Lista uspješno obrađenih knjiga
-- **Failed files** - Lista neuspješnih s error porukom
+- **Processed files** - List of successfully processed books
+- **Failed files** - List of failed files with error message
 - **Statistics** - Total books, chunks, errors
 
-### Lokacija
+### Location
 
 `scripts/batch_ingest_progress.json`
 
-### Kako Koristiti
+### How to Use
 
-#### Resume Nakon Prekida
+#### Resume After Interruption
 
 ```bash
-# Ako batch ingestion padne na pola puta, nastavi odakle si stao
+# If batch ingestion fails halfway, continue from where you stopped
 python batch_ingest.py --directory ../ingest --domain technical --resume
 ```
 
-**Resume** preskoči knjige koje su već ingestirane.
+**Resume** skips books that are already ingested.
 
-#### Provjeri Progress
+#### Check Progress
 
 ```bash
 # Windows
@@ -140,36 +140,36 @@ cat batch_ingest_progress.json
 
 ---
 
-## Praktični Primjeri
+## Practical Examples
 
-### Scenario 1: "Je li ova knjiga već ingestirana?"
+### Scenario 1: "Is this book already ingested?"
 
 ```bash
-# Brzo provjeri manifest
+# Quick check manifest
 python collection_manifest.py show alexandria | findstr "Silverston"
 
-# Ili provjeri cijelu listu
+# Or check entire list
 python collection_manifest.py show alexandria
 ```
 
-### Scenario 2: "Koliko prostora zauzima collection?"
+### Scenario 2: "How much space does the collection take?"
 
 ```bash
 python collection_manifest.py show alexandria
 # Output shows: Total size: 123.45 MB
 ```
 
-### Scenario 3: "Batch ingestion pao na pola puta"
+### Scenario 3: "Batch ingestion failed halfway"
 
 ```bash
-# Nastavi odakle si stao
+# Continue from where you stopped
 python batch_ingest.py --directory ../ingest --domain technical --resume
 
-# Provjeri što je prošlo, što ne
+# Check what passed, what didn't
 type batch_ingest_progress.json
 ```
 
-### Scenario 4: "Želim backup prije brisanja collection-a"
+### Scenario 4: "I want backup before deleting collection"
 
 ```bash
 # Export manifest
@@ -179,7 +179,7 @@ python collection_manifest.py export alexandria --output ../logs/alexandria_befo
 python qdrant_utils.py delete alexandria --confirm
 ```
 
-### Scenario 5: "Izgubio sam manifest, ali Qdrant ima podatke"
+### Scenario 5: "I lost the manifest, but Qdrant has the data"
 
 ```bash
 # Rebuild manifest from Qdrant
@@ -365,7 +365,7 @@ python rag_query.py "test query" --collection alexandria --limit 5
 ✅ **Backup/export** - `collection_manifest.py export`
 ✅ **Sync from Qdrant** - `collection_manifest.py sync` (recovery)
 
-**Key Takeaway:** Uvijek koristi `batch_ingest.py` za produkciju - automatski logira sve što trebaš znati!
+**Key Takeaway:** Always use `batch_ingest.py` for production - automatically logs everything you need to know!
 
 ---
 

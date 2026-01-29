@@ -1,6 +1,6 @@
 # Alexandria Ingestion Scripts
 
-Python skripte za ingestiju knjiga u Qdrant vektorsku bazu.
+Python scripts for ingesting books into Qdrant vector database.
 
 ## Setup
 
@@ -12,7 +12,7 @@ pip install -r ../requirements.txt
 
 ### 2. Verify Qdrant is Running
 
-Qdrant mora biti pokrenut na `localhost:6333` (ili specificiraj drugačiji host/port).
+Qdrant must be running on `localhost:6333` (or specify different host/port).
 
 ```bash
 # Test connection
@@ -74,7 +74,7 @@ python qdrant_utils.py search alexandria "cognitive load" --domain psychology --
 
 ## Domain-Specific Chunking Strategies
 
-Ingestion skripta automatski primjenjuje domain-specific chunking:
+Ingestion script automatically applies domain-specific chunking:
 
 | Domain | Chunk Size (tokens) | Overlap | Rationale |
 |--------|---------------------|---------|-----------|
@@ -155,17 +155,17 @@ python qdrant_utils.py delete-points alexandria --book "Test Book Title"
 
 ## Open WebUI Integration
 
-Ingested data je automatski kompatibilan s Open WebUI:
+Ingested data is automatically compatible with Open WebUI:
 
-1. Payload sadrži `metadata` field koji Open WebUI očekuje
-2. Chunks su automatski pretraživi kroz Open WebUI RAG interface
-3. Možeš filtrirati po domeni/autoru/knjizi kroz Open WebUI
+1. Payload contains `metadata` field that Open WebUI expects
+2. Chunks are automatically searchable through Open WebUI RAG interface
+3. You can filter by domain/author/book through Open WebUI
 
-**Test u Open WebUI:**
-1. Otvori Open WebUI (http://localhost:3000 ili slično)
-2. Odaberi RAG model
-3. Postavi pitanje: *"What does Silverston say about shipment patterns?"*
-4. Open WebUI će automatski queryati Qdrant i prikazati relevantne chunks
+**Test in Open WebUI:**
+1. Open Open WebUI (http://localhost:3000 or similar)
+2. Select RAG model
+3. Ask question: *"What does Silverston say about shipment patterns?"*
+4. Open WebUI will automatically query Qdrant and display relevant chunks
 
 ## Troubleshooting
 
@@ -179,20 +179,20 @@ pip install EbookLib
 ```
 
 ### Error: `Connection refused to localhost:6333`
-Qdrant nije pokrenut. Provjeri Docker container:
+Qdrant is not running. Check Docker container:
 ```bash
 docker ps | grep qdrant
 ```
 
 ### Error: `Embedding model download stuck`
-Sentence-transformers skida model prvi put. Budi strpljiv ili:
+Sentence-transformers downloads model on first run. Be patient or:
 ```bash
 # Pre-download model
 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 ```
 
 ### Chunks are too small/large
-Prilagodi chunking strategiju u `ingest_books.py`:
+Adjust chunking strategy in `ingest_books.py`:
 ```python
 DOMAIN_CHUNK_SIZES = {
     'technical': {'min': 1500, 'max': 2000, 'overlap': 200},

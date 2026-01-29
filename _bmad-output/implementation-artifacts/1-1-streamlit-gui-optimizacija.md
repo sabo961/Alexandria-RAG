@@ -1,53 +1,53 @@
-# Story: 1-1-streamlit-gui-optimizacija
+# Story: 1-1-streamlit-gui-optimization
 
 ## Story
 
-**Title:** Optimizacija Alexandria Streamlit aplikacije
+**Title:** Alexandria Streamlit Application Optimization
 
-**Description:** Alexandria app (`alexandria_app.py`) je RAG aplikacija s ~2150 linija koja reruna cijelu skriptu na svaku interakciju. Trebam minimizirati nepotrebne rerunove kroz caching i fragmentacije, poboljšati strukturu koda, i smanjiti veličinu aplikacije.
+**Description:** Alexandria app (`alexandria_app.py`) is a RAG application with ~2150 lines that reruns the entire script on every interaction. I need to minimize unnecessary reruns through caching and fragmentation, improve code structure, and reduce application size.
 
-**Kontekst:** Streamlit reruna cijelu skriptu na svaki event (checkbox, button click, dropdown selection itd.). Glavna optimizacija je korištenje `@st.fragment` dekoratora za izolaciju tab logike i `@st.cache_data` za česte file reads.
+**Context:** Streamlit reruns the entire script on every event (checkbox, button click, dropdown selection, etc.). The main optimization is using the `@st.fragment` decorator to isolate tab logic and `@st.cache_data` for frequent file reads.
 
 ---
 
 ## Acceptance Criteria
 
-1. **AC 1 - HIGH:** `load_domains()` je dekorirana s `@st.cache_data` - datoteka `scripts/domains.json` se čita samo prvi put, ne na svaki rerun
-   - Test: Pokreni app, otvori bilo koji tab koji koristi domains - domains trebali biti loaded iz cachea
-   - Verify: Nema dodatnih file I/O operacija nakon prvog load-a
+1. **AC 1 - HIGH:** `load_domains()` is decorated with `@st.cache_data` - the `scripts/domains.json` file is read only the first time, not on every rerun
+   - Test: Run app, open any tab that uses domains - domains should be loaded from cache
+   - Verify: No additional file I/O operations after first load
 
-2. **AC 2 - HIGH:** `check_qdrant_health()` je dekorirana s `@st.cache_data(ttl=30)` - health check se izvršava maksimalno jednom u 30 sekundi
-   - Test: Otvori Ingestion tab, klikni checkbox više puta - health check ne bi trebao biti pozvan više od jednom svakih 30 sekundi
-   - Verify: Network requests za health check su minimalni
+2. **AC 2 - HIGH:** `check_qdrant_health()` is decorated with `@st.cache_data(ttl=30)` - health check executes at most once every 30 seconds
+   - Test: Open Ingestion tab, click checkbox multiple times - health check should not be called more than once every 30 seconds
+   - Verify: Network requests for health check are minimal
 
-3. **AC 3 - HIGH:** Query tab logika (linije 1969-2136) je wrappana u `@st.fragment` - klik na Query tab i interakcije ne rerune cijelu aplikaciju
-   - Test: Otvori Query tab, klikni checkbox ili promijeni slider - samo Query tab se trebao refreshati, ostatak stranice ostaje nepromijenjen
-   - Verify: Nema full page reload events
+3. **AC 3 - HIGH:** Query tab logic (lines 1969-2136) is wrapped in `@st.fragment` - clicking Query tab and interactions don't rerun the entire application
+   - Test: Open Query tab, click checkbox or change slider - only Query tab should refresh, rest of page stays unchanged
+   - Verify: No full page reload events
 
-4. **AC 4 - MEDIUM:** Calibre tab filtere i tablica (linije 635-836) su wrappane u `@st.fragment` - filter inputi ne rerune cijelu aplikaciju
-   - Test: Otvori Calibre tab, unesi tekst u author/title filter - samo filteri i tablica trebali biti refreshati
-   - Verify: Stats sekcija (linije 615-631) ostaju izvan fragmenta i ne refresh-ajuse nepotrebno
+4. **AC 4 - MEDIUM:** Calibre tab filters and table (lines 635-836) are wrapped in `@st.fragment` - filter inputs don't rerun the entire application
+   - Test: Open Calibre tab, enter text in author/title filter - only filters and table should refresh
+   - Verify: Stats section (lines 615-631) stays outside fragment and doesn't refresh unnecessarily
 
-5. **AC 5 - MEDIUM:** Ingested Books tab filtere i tablica (linije 1013-1345) su wrappane u `@st.fragment` - filter interakcije ne rerune cijelu aplikaciju
-   - Test: Otvori Ingested Books tab, klikni filter checkbox ili unesi tekst - samo tab sadržaj se trebao refreshati
-   - Verify: Stranica je responzivnija na filter interakcije
+5. **AC 5 - MEDIUM:** Ingested Books tab filters and table (lines 1013-1345) are wrapped in `@st.fragment` - filter interactions don't rerun the entire application
+   - Test: Open Ingested Books tab, click filter checkbox or enter text - only tab content should refresh
+   - Verify: Page is more responsive to filter interactions
 
-6. **AC 6 - MEDIUM:** `load_gui_settings()` je dekorirana s `@st.cache_data` i cache se invalidira u `save_gui_settings()` - GUI settings se čitaju iz cachea kad se ne mijenjaju
-   - Test: Otvori app, promijeni setting (npr. checkbox) - setting se trebao pravilno spasiti i učitati
-   - Verify: Nema race conditions između cache invalidacije i spašavanja
+6. **AC 6 - MEDIUM:** `load_gui_settings()` is decorated with `@st.cache_data` and cache is invalidated in `save_gui_settings()` - GUI settings are read from cache when not changing
+   - Test: Open app, change setting (e.g. checkbox) - setting should be properly saved and loaded
+   - Verify: No race conditions between cache invalidation and saving
 
-7. **AC 7 - LOW:** CSS je ekstrahiran u `assets/style.css` - 120 linija CSS-a više nije inline u main skripti
-   - Test: Pokreni app - stranica trebala biti stilizirana identično kao prije
-   - Verify: CSS je logički organiziran u datoteci, main script je manji
+7. **AC 7 - LOW:** CSS is extracted to `assets/style.css` - 120 lines of CSS are no longer inline in main script
+   - Test: Run app - page should be styled identically as before
+   - Verify: CSS is logically organized in file, main script is smaller
 
-8. **AC 8 - LOW:** `run_ingestion_batch()` helper funkcija je kreirana - Calibre i Folder ingestion dijele zajedničku logiku
-   - Test: Izvrši Calibre ingestion - trebao bi koristiti novu helper funkciju
-   - Test: Izvrši Folder ingestion - trebao bi koristiti istu helper funkciju
-   - Verify: Nema code duplication, oba ingestion koda koriste isti batch helper
+8. **AC 8 - LOW:** `run_ingestion_batch()` helper function is created - Calibre and Folder ingestion share common logic
+   - Test: Execute Calibre ingestion - should use new helper function
+   - Test: Execute Folder ingestion - should use same helper function
+   - Verify: No code duplication, both ingestion codes use same batch helper
 
-9. **AC 9 - LOW:** Session state je konsolidiran u `AppState` dataclass - 20+ `st.session_state` varijabli je grupirano
-   - Test: Pokreni app, testiraj sve interakcije - sve trebalo bi raditi kao prije
-   - Verify: Code je čitljiviji, session state je centraliziran
+9. **AC 9 - LOW:** Session state is consolidated in `AppState` dataclass - 20+ `st.session_state` variables are grouped
+   - Test: Run app, test all interactions - everything should work as before
+   - Verify: Code is more readable, session state is centralized
 
 ---
 
@@ -56,61 +56,61 @@
 ### HIGH Priority Tasks
 
 #### Task 1: Implement @st.cache_data on load_domains()
-- [x] 1a. Dodaj `@st.cache_data` dekorator na `load_domains()` funkciju (linija 209)
-- [x] 1b. Testiraj da domains učitavanje koristi cache na drugom pozivu
-- [x] 1c. Provjeri da nema error-a kod caching
+- [x] 1a. Add `@st.cache_data` decorator to `load_domains()` function (line 209)
+- [x] 1b. Test that domains loading uses cache on second call
+- [x] 1c. Verify no errors during caching
 
 #### Task 2: Implement @st.cache_data(ttl=30) on check_qdrant_health()
-- [x] 2a. Dodaj `@st.cache_data(ttl=30)` dekorator na `check_qdrant_health()` (linija 321)
-- [x] 2b. Testiraj da health check se izvršava samo jednom u 30 sekundi
-- [x] 2c. Provjeri da TTL cache expiration radi pravilno
+- [x] 2a. Add `@st.cache_data(ttl=30)` decorator to `check_qdrant_health()` (line 321)
+- [x] 2b. Test that health check executes only once every 30 seconds
+- [x] 2c. Verify TTL cache expiration works correctly
 
 #### Task 3: Implement @st.fragment for Query tab
-- [x] 3a. Definiraj `render_query_tab()` funkciju s `@st.fragment` dekorator koji wrappuje logiku iz tab_query bloka (linije 1969-2136)
-- [x] 3b. Zamijeni `with tab_query:` blok s pozivom `render_query_tab()`
-- [x] 3c. Testiraj da Query tab interakcije ne rerune ostatak aplikacije
-- [x] 3d. Provjeri da svi elementi u Query tabu funkcioniraju pravilno
+- [x] 3a. Define `render_query_tab()` function with `@st.fragment` decorator that wraps logic from tab_query block (lines 1969-2136)
+- [x] 3b. Replace `with tab_query:` block with `render_query_tab()` call
+- [x] 3c. Test that Query tab interactions don't rerun rest of application
+- [x] 3d. Verify all elements in Query tab function correctly
 
 ### MEDIUM Priority Tasks
 
 #### Task 4: Implement @st.fragment for Calibre filters and table
-- [x] 4a. Definiraj `render_calibre_filters_and_table()` s `@st.fragment` dekorator koji wrappuje filter sekciju (linije 635-653), primjenu filtera (linije 655-676), i tablicu (linije 677-836)
-- [x] 4b. Ostavi stats sekciju (linije 615-631) IZVAN fragmenta
-- [x] 4c. Testiraj filter interakcije u Calibre tabu
-- [x] 4d. Provjeri da stats sekcija ostaje odvojena
+- [x] 4a. Define `render_calibre_filters_and_table()` with `@st.fragment` decorator that wraps filter section (lines 635-653), filter application (lines 655-676), and table (lines 677-836)
+- [x] 4b. Leave stats section (lines 615-631) OUTSIDE fragment
+- [x] 4c. Test filter interactions in Calibre tab
+- [x] 4d. Verify stats section stays separate
 
 #### Task 5: Implement @st.fragment for Ingested Books filters and table
-- [x] 5a. Definiraj `render_ingested_books_filters_and_table()` s `@st.fragment` dekorator (linije 1013-1345)
-- [x] 5b. Testiraj filter interakcije u Ingested Books tabu
-- [x] 5c. Provjeri da tablica i filtri se refreshaju samo kad trebaju
+- [x] 5a. Define `render_ingested_books_filters_and_table()` with `@st.fragment` decorator (lines 1013-1345)
+- [x] 5b. Test filter interactions in Ingested Books tab
+- [x] 5c. Verify table and filters refresh only when needed
 
 #### Task 6: Implement @st.cache_data on load_gui_settings() with cache invalidation
-- [x] 6a. Dodaj `@st.cache_data` dekorator na `load_gui_settings()` (linija 49)
-- [x] 6b. U `save_gui_settings()` dodaj `load_gui_settings.clear()` na kraju (nakon linije 67)
-- [x] 6c. Testiraj da settings se spašavaju i učitavaju pravilno
-- [x] 6d. Provjeri da nema stale cache problema
+- [x] 6a. Add `@st.cache_data` decorator to `load_gui_settings()` (line 49)
+- [x] 6b. In `save_gui_settings()` add `load_gui_settings.clear()` at end (after line 67)
+- [x] 6c. Test that settings save and load correctly
+- [x] 6d. Verify no stale cache problems
 
 ### LOW Priority Tasks
 
 #### Task 7: Extract CSS to assets/style.css
-- [x] 7a. Kreiraj `assets/` direktorij
-- [x] 7b. Kreiraj `assets/style.css` i kopiraj 120 linija CSS-a (linije 81-203) bez `<style>` tagova
-- [x] 7c. Definiraj `load_css()` funkciju koja učitava CSS
-- [x] 7d. Zamijeni inline CSS s `load_css()` pozivom na početku skripte
-- [x] 7e. Testiraj da stranica izgleda identično
+- [x] 7a. Create `assets/` directory
+- [x] 7b. Create `assets/style.css` and copy 120 lines of CSS (lines 81-203) without `<style>` tags
+- [x] 7c. Define `load_css()` function that loads CSS
+- [x] 7d. Replace inline CSS with `load_css()` call at script start
+- [x] 7e. Test that page looks identical
 
 #### Task 8: Create DRY ingestion helper function
-- [x] 8a. Kreiraj `run_ingestion_batch()` helper funkciju s parametrima: items, domain, collection_name, qdrant_host, qdrant_port, manifest, move_files, ingested_dir, progress_callback
-- [x] 8b. Ekstrahiraj zajedničku logiku iz Calibre ingestion petlje (linije 886-996)
-- [x] 8c. Ekstrahiraj zajedničku logiku iz Folder ingestion petlje (linije 1458-1510)
-- [x] 8d. Zamijeni obje ingestion logike s `run_ingestion_batch()` pozivima
-- [x] 8e. Testiraj obje ingestion rute - trebali bi biti funkcionalni
+- [x] 8a. Create `run_ingestion_batch()` helper function with parameters: items, domain, collection_name, qdrant_host, qdrant_port, manifest, move_files, ingested_dir, progress_callback
+- [x] 8b. Extract common logic from Calibre ingestion loop (lines 886-996)
+- [x] 8c. Extract common logic from Folder ingestion loop (lines 1458-1510)
+- [x] 8d. Replace both ingestion logics with `run_ingestion_batch()` calls
+- [x] 8e. Test both ingestion routes - should be functional
 
 #### Task 9: Create session state dataclass
-- [x] 9a. Kreiraj `AppState` dataclass s svim session state varijablama (config, UI state, etc.)
-- [x] 9b. Kreiraj `get_app_state()` funkciju
-- [x] 9c. Zamijeni sve `st.session_state.xyz` s `state.xyz` pozivima kroz aplikaciju (ključne varijable)
-- [x] 9d. Testiraj sve interakcije - trebalo bi sve raditi kao prije
+- [x] 9a. Create `AppState` dataclass with all session state variables (config, UI state, etc.)
+- [x] 9b. Create `get_app_state()` function
+- [x] 9c. Replace all `st.session_state.xyz` with `state.xyz` calls throughout application (key variables)
+- [x] 9d. Test all interactions - everything should work as before
 
 ---
 
@@ -125,44 +125,44 @@
 ### Key Implementation Guidance
 
 1. **Fragments (`@st.fragment`):**
-   - Funkcije moraju biti definirane PRIJE nego se koriste
-   - Fragment omota sekciju UI-ja, ne čini je nezavisnom od session state-a
-   - Fragment se trebao izvršiti samo kad su njegovi inputi promijenjeni
+   - Functions must be defined BEFORE they are used
+   - Fragment wraps a UI section, doesn't make it independent of session state
+   - Fragment should execute only when its inputs have changed
 
 2. **Caching (`@st.cache_data`):**
-   - Koristiti za pure functions (file reads, JSON parsing)
-   - `ttl` parametar za cache expiration (npr. 30 sekundi za health checks)
-   - `clear()` trebalo biti pozvano nakon invalidacije
+   - Use for pure functions (file reads, JSON parsing)
+   - `ttl` parameter for cache expiration (e.g. 30 seconds for health checks)
+   - `clear()` should be called after invalidation
 
 3. **File Changes:**
-   - `alexandria_app.py` - main app logika
-   - `assets/style.css` - NEW, ekstrahirani CSS
-   - Nema promjena u `scripts/` foldera
+   - `alexandria_app.py` - main app logic
+   - `assets/style.css` - NEW, extracted CSS
+   - No changes to `scripts/` folder
 
 4. **Testing Strategy:**
-   - Pokreni `streamlit run alexandria_app.py`
-   - Otvori različite tabove i testiraj interakcije
-   - Provjeri konsolu za error-e ili warning-e
-   - Testiraj da nema full page refresh-eva gdje ne trebaju biti
+   - Run `streamlit run alexandria_app.py`
+   - Open different tabs and test interactions
+   - Check console for errors or warnings
+   - Test that there are no full page refreshes where they shouldn't be
 
 ### Previous Learnings / Context
 
-- App koristi Streamlit session state za praćenje UI state-a
-- Manifest struktura trebala ostati netaknuta
-- RAG query logika (`perform_rag_query()`) trebala ostati netaknuta
-- Backend scripts trebali ostati netaknuti
+- App uses Streamlit session state for tracking UI state
+- Manifest structure should remain intact
+- RAG query logic (`perform_rag_query()`) should remain intact
+- Backend scripts should remain untouched
 
 ### Code Locations Reference
 
-- **load_domains():** Linije 209-216
-- **check_qdrant_health():** Linije 321-349
-- **Query tab:** Linije 1969-2136
-- **Calibre filters/table:** Linije 615-836
-- **Ingested Books:** Linije 1013-1345
-- **CSS:** Linije 81-203
-- **Calibre ingestion loop:** Linije 886-996
-- **Folder ingestion loop:** Linije 1458-1510
-- **GUI settings:** Linije 49-67
+- **load_domains():** Lines 209-216
+- **check_qdrant_health():** Lines 321-349
+- **Query tab:** Lines 1969-2136
+- **Calibre filters/table:** Lines 615-836
+- **Ingested Books:** Lines 1013-1345
+- **CSS:** Lines 81-203
+- **Calibre ingestion loop:** Lines 886-996
+- **Folder ingestion loop:** Lines 1458-1510
+- **GUI settings:** Lines 49-67
 
 ---
 

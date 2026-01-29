@@ -1,4 +1,4 @@
-Imaš pravo. Evo kompletna verzija - sve na jednom mjestu:
+You're right. Here's the complete version - all in one place:
 
 ---
 

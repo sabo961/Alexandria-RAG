@@ -3,39 +3,37 @@
 **Generated:** 2026-01-21
 **Census Base:** 9,383 books analyzed
 
-Analiza kritičnih autora/knjiga koji **nedostaju** u Alexandriji, grupirano po domenama.
+Analysis of critical authors/books that are **missing** from Alexandria, grouped by domain.
 
 ---
 
-## Database Theory & Relational Model ❌ KRITIČNO
+## Database Theory & Relational Model ❌ CRITICAL
 
 ### Missing Authors:
-1. **C.J. Date & Hugh Darwen** - "An Introduction to Database Systems" (industrijsko must-have)
-2. **E.F. Codd** - "The Relational Model for Database Management" (osnivač relacijske teorije)
+1. **C.J. Date & Hugh Darwen** - "An Introduction to Database Systems" (industry must-have)
+2. **E.F. Codd** - "The Relational Model for Database Management" (founder of relational theory)
 3. **Fabian Pascal** - "Practical Issues in Database Management" (relational purist)
 4. **Joe Celko** - "SQL for Smarties" (SQL anti-patterns, best practices)
 
-**Impact:** Silverston pokriva data modeling patterne, ali nedostaje teorijska osnova normalizacije i relacijske algebre.
+**Impact:** Silverston covers data modeling patterns, but theoretical foundation of normalization and relational algebra is missing.
 
 **Recommended Addition:**
-- Date & Darwen: "Database in Depth" (2005) - najdostupniji intro u relacijsku teoriju
-- Celko: "Joe Celko's SQL for Smarties" (bilo koja verzija) - SQL idiomi, tempor
-
-al logic
+- Date & Darwen: "Database in Depth" (2005) - most accessible intro to relational theory
+- Celko: "Joe Celko's SQL for Smarties" (any version) - SQL idioms, temporal logic
 
 ---
 
-## UX Design & Human-Computer Interaction ❌ KRITIČNO
+## UX Design & Human-Computer Interaction ❌ CRITICAL
 
 ### Missing Authors:
-1. **Don Norman** - "The Design of Everyday Things" (affordances, signifiers - ključ za WBF UI)
+1. **Don Norman** - "The Design of Everyday Things" (affordances, signifiers - key for WBF UI)
 2. **Jakob Nielsen** - "Designing Web Usability" (heuristics, usability testing)
-3. **Steve Krug** - "Don't Make Me Think" (intuitivni UI design)
+3. **Steve Krug** - "Don't Make Me Think" (intuitive UI design)
 4. **Jared Spool** - UX research articles/books
 
-**Current Status:** Imaš Kahneman (cognitive load), ali nedostaju **praktični UX principi**.
+**Current Status:** You have Kahneman (cognitive load), but **practical UX principles** are missing.
 
-**Impact:** WBF Distribution modul UI dizajn bi imao benefita od Norman's affordances i Krug's simplicity principles.
+**Impact:** WBF Distribution module UI design would benefit from Norman's affordances and Krug's simplicity principles.
 
 **Recommended Addition:**
 - Norman: "The Design of Everyday Things" (Revised 2013)
@@ -43,49 +41,49 @@ al logic
 
 ---
 
-## Philosophy - Political & Ethics ⚠️ DJELOMIČNO
+## Philosophy - Political & Ethics ⚠️ PARTIAL
 
 ### Present:
 - ✅ John Stuart Mill - "On Liberty" (utilitarianism)
 
 ### Missing:
-1. **Immanuel Kant** - "Groundwork for the Metaphysics of Morals" (Categorical Imperative - ključno za AI etiku!)
+1. **Immanuel Kant** - "Groundwork for the Metaphysics of Morals" (Categorical Imperative - crucial for AI ethics!)
 2. **John Rawls** - "A Theory of Justice" (fairness, social contract)
-3. **Robert Nozick** - "Anarchy, State, and Utopia" (libertarian counterpoint Rawlsu)
-4. **Michael Sandel** - "Justice: What's the Right Thing to Do?" (applied ethics, pristupačno)
+3. **Robert Nozick** - "Anarchy, State, and Utopia" (libertarian counterpoint to Rawls)
+4. **Michael Sandel** - "Justice: What's the Right Thing to Do?" (applied ethics, accessible)
 
-**Impact:** Za pitanja tipa "Treba li WBF automatizirati QC i zamijeniti inspektore?", Kant je **neophodno** čitanje.
+**Impact:** For questions like "Should WBF automate QC and replace inspectors?", Kant is **essential** reading.
 
 **Recommended Addition:**
-- Kant: "Grounding for the Metaphysics of Morals" (Hackett edition, James W. Ellington prijevod)
-- Sandel: "Justice" (pristupačan uvod u etičke okvire)
+- Kant: "Grounding for the Metaphysics of Morals" (Hackett edition, James W. Ellington translation)
+- Sandel: "Justice" (accessible intro to ethical frameworks)
 
 ---
 
-## Manufacturing & Operations Management ❌ KRITIČNO ZA WBF!
+## Manufacturing & Operations Management ❌ CRITICAL FOR WBF!
 
-### Missing (SRAMOTA za WBF projekt!):
+### Missing (SHAME for WBF project!):
 1. **Eliyahu M. Goldratt** - "The Goal" (Theory of Constraints - TOC)
 2. **James P. Womack & Daniel T. Jones** - "Lean Thinking" (Lean principles, Toyota way)
 3. **W. Edwards Deming** - "Out of the Crisis" (Total Quality Management, Plan-Do-Check-Act)
 4. **Taiichi Ohno** - "Toyota Production System" (JIT, Kanban, Muda/Mura/Muri)
-5. **Jeffrey Liker** - "The Toyota Way" (14 principi Toyote)
+5. **Jeffrey Liker** - "The Toyota Way" (14 Toyota principles)
 
-**Current Status:** **PRAZNINA!** Nemaš NIJEDNU manufacturing classics knjigu.
+**Current Status:** **GAP!** You don't have a SINGLE manufacturing classics book.
 
-**Impact:** WBF je MES (Manufacturing Execution System) bez teorijske osnove. Goldratt's TOC direktno primjenjiv na:
-- Bottleneck analiza (Warping, Prepreg, Packing delays)
+**Impact:** WBF is an MES (Manufacturing Execution System) without theoretical foundation. Goldratt's TOC directly applicable to:
+- Bottleneck analysis (Warping, Prepreg, Packing delays)
 - Drum-Buffer-Rope scheduling
 - Throughput accounting (vs cost accounting)
 
-**Recommended Addition (PRIORITET #1):**
-- Goldratt: "The Goal" (roman, lako čitljivo, game-changer)
-- Womack & Jones: "Lean Thinking" (5 lean principa)
-- Ohno: "Toyota Production System" (originalni izvor Lean/JIT)
+**Recommended Addition (PRIORITY #1):**
+- Goldratt: "The Goal" (novel format, easy to read, game-changer)
+- Womack & Jones: "Lean Thinking" (5 lean principles)
+- Ohno: "Toyota Production System" (original Lean/JIT source)
 
 ---
 
-## Computer Science Classics ✅ DOBRO POKRIVENO
+## Computer Science Classics ✅ WELL COVERED
 
 ### Present:
 - ✅ Martin Fowler - "Refactoring"
@@ -93,33 +91,33 @@ al logic
 - ✅ Erich Gamma (GoF) - "Design Patterns"
 - ✅ Eric Evans - "Domain-Driven Design"
 
-### Missing (nice-to-have, ne kritično):
-1. **Donald Knuth** - "The Art of Computer Programming" (algoritmi, fundamentals)
-2. **Abelson & Sussman** - "Structure and Interpretation of Computer Programs" (SICP - Lisp/Scheme klasik)
+### Missing (nice-to-have, not critical):
+1. **Donald Knuth** - "The Art of Computer Programming" (algorithms, fundamentals)
+2. **Abelson & Sussman** - "Structure and Interpretation of Computer Programs" (SICP - Lisp/Scheme classic)
 3. **Kent Beck** - "Test-Driven Development by Example" (TDD bible)
 
-**Impact:** Nizak - već imaš core software engineering books. Ovo su više akademski klasici.
+**Impact:** Low - you already have core software engineering books. These are more academic classics.
 
 ---
 
-## Psychology & Behavioral Economics ✅ IZVRSNO POKRIVENO
+## Psychology & Behavioral Economics ✅ EXCELLENTLY COVERED
 
 ### Present:
 - ✅ Daniel Kahneman - "Thinking, Fast and Slow"
 - ✅ Robert Cialdini - "Influence"
 - ✅ Steven Pinker
 - ✅ Stanislav Grof (psychedelics research)
-- ✅ William James (psychology klasik)
+- ✅ William James (psychology classic)
 
 ### Missing (minimal gaps):
 1. **Dan Ariely** - "Predictably Irrational" (behavioral economics experiments)
 2. **Richard Thaler** - "Nudge" (choice architecture)
 
-**Impact:** Nizak - već imaš core behavioralne knjige. Ariely/Thaler bi dodali praktične primjere nudginga.
+**Impact:** Low - you already have core behavioral books. Ariely/Thaler would add practical nudging examples.
 
 ---
 
-## History - Industrial Revolution & Manufacturing ⚠️ DJELOMIČNO
+## History - Industrial Revolution & Manufacturing ⚠️ PARTIAL
 
 ### Present:
 - ✅ Yuval Noah Harari - "Sapiens" (broad history)
@@ -129,22 +127,22 @@ al logic
 2. **Nathan Rosenberg** - "Inside the Black Box: Technology and Economics" (technological change history)
 3. **David S. Landes** - "The Wealth and Poverty of Nations" (industrial history)
 
-**Impact:** Srednji - imaš Harrari za broad strokes, ali specifična manufacturing history nedostaje.
+**Impact:** Medium - you have Harari for broad strokes, but specific manufacturing history is missing.
 
 ---
 
 ## Summary: Top 20 Missing Books (Prioritized - Revised after Deep Dive)
 
-### TIER 1 - KRITIČNO za WBF kontekst:
-1. **Goldratt** - "The Goal" (TOC za manufacturing bottlenecks)
+### TIER 1 - CRITICAL for WBF context:
+1. **Goldratt** - "The Goal" (TOC for manufacturing bottlenecks)
 2. **Womack & Jones** - "Lean Thinking" (Lean principles)
 3. **Don Norman** - "The Design of Everyday Things" (UX affordances)
 4. **Kant** - "Grounding for the Metaphysics of Morals" (AI ethics)
 5. **C.J. Date** - "Database in Depth" (relational theory)
 6. **Kurt Lewin** - Force Field Analysis / Change Theory (WBF Distribution rollout change management!)
-7. **John Kotter** - "Leading Change" (8-step change model za Nataša's workflow transition)
+7. **John Kotter** - "Leading Change" (8-step change model for Nataša's workflow transition)
 
-### TIER 2 - Visok prioritet (Domain Foundations):
+### TIER 2 - High priority (Domain Foundations):
 8. **Taiichi Ohno** - "Toyota Production System" (JIT/Kanban)
 9. **Joe Celko** - "SQL for Smarties" (SQL best practices)
 10. **Steve Krug** - "Don't Make Me Think" (simple UX)
@@ -153,19 +151,19 @@ al logic
 13. **Peter Senge** - "The Fifth Discipline" (Learning Organizations - systems thinking)
 14. **Max Weber** - "Protestant Ethic and Spirit of Capitalism" (organizational sociology)
 
-### TIER 3 - Nice-to-have (Zaokruživanje praznina):
+### TIER 3 - Nice-to-have (Rounding out gaps):
 15. **Antonio Damasio** - "Descartes' Error" (emotion/reason neuroscience)
 16. **Stephen Jay Gould** - "Structure of Evolutionary Theory" (punctuated equilibrium)
 17. **Ian Goodfellow** - "Deep Learning" (deep learning bible)
 18. Dan Ariely - "Predictably Irrational" (behavioral economics)
 19. Jakob Nielsen - "Designing Web Usability" (UX heuristics)
-20. Michael Sandel - "Justice: What's the Right Thing to Do?" (applied ethics, pristupačno)
+20. Michael Sandel - "Justice: What's the Right Thing to Do?" (applied ethics, accessible)
 
 ---
 
-## Akcijski Plan: Popunjavanje Praznina
+## Action Plan: Filling the Gaps
 
-### Prioritet #1: Manufacturing Classics (za WBF)
+### Priority #1: Manufacturing Classics (for WBF)
 ```
 [ ] Goldratt - The Goal (Theory of Constraints)
 [ ] Womack & Jones - Lean Thinking
@@ -174,46 +172,46 @@ al logic
 [ ] Liker - The Toyota Way
 ```
 
-**Rationale:** WBF je MES za composite manufacturing. Bez ovih knjiga, nemamo teorijsku osnovu za:
-- Bottleneck optimizaciju (Warping delays, Prepreg capacity)
+**Rationale:** WBF is an MES for composite manufacturing. Without these books, we lack theoretical foundation for:
+- Bottleneck optimization (Warping delays, Prepreg capacity)
 - Waste elimination (Muda/Mura/Muri)
 - Pull systems vs push systems (Kanban vs schedule-driven)
 
-### Prioritet #2: UX Design Classics (za WBF UI)
+### Priority #2: UX Design Classics (for WBF UI)
 ```
 [ ] Norman - The Design of Everyday Things
 [ ] Krug - Don't Make Me Think
 [ ] Nielsen - Designing Web Usability (optional)
 ```
 
-**Rationale:** WBF Distribution modul će imati nove UI/UX zahtjeve. Nataša's workflow pain points (manual data entry, no real-time visibility) zahtijevaju UX expertise.
+**Rationale:** WBF Distribution module will have new UI/UX requirements. Nataša's workflow pain points (manual data entry, no real-time visibility) require UX expertise.
 
-### Prioritet #3: Database Theory (za WBF data modeling)
+### Priority #3: Database Theory (for WBF data modeling)
 ```
 [ ] Date & Darwen - Database in Depth
 [ ] Celko - SQL for Smarties
 [ ] Fabian Pascal - Practical Issues in Database Management (optional)
 ```
 
-**Rationale:** Silverston pokriva data model patterne, ali teorijska osnova normalizacije/denormalizacije nedostaje.
+**Rationale:** Silverston covers data model patterns, but theoretical foundation of normalization/denormalization is missing.
 
-### Prioritet #4: Philosophy/Ethics (za AI decision-making)
+### Priority #4: Philosophy/Ethics (for AI decision-making)
 ```
 [ ] Kant - Grounding for the Metaphysics of Morals
 [ ] Rawls - A Theory of Justice
-[ ] Sandel - Justice (pristupačan uvod)
+[ ] Sandel - Justice (accessible intro)
 ```
 
-**Rationale:** WBF Rule Engine automatizira odluke. Etički okviri potrebni za evaluaciju:
-- Automatizirani quality inspection (zamjenjuje radnike?)
-- Resource allocation (koji nalog ima prioritet?)
-- Exception handling (tko snosi cost greške?)
+**Rationale:** WBF Rule Engine automates decisions. Ethical frameworks needed for evaluating:
+- Automated quality inspection (replaces workers?)
+- Resource allocation (which order has priority?)
+- Exception handling (who bears cost of errors?)
 
 ---
 
 ## Additional Findings - Deep Dive
 
-### Economics ⚠️ DJELOMIČNO
+### Economics ⚠️ PARTIAL
 **Present:**
 - ✅ Karl Marx - "Capital" (Vol 1-3)
 - ✅ Adam Smith - "Wealth of Nations"
@@ -224,7 +222,7 @@ al logic
 - ❌ **John Maynard Keynes** - "The General Theory" (Keynesian economics foundation!)
 - ❌ Milton Friedman - "Capitalism and Freedom"
 
-### Organizational Psychology & Change Management ❌ KRITIČNO
+### Organizational Psychology & Change Management ❌ CRITICAL
 **Missing (ALL):**
 - ❌ **Kurt Lewin** - Force Field Analysis, Change Theory (3-step model: Unfreeze-Change-Refreeze)
 - ❌ **John Kotter** - "Leading Change" (8-step change model)
@@ -232,7 +230,7 @@ al logic
 - ❌ **Chris Argyris** - "Organizational Learning"
 - ❌ **Peter Senge** - "The Fifth Discipline" (Learning Organizations)
 
-**Impact:** WBF Distribution rollout = organizational change. Nataša's workflow disruption zahtijeva change management frameworks.
+**Impact:** WBF Distribution rollout = organizational change. Nataša's workflow disruption requires change management frameworks.
 
 ### Sociology & Anthropology ❌ MAJOR GAP
 **Missing (ALL classics):**
@@ -242,34 +240,34 @@ al logic
 - ❌ **Clifford Geertz** - "The Interpretation of Cultures"
 - ❌ Ruth Benedict - "The Chrysanthemum and the Sword"
 
-### Neuroscience & Consciousness ❌ PRAZNINA
+### Neuroscience & Consciousness ❌ GAP
 **Missing:**
 - ❌ **Antonio Damasio** - "Descartes' Error" (emotion/reason connection)
 - ❌ **Daniel Dennett** - "Consciousness Explained"
 - ❌ **David Chalmers** - "The Conscious Mind" (hard problem of consciousness)
 
-**Note:** Imaš Stanislav Grof (psychedelic consciousness research) - drugačiji pristup, ali ne mainstream neuroscience.
+**Note:** You have Stanislav Grof (psychedelic consciousness research) - different approach, but not mainstream neuroscience.
 
-### Linguistics & Semiotics ✅ IZVRSNO
+### Linguistics & Semiotics ✅ EXCELLENT
 **Present:**
-- ✅ **Umberto Eco** - KOMPLETNA kolekcija (Name of the Rose, Limits of Interpretation, Semiotics)
-- ✅ **Noam Chomsky** - political works (lingvistika implicit)
+- ✅ **Umberto Eco** - COMPLETE collection (Name of the Rose, Limits of Interpretation, Semiotics)
+- ✅ **Noam Chomsky** - political works (linguistics implicit)
 
 **Missing:**
 - ❌ Ferdinand de Saussure - "Course in General Linguistics" (semiotics foundation)
 - ❌ George Lakoff - "Metaphors We Live By" (cognitive linguistics)
 
-### Evolutionary Biology ⚠️ DJELOMIČNO
+### Evolutionary Biology ⚠️ PARTIAL
 **Present:**
-- ✅ **Richard Dawkins** - KOMPLETNA kolekcija (Selfish Gene, God Delusion, Ancestor's Tale)
+- ✅ **Richard Dawkins** - COMPLETE collection (Selfish Gene, God Delusion, Ancestor's Tale)
 
 **Missing:**
 - ❌ **Stephen Jay Gould** - "The Structure of Evolutionary Theory" (punctuated equilibrium)
 - ❌ **E.O. Wilson** - "Sociobiology" (evolutionary basis of social behavior)
 
-### Complexity Science & Systems Thinking ✅ IZVRSNO!
+### Complexity Science & Systems Thinking ✅ EXCELLENT!
 **Present:**
-- ✅ **Stuart Kauffman** - KOMPLETNA kolekcija (Origins of Order, At Home in the Universe)
+- ✅ **Stuart Kauffman** - COMPLETE collection (Origins of Order, At Home in the Universe)
 - ✅ Chaos theory / emergence books
 
 **Missing:**
@@ -277,18 +275,18 @@ al logic
 - ❌ Melanie Mitchell - "Complexity: A Guided Tour"
 - ❌ John Holland - "Emergence: From Chaos to Order"
 
-**Note:** Kauffman pokriva Santa Fe Institute perspective, ali širi popularni uvodi nedostaju.
+**Note:** Kauffman covers Santa Fe Institute perspective, but broader popular intros are missing.
 
-### Modern Software Architecture ✅ ODLIČNO
+### Modern Software Architecture ✅ EXCELLENT
 **Present:**
 - ✅ **Sam Newman** - "Building Microservices"
 - ✅ **Martin Kleppmann** - "Designing Data-Intensive Applications"
 - ✅ Modern architecture well-covered
 
-**Missing (niche, ne kritično):**
-- Vaughn Vernon - "Implementing Domain-Driven Design" (praktični DDD, Evans pokriva teoriju)
+**Missing (niche, not critical):**
+- Vaughn Vernon - "Implementing Domain-Driven Design" (practical DDD, Evans covers theory)
 
-### AI & Machine Learning ⚠️ DJELOMIČNO
+### AI & Machine Learning ⚠️ PARTIAL
 **Present:**
 - ✅ **Russell & Norvig** - "Artificial Intelligence: A Modern Approach" (AI bible)
 - ✅ **Andrew Ng** - "Machine Learning Yearning"
@@ -299,35 +297,35 @@ al logic
 
 ---
 
-## Fascinantne Praznine (Unexpected Gaps)
+## Fascinating Gaps (Unexpected Findings)
 
-**Što JE prisutno (iznenađujuće):**
-- ✅ Stanislav Grof (psychedelic research) - nije mainstream, ali ima!
-- ✅ Zivorad Mihajlovic Slavinski (gnosticism, okultizam) - niche, ali detaljno
-- ✅ Yukio Mishima (Japanese literature) - kompletna kolekcija
-- ✅ Yamamoto Tsunetomo - "Hagakure" (samurai filozofija)
-- ✅ Zecharia Sitchin (ancient astronaut theory) - kontroverzno, ali prisutno
+**What IS present (surprisingly):**
+- ✅ Stanislav Grof (psychedelic research) - not mainstream, but present!
+- ✅ Zivorad Mihajlovic Slavinski (gnosticism, occultism) - niche, but detailed
+- ✅ Yukio Mishima (Japanese literature) - complete collection
+- ✅ Yamamoto Tsunetomo - "Hagakure" (samurai philosophy)
+- ✅ Zecharia Sitchin (ancient astronaut theory) - controversial, but present
 
-### Literary Theory & Critical Theory ⚠️ DJELOMIČNO
+### Literary Theory & Critical Theory ⚠️ PARTIAL
 **Present:**
 - ✅ **Roland Barthes** - "Image, Music, Text", "Writing Degree Zero"
-- ✅ **Edward Said** - "Freud and the Non-European" (ali BEZ "Orientalism"!)
-- ✅ **Umberto Eco** - semiotics kompletno (sekundarna teorija, ne samo romani)
+- ✅ **Edward Said** - "Freud and the Non-European" (but WITHOUT "Orientalism"!)
+- ✅ **Umberto Eco** - semiotics complete (secondary theory, not just novels)
 
 **Missing:**
-- ❌ **Michel Foucault** - "Discipline and Punish", "History of Sexuality" (power/knowledge praznina!)
-- ❌ **Jacques Derrida** - "Of Grammatology" (deconstruction praznina)
+- ❌ **Michel Foucault** - "Discipline and Punish", "History of Sexuality" (power/knowledge gap!)
+- ❌ **Jacques Derrida** - "Of Grammatology" (deconstruction gap)
 - ❌ **Judith Butler** - "Gender Trouble" (performativity theory)
 
-### Mythology & Depth Psychology ✅ IZVRSNO!
+### Mythology & Depth Psychology ✅ EXCELLENT!
 **Present:**
-- ✅ **Joseph Campbell** - KOMPLETNA kolekcija (Hero's Journey, Masks of God, Power of Myth)
-- ✅ **Mircea Eliade** - KOMPLETNA kolekcija (Shamanism, History of Religious Ideas)
-- ✅ **Carl Jung** - KOMPLETNA kolekcija (Red Book, Archetypes, Psychology of Kundalini)
+- ✅ **Joseph Campbell** - COMPLETE collection (Hero's Journey, Masks of God, Power of Myth)
+- ✅ **Mircea Eliade** - COMPLETE collection (Shamanism, History of Religious Ideas)
+- ✅ **Carl Jung** - COMPLETE collection (Red Book, Archetypes, Psychology of Kundalini)
 
-**Comment:** Mitologija/dubinska psihologija NAJBOLJE pokrivena domena u Alexandriji!
+**Comment:** Mythology/depth psychology BEST-COVERED domain in Alexandria!
 
-### Science & Technology Studies ⚠️ DJELOMIČNO
+### Science & Technology Studies ⚠️ PARTIAL
 **Present:**
 - ✅ **Thomas Kuhn** - "The Road since Structure" (paradigm shifts)
 - ✅ **Jared Diamond** - "Guns, Germs, and Steel", "Collapse"
@@ -335,58 +333,58 @@ al logic
 **Missing:**
 - ❌ **Bruno Latour** - "We Have Never Been Modern" (Actor-Network Theory)
 
-### Game Theory & Decision Science ❌ PRAZNINA
+### Game Theory & Decision Science ❌ GAP
 **Missing (ALL):**
 - ❌ **John von Neumann & Oskar Morgenstern** - "Theory of Games and Economic Behavior"
 - ❌ **Robert Axelrod** - "Evolution of Cooperation" (Prisoner's Dilemma, tit-for-tat)
 - ❌ **Thomas Schelling** - "Micromotives and Macrobehavior" (coordination problems)
 
-**Impact:** Game theory direktno primjenjiv na multi-agent coordination (WBF Rule Engine priority conflicts!).
+**Impact:** Game theory directly applicable to multi-agent coordination (WBF Rule Engine priority conflicts!).
 
-### Mathematics & Logic Popularization ✅ IZVRSNO!
+### Mathematics & Logic Popularization ✅ EXCELLENT!
 **Present:**
 - ✅ **Roger Penrose** - "The Emperor's New Mind" (consciousness & computation)
-- ✅ **Douglas Hofstadter** - "Gödel, Escher, Bach: An Eternal Golden Braid" (KULTNA KNJIGA! recursion, self-reference, AI)
+- ✅ **Douglas Hofstadter** - "Gödel, Escher, Bach: An Eternal Golden Braid" (CULT BOOK! recursion, self-reference, AI)
 
 **Missing:**
 - ❌ **G.H. Hardy** - "A Mathematician's Apology" (beauty of pure mathematics)
 
-### Political Philosophy - Modern ⚠️ DJELOMIČNO
+### Political Philosophy - Modern ⚠️ PARTIAL
 **Present:**
-- ✅ **Karl Popper** - KOMPLETNA kolekcija (Open Society, Logic of Scientific Discovery, Poverty of Historicism)
+- ✅ **Karl Popper** - COMPLETE collection (Open Society, Logic of Scientific Discovery, Poverty of Historicism)
 
 **Missing:**
 - ❌ **Hannah Arendt** - "The Origins of Totalitarianism", "The Human Condition"
 - ❌ **Isaiah Berlin** - "Two Concepts of Liberty" (negative vs positive freedom)
 
-### Existentialism ⚠️ DJELOMIČNO
+### Existentialism ⚠️ PARTIAL
 **Present:**
-- ✅ **Friedrich Nietzsche** - KOMPLETNA kolekcija (Thus Spoke Zarathustra, Beyond Good and Evil)
-- ✅ **Albert Camus** - "The Stranger" (ali možda nedostaje "The Myth of Sisyphus"?)
+- ✅ **Friedrich Nietzsche** - COMPLETE collection (Thus Spoke Zarathustra, Beyond Good and Evil)
+- ✅ **Albert Camus** - "The Stranger" (but perhaps missing "The Myth of Sisyphus"?)
 
 **Missing:**
 - ❌ **Jean-Paul Sartre** - "Being and Nothingness", "Nausea"
 - ❌ **Søren Kierkegaard** - "Fear and Trembling", "The Sickness Unto Death"
 
-**Note:** Sekundarna literatura o Nietzscheu/Camusu bogata (Osho, Kazantzakis commentaries), ali Sartre/Kierkegaard potpuno nedostaju.
+**Note:** Secondary literature about Nietzsche/Camus is rich (Osho, Kazantzakis commentaries), but Sartre/Kierkegaard are completely missing.
 
 ---
 
-**Što NIJE prisutno (očekivano bi bilo):**
-- ❌ **Manufacturing classics** (Goldratt, Womack, Deming) - VELIKA praznina za WBF projekt!
-- ❌ **Organizational change** (Lewin, Kotter, Senge) - KRITIČNO za WBF Distribution rollout!
-- ❌ **UX design** (Norman, Nielsen, Krug) - UI/UX praznina
-- ❌ **Kant** (ethics) - filozofska praznina za AI etiku
-- ❌ **Database theory** (Date, Codd, Celko) - teorijska praznina za data modeling
-- ❌ **Game theory** (von Neumann, Axelrod, Schelling) - multi-agent coordination praznina
-- ❌ **Sartre/Kierkegaard** (existentialism) - filozofska praznina (ali Nietzsche/Camus pokriveni)
-- ❌ **Foucault/Derrida** (critical theory) - post-structuralism praznina
-- ❌ **Gödel Escher Bach** (Hofstadter) - kultna knjiga, rekurzija/AI praznina
+**What is NOT present (would be expected):**
+- ❌ **Manufacturing classics** (Goldratt, Womack, Deming) - MAJOR gap for WBF project!
+- ❌ **Organizational change** (Lewin, Kotter, Senge) - CRITICAL for WBF Distribution rollout!
+- ❌ **UX design** (Norman, Nielsen, Krug) - UI/UX gap
+- ❌ **Kant** (ethics) - philosophical gap for AI ethics
+- ❌ **Database theory** (Date, Codd, Celko) - theoretical gap for data modeling
+- ❌ **Game theory** (von Neumann, Axelrod, Schelling) - multi-agent coordination gap
+- ❌ **Sartre/Kierkegaard** (existentialism) - philosophical gap (but Nietzsche/Camus covered)
+- ❌ **Foucault/Derrida** (critical theory) - post-structuralism gap
+- ❌ **Gödel Escher Bach** (Hofstadter) - cult book, recursion/AI gap
 
-**Interpretacija:** Alexandria je **multidisciplinarna** (psyche, mysticism, esoterica), ali **praksa-orijentirana** (software engineering, psychology). Praznine su u:
-1. **Manufacturing operations** (ironično za WBF MES projekt!)
-2. **Akademskoj filozofiji** (Kant, Rawls - prelazi se direktno na Mill utilitarianizam)
-3. **Formal UX theory** (ima se Kahneman za cognitive load, ali ne Norman za affordances)
+**Interpretation:** Alexandria is **multidisciplinary** (psyche, mysticism, esoterica), but **practice-oriented** (software engineering, psychology). Gaps are in:
+1. **Manufacturing operations** (ironically for WBF MES project!)
+2. **Academic philosophy** (Kant, Rawls - jumps directly to Mill utilitarianism)
+3. **Formal UX theory** (has Kahneman for cognitive load, but not Norman for affordances)
 
 ---
 
@@ -439,48 +437,48 @@ al logic
 19. Jakob Nielsen - "Designing Web Usability" (UX heuristics)
 20. Michael Sandel - "Justice" (applied ethics intro)
 
-### Fascinantne Neočekivane Nalaze
+### Fascinating Unexpected Findings
 
-**Što JE (iznenađujuće):**
+**What IS (surprisingly):**
 - Stanislav Grof (psychedelic consciousness research)
-- Zivorad Mihajlovic Slavinski (gnosticism, okultizam)
+- Zivorad Mihajlovic Slavinski (gnosticism, occultism)
 - Yukio Mishima complete collection (Japanese literature)
 - Yamamoto Tsunetomo - "Hagakure" (samurai philosophy)
 - Zecharia Sitchin (ancient astronaut theory)
 
-**Što NIJE (očekivano bi bilo):**
-- NITI JEDNA manufacturing klasik (Goldratt, Womack, Deming) - ironija za MES projekt!
-- NITI JEDAN organizational change autor (Lewin, Kotter, Senge) - kritično za rollout
-- Sartre/Kierkegaard potpuno odsutni (ali Nietzsche/Camus kompletni)
-- Foucault/Derrida praznina (ali Barthes prisutan)
+**What is NOT (would be expected):**
+- NOT A SINGLE manufacturing classic (Goldratt, Womack, Deming) - irony for MES project!
+- NOT A SINGLE organizational change author (Lewin, Kotter, Senge) - critical for rollout
+- Sartre/Kierkegaard completely absent (but Nietzsche/Camus complete)
+- Foucault/Derrida gap (but Barthes present)
 
-### Interpretacija: Alexandria Personality Profile
+### Interpretation: Alexandria Personality Profile
 
-**Alexandria je:**
-- **Multidisciplinarna** (tehnika + psihologija + filozofija + povijest + ezoterija)
-- **Praksa-orijentirana** (software patterns preko čiste teorije)
-- **Depth-psychology heavy** (Jung/Campbell/Eliade definitivno favoriti!)
+**Alexandria is:**
+- **Multidisciplinary** (technical + psychology + philosophy + history + esoteric)
+- **Practice-oriented** (software patterns over pure theory)
+- **Depth-psychology heavy** (Jung/Campbell/Eliade definitely favorites!)
 - **Mystic-curious** (Kabbalah, gnosticism, psychedelics well-covered)
-- **Manufacturing-blind** (VELIKA praznina za production-focused projekt!)
+- **Manufacturing-blind** (MAJOR gap for production-focused project!)
 
-**Što nedostaje:**
+**What's missing:**
 1. **Operations excellence** (TOC, Lean, TQM)
-2. **Formal UX theory** (ima Kahneman za cognitive load, nema Norman za affordances)
-3. **Mainstream philosophy** (Mill prisutan, Kant/Rawls nedostaju)
-4. **Change management** (organizational behavior praznina)
+2. **Formal UX theory** (has Kahneman for cognitive load, lacks Norman for affordances)
+3. **Mainstream philosophy** (Mill present, Kant/Rawls missing)
+4. **Change management** (organizational behavior gap)
 
 ### Next Steps
 
-**Za PoC (10 knjiga), koristi ŠTO IMAŠ:**
+**For PoC (10 books), use WHAT YOU HAVE:**
 1. **Technical (3):** Silverston (data modeling), Fowler (refactoring), Evans (DDD)
 2. **Psychology (2):** Kahneman (System 1/2), Cialdini (persuasion)
 3. **Philosophy (2):** Mill (utilitarianism), Campbell (Hero's Journey)
 4. **History (2):** Harari (Sapiens), Diamond (Guns, Germs, Steel)
 5. **Complexity (1):** Kauffman (Origins of Order)
 
-**Nakon PoC, prioritiziraj nabavu:**
-- **Odmah:** Tier 1 books (Goldratt, Norman, Kant, Date za WBF immediate needs)
-- **Uskoro:** Tier 2 books (foundation gaps)
+**After PoC, prioritize acquisition:**
+- **Immediately:** Tier 1 books (Goldratt, Norman, Kant, Date for WBF immediate needs)
+- **Soon:** Tier 2 books (foundation gaps)
 - **Eventually:** Tier 3 books (nice-to-have completions)
 
 ---

@@ -26,6 +26,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from qdrant_client import QdrantClient
+from qdrant_utils import check_qdrant_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +87,12 @@ class CollectionManifest:
         Returns:
             True if collection exists, False if it was deleted (and manifest reset)
         """
+        # Check connection before attempting to verify collection
+        is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
+        if not is_connected:
+            logger.error(error_msg)
+            return False
+
         try:
             client = QdrantClient(host=qdrant_host, port=qdrant_port)
             collections = [c.name for c in client.get_collections().collections]
@@ -329,6 +336,12 @@ class CollectionManifest:
     ):
         """Sync manifest with actual Qdrant collection"""
         logger.info(f"🔄 Syncing manifest with Qdrant collection: {collection_name}")
+
+        # Check connection before attempting to sync
+        is_connected, error_msg = check_qdrant_connection(host, port)
+        if not is_connected:
+            logger.error(error_msg)
+            return
 
         client = QdrantClient(host=host, port=port)
 

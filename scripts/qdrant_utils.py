@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 from datetime import datetime
+import tomllib
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
@@ -31,11 +32,42 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+def load_config():
+    """Load Qdrant configuration from .streamlit/secrets.toml"""
+    scripts_dir = Path(__file__).parent
+    app_root = scripts_dir.parent
+    secrets_path = app_root / '.streamlit' / 'secrets.toml'
+
+    try:
+        with open(secrets_path, 'rb') as f:
+            secrets = tomllib.load(f)
+            return {
+                'host': secrets.get('QDRANT_HOST', 'localhost'),
+                'port': secrets.get('QDRANT_PORT', 6333)
+            }
+    except FileNotFoundError:
+        logger.warning(f"Config file not found at {secrets_path}, using defaults")
+        return {'host': 'localhost', 'port': 6333}
+    except Exception as e:
+        logger.warning(f"Error loading config: {e}, using defaults")
+        return {'host': 'localhost', 'port': 6333}
+
+
+# Load default config at module level
+_DEFAULT_CONFIG = load_config()
+
+
+# ============================================================================
 # COLLECTION MANAGEMENT
 # ============================================================================
 
-def list_collections(host: str = 'localhost', port: int = 6333):
+def list_collections(host: str = None, port: int = None):
     """List all Qdrant collections with basic stats"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     collections = client.get_collections().collections
@@ -58,10 +90,12 @@ def list_collections(host: str = 'localhost', port: int = 6333):
 
 def get_collection_stats(
     collection_name: str,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = None,
+    port: int = None
 ):
     """Get detailed statistics for a collection"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     try:
@@ -111,14 +145,16 @@ def get_collection_stats(
 def copy_collection(
     source: str,
     target: str,
-    host: str = 'localhost',
-    port: int = 6333,
+    host: str = None,
+    port: int = None,
     filter_domain: Optional[str] = None
 ):
     """
     Copy collection to a new collection.
     Optionally filter by domain.
     """
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     # Get source collection info
@@ -298,12 +334,14 @@ def delete_collection_preserve_artifacts(collection_name: str, host: str, port: 
 
 def delete_collection(
     collection_name: str,
-    host: str = 'localhost',
-    port: int = 6333,
+    host: str = None,
+    port: int = None,
     confirm: bool = False,
     with_artifacts: bool = False
 ):
     """Delete a collection (with confirmation)"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     if not confirm:
         logger.warning(f"⚠️  This will DELETE collection '{collection_name}'")
         if with_artifacts:
@@ -334,10 +372,12 @@ def delete_collection(
 def create_alias(
     collection_name: str,
     alias_name: str,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = None,
+    port: int = None
 ):
     """Create an alias for a collection"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     try:
@@ -360,10 +400,12 @@ def delete_points_by_filter(
     collection_name: str,
     domain: Optional[str] = None,
     book_title: Optional[str] = None,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = None,
+    port: int = None
 ):
     """Delete points from collection based on filter"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     conditions = []
@@ -405,10 +447,12 @@ def search_collection(
     query: str,
     limit: int = 10,
     domain_filter: Optional[str] = None,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = None,
+    port: int = None
 ):
     """Search collection using semantic similarity"""
+    host = host or _DEFAULT_CONFIG['host']
+    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding
@@ -467,14 +511,14 @@ def main():
     )
     parser.add_argument(
         '--host',
-        default='192.168.0.151',
-        help='Qdrant host'
+        default=_DEFAULT_CONFIG['host'],
+        help=f"Qdrant host (default: {_DEFAULT_CONFIG['host']})"
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=6333,
-        help='Qdrant port'
+        default=_DEFAULT_CONFIG['port'],
+        help=f"Qdrant port (default: {_DEFAULT_CONFIG['port']})"
     )
     parser.add_argument(
         '--limit',

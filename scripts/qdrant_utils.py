@@ -16,13 +16,13 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
-import tomllib
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
+import requests.exceptions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,42 +32,57 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# CONFIGURATION
+# CONNECTION HELPERS
 # ============================================================================
 
-def load_config():
-    """Load Qdrant configuration from .streamlit/secrets.toml"""
-    scripts_dir = Path(__file__).parent
-    app_root = scripts_dir.parent
-    secrets_path = app_root / '.streamlit' / 'secrets.toml'
+def check_qdrant_connection(host: str, port: int, timeout: int = 5) -> Tuple[bool, Optional[str]]:
+    """
+    Check if Qdrant server is reachable.
 
+    Args:
+        host: Qdrant server hostname or IP address
+        port: Qdrant server port
+        timeout: Connection timeout in seconds (default: 5)
+
+    Returns:
+        Tuple of (is_connected, error_message):
+            - (True, None) if connection successful
+            - (False, error_msg) if connection failed with helpful debugging hints
+    """
     try:
-        with open(secrets_path, 'rb') as f:
-            secrets = tomllib.load(f)
-            return {
-                'host': secrets.get('QDRANT_HOST', 'localhost'),
-                'port': secrets.get('QDRANT_PORT', 6333)
-            }
-    except FileNotFoundError:
-        logger.warning(f"Config file not found at {secrets_path}, using defaults")
-        return {'host': 'localhost', 'port': 6333}
+        client = QdrantClient(host=host, port=port, timeout=timeout)
+        client.get_collections()  # Simple operation to test connectivity
+        return True, None
+    except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+        error_msg = f"""
+❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network timeout ({timeout}s) - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
+        return False, error_msg
     except Exception as e:
-        logger.warning(f"Error loading config: {e}, using defaults")
-        return {'host': 'localhost', 'port': 6333}
-
-
-# Load default config at module level
-_DEFAULT_CONFIG = load_config()
+        error_msg = f"Unexpected error connecting to Qdrant at {host}:{port}: {str(e)}"
+        return False, error_msg
 
 
 # ============================================================================
 # COLLECTION MANAGEMENT
 # ============================================================================
 
-def list_collections(host: str = None, port: int = None):
+def list_collections(host: str = 'localhost', port: int = 6333):
     """List all Qdrant collections with basic stats"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     collections = client.get_collections().collections
@@ -90,12 +105,16 @@ def list_collections(host: str = None, port: int = None):
 
 def get_collection_stats(
     collection_name: str,
-    host: str = None,
-    port: int = None
+    host: str = 'localhost',
+    port: int = 6333
 ):
     """Get detailed statistics for a collection"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     try:
@@ -145,16 +164,20 @@ def get_collection_stats(
 def copy_collection(
     source: str,
     target: str,
-    host: str = None,
-    port: int = None,
+    host: str = 'localhost',
+    port: int = 6333,
     filter_domain: Optional[str] = None
 ):
     """
     Copy collection to a new collection.
     Optionally filter by domain.
     """
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     # Get source collection info
@@ -236,6 +259,14 @@ def delete_collection_and_artifacts(collection_name: str, host: str, port: int) 
         A dictionary with the results of the deletion operations.
     """
     results = {'qdrant': False, 'manifest': False, 'csv': False, 'progress': False, 'errors': []}
+
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        results['errors'].append(f"Connection failed: {error_msg}")
+        return results
+
     client = QdrantClient(host=host, port=port)
 
     # 1. Delete Qdrant collection
@@ -284,6 +315,14 @@ def delete_collection_preserve_artifacts(collection_name: str, host: str, port: 
     them into logs/deleted with a timestamp suffix.
     """
     results = {'qdrant': False, 'manifest': False, 'csv': False, 'progress': False, 'errors': []}
+
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        results['errors'].append(f"Connection failed: {error_msg}")
+        return results
+
     client = QdrantClient(host=host, port=port)
 
     # 1. Delete Qdrant collection
@@ -334,14 +373,18 @@ def delete_collection_preserve_artifacts(collection_name: str, host: str, port: 
 
 def delete_collection(
     collection_name: str,
-    host: str = None,
-    port: int = None,
+    host: str = 'localhost',
+    port: int = 6333,
     confirm: bool = False,
     with_artifacts: bool = False
 ):
     """Delete a collection (with confirmation)"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     if not confirm:
         logger.warning(f"⚠️  This will DELETE collection '{collection_name}'")
         if with_artifacts:
@@ -372,12 +415,10 @@ def delete_collection(
 def create_alias(
     collection_name: str,
     alias_name: str,
-    host: str = None,
-    port: int = None
+    host: str = 'localhost',
+    port: int = 6333
 ):
     """Create an alias for a collection"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
     client = QdrantClient(host=host, port=port)
 
     try:
@@ -400,12 +441,16 @@ def delete_points_by_filter(
     collection_name: str,
     domain: Optional[str] = None,
     book_title: Optional[str] = None,
-    host: str = None,
-    port: int = None
+    host: str = 'localhost',
+    port: int = 6333
 ):
     """Delete points from collection based on filter"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     conditions = []
@@ -447,12 +492,16 @@ def search_collection(
     query: str,
     limit: int = 10,
     domain_filter: Optional[str] = None,
-    host: str = None,
-    port: int = None
+    host: str = 'localhost',
+    port: int = 6333
 ):
     """Search collection using semantic similarity"""
-    host = host or _DEFAULT_CONFIG['host']
-    port = port or _DEFAULT_CONFIG['port']
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding
@@ -511,14 +560,14 @@ def main():
     )
     parser.add_argument(
         '--host',
-        default=_DEFAULT_CONFIG['host'],
-        help=f"Qdrant host (default: {_DEFAULT_CONFIG['host']})"
+        default='192.168.0.151',
+        help='Qdrant host'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=_DEFAULT_CONFIG['port'],
-        help=f"Qdrant port (default: {_DEFAULT_CONFIG['port']})"
+        default=6333,
+        help='Qdrant port'
     )
     parser.add_argument(
         '--limit',

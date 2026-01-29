@@ -277,6 +277,7 @@ from dataclasses import dataclass
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from ingest_books import generate_embeddings
+from qdrant_utils import check_qdrant_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -319,6 +320,12 @@ def search_qdrant(
     Returns:
         (filtered_results, initial_count)
     """
+    # Check connection before attempting search
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(f"Qdrant connection check failed: {error_msg}")
+        raise ConnectionError(error_msg)
+
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding
@@ -567,6 +574,18 @@ def perform_rag_query(
             fetch_multiplier=fetch_multiplier
         )
     except Exception as e:
+        # Create detailed error message with debugging hints
+        error_detail = f"""
+❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network issue - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
         logger.error(f"Qdrant search failed: {str(e)}")
         return RAGResult(
             query=query,
@@ -574,7 +593,7 @@ def perform_rag_query(
             filtered_count=0,
             initial_count=0,
             reranked=False,
-            error=f"Qdrant search failed: {str(e)}"
+            error=error_detail.strip()
         )
 
     if len(filtered_results) == 0:

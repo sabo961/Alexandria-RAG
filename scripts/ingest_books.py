@@ -32,6 +32,7 @@ from sentence_transformers import SentenceTransformer
 # Qdrant
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
+from scripts.qdrant_utils import check_qdrant_connection
 
 # Universal Semantic Chunking
 from universal_chunking import UniversalChunker
@@ -57,22 +58,7 @@ calibre_db_instance = None # Lazy load
 # ============================================================================ 
 
 def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
-    r"""
-    Normalize file paths for cross-platform access with Windows long path support.
-
-    Expands user home directory (~), converts to absolute path, and applies Windows
-    long path prefix (\\?\) for paths >= 248 characters to avoid MAX_PATH limitations.
-
-    Args:
-        filepath: Input file path (relative, absolute, or with ~ prefix).
-
-    Returns:
-        Tuple containing:
-            - path_for_open (str): Path to use with open() - includes long path prefix if needed
-            - abs_path (str): Standard absolute path without long path prefix
-            - used_long_path (bool): True if Windows long path prefix was applied
-            - path_length (int): Length of the absolute path in characters
-    """
+    """Normalize paths for cross-platform file access."""
     logger.debug(f"normalize_file_path input: {repr(filepath)}")
     expanded = os.path.expanduser(filepath)
     logger.debug(f"After expanduser: {repr(expanded)}")
@@ -95,23 +81,7 @@ def normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]:
 
 
 def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, Optional[str]]:
-    r"""
-    Validate that a file exists and is readable.
-
-    Performs a two-step validation:
-    1. Checks file existence using os.path.exists()
-    2. Verifies file accessibility by calling os.stat() and attempting to read first byte
-
-    Args:
-        path_for_open: The actual file path to use for operations (may include Windows
-                      long path prefix \\?\ for paths >= 248 characters).
-        display_path: User-friendly path for error messages (without long path prefix).
-
-    Returns:
-        Tuple containing:
-            - success (bool): True if file exists and is readable, False otherwise
-            - error_message (Optional[str]): None on success, descriptive error message on failure
-    """
+    """Validate file exists and is readable."""
     # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logger.debug(f"validate_file_access checking: {repr(path_for_open)}")
 
@@ -134,26 +104,8 @@ def validate_file_access(path_for_open: str, display_path: str) -> Tuple[bool, O
 
 def extract_text(filepath: str) -> Tuple[str, Dict]:
     """
-    Extract text content and metadata from supported book file formats.
-
-    Parses EPUB, PDF, TXT, and Markdown files to extract full text content and
-    associated metadata (title, author, language, format). EPUB files are processed
-    chapter by chapter with HTML parsing. PDF files use PyMuPDF for text extraction.
-
-    Args:
-        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
-
-    Returns:
-        Tuple containing:
-            - full_text (str): Extracted text content, chapters/pages separated by double newlines
-            - metadata (dict): Book metadata with keys:
-                - title (str): Book title or filename stem
-                - author (str): Author name or 'Unknown'
-                - language (str): Standardized language code (e.g., 'en', 'hr') or 'unknown'
-                - format (str): File format ('EPUB', 'PDF', or 'TXT')
-
-    Raises:
-        ValueError: If file extension is not supported (.epub, .pdf, .txt, .md).
+    Extract text from file based on extension.
+    Returns: full_text, metadata
     """
     ext = Path(filepath).suffix.lower()
     
@@ -197,70 +149,28 @@ def extract_text(filepath: str) -> Tuple[str, Dict]:
 
 
 def _get_epub_metadata(book, key: str) -> str:
-    """
-    Extract metadata field from EPUB book using Dublin Core namespace.
-
-    Retrieves metadata from EPUB files using the Dublin Core (DC) metadata standard.
-    Automatically standardizes language codes to ensure consistency across the system.
-
-    Args:
-        book: EPUB book object from ebooklib (epub.EpubBook instance).
-        key: Dublin Core metadata key to extract (e.g., 'title', 'creator', 'language').
-
-    Returns:
-        Metadata value as string. For language fields, returns standardized code
-        (e.g., 'en', 'hr'). Returns 'unknown' if metadata key is not found or
-        extraction fails.
-
-    Note:
-        This is a private helper function used internally by extract_text().
-        All language values are automatically passed through standardize_language_code().
-    """
     try:
         result = book.get_metadata('DC', key)
-        if result:
+        if result: 
             return standardize_language_code(result[0][0])
     except: pass
     return "unknown"
 
 def standardize_language_code(lang: str) -> str:
-    """
-    Standardize language codes to consistent format for metadata uniformity.
-
-    Converts ISO 639-2 three-letter codes and non-standard variants to their
-    canonical two-letter ISO 639-1 equivalents. Preserves regional variants
-    (e.g., 'en-us', 'en-gb') while normalizing base language codes.
-
-    Args:
-        lang: Language code string in any format (e.g., 'eng', 'en', 'hrv', 'en-US').
-              Can be None or empty string.
-
-    Returns:
-        Standardized language code in lowercase. Returns 'unknown' for None/empty input.
-
-        Common transformations:
-            - 'eng' -> 'en' (ISO 639-2 to ISO 639-1)
-            - 'hrv', 'cro' -> 'hr' (Croatian variants to standard code)
-            - 'en-US' -> 'en-us' (lowercase normalization, preserves regional variant)
-            - '' or None -> 'unknown'
-
-    Note:
-        Regional variants like 'en-us' or 'en-gb' are preserved to maintain
-        specificity while ensuring consistent lowercase formatting.
-    """
+    """Standardizes common language codes to a consistent format (e.g., 'en', 'hr')."""
     if not lang:
         return "unknown"
-
+    
     lang = lang.lower().strip()
 
     # Standardize known problematic English indicators
     if lang == 'eng': # Only 'eng' to 'en', keep 'en-us', 'en-gb'
         return 'en'
-
+    
     # Standardize known problematic Croatian indicators
     if lang in ['hrv', 'cro']:
-        return 'hr'
-
+        return 'hr' 
+    
     # Keep other specific regional variants or unexpected codes as they are
     return lang
 
@@ -270,76 +180,21 @@ def standardize_language_code(lang: str) -> str:
 # ============================================================================ 
 
 class EmbeddingGenerator:
-    """
-    Singleton Embedding Generator for Text Vectorization
-    =====================================================
-
-    Thread-safe singleton that manages a shared SentenceTransformer model instance
-    to generate vector embeddings for text chunks. Ensures the model is loaded only
-    once across the entire application lifecycle, reducing memory usage and startup time.
-
-    Design Pattern:
-        Singleton: Only one instance of this class exists across all imports and calls.
-        This prevents multiple copies of the 384MB+ embedding model from being loaded
-        into memory when processing multiple books or serving requests.
-
-    Usage:
-        # All instances reference the same underlying object
-        embedder1 = EmbeddingGenerator()
-        embedder2 = EmbeddingGenerator()
-        assert embedder1 is embedder2  # True
-
-        # Generate embeddings for a list of text chunks
-        texts = ["Philosophy is the study...", "Nietzsche wrote about..."]
-        vectors = embedder1.generate_embeddings(texts)
-
-    Attributes:
-        _instance (EmbeddingGenerator): Shared singleton instance.
-        _model (SentenceTransformer): Lazy-loaded embedding model (default: all-MiniLM-L6-v2).
-    """
     _instance = None
     _model = None
 
     def __new__(cls):
-        """Ensure only one instance exists (singleton pattern)."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def get_model(self, model_name: str = 'all-MiniLM-L6-v2'):
-        """
-        Lazy-load and return the SentenceTransformer embedding model.
-
-        Loads the model on first call and caches it for subsequent requests.
-        This prevents redundant model loading and reduces memory overhead.
-
-        Args:
-            model_name: HuggingFace model identifier (default: 'all-MiniLM-L6-v2').
-                       Supports any model from sentence-transformers library.
-
-        Returns:
-            SentenceTransformer: Cached model instance ready for encoding text.
-        """
         if self._model is None:
             logger.info(f"Loading embedding model: {model_name}")
             self._model = SentenceTransformer(model_name)
         return self._model
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """
-        Generate vector embeddings for a batch of text strings.
-
-        Converts text into dense vector representations using the cached
-        SentenceTransformer model. Progress bars are disabled to prevent
-        stderr conflicts in Streamlit environments.
-
-        Args:
-            texts: List of text strings to encode (e.g., chunks, sentences).
-
-        Returns:
-            List of embedding vectors, where each vector is a list of floats
-            with dimensionality matching the model (384 for all-MiniLM-L6-v2).
-        """
         model = self.get_model()
         # Disable ALL progress bars to avoid sys.stderr issues in Streamlit environment
         # tqdm progress bar causes [Errno 22] when sys.stderr is not available
@@ -352,20 +207,6 @@ class EmbeddingGenerator:
         return embeddings.tolist()
 
 def generate_embeddings(texts: List[str]) -> List[List[float]]:
-    """
-    Convenience wrapper for batch embedding generation using singleton pattern.
-
-    Delegates to the shared EmbeddingGenerator instance to convert text strings
-    into vector embeddings. This function provides a simple interface without
-    requiring explicit instantiation of the EmbeddingGenerator class.
-
-    Args:
-        texts: List of text strings to encode (e.g., chunks, sentences).
-
-    Returns:
-        List of embedding vectors, where each vector is a list of floats
-        with dimensionality matching the model (384 for all-MiniLM-L6-v2).
-    """
     return EmbeddingGenerator().generate_embeddings(texts)
 
 
@@ -380,56 +221,64 @@ def upload_to_qdrant(
     collection_name: str,
     qdrant_host: str,
     qdrant_port: int
-):
+) -> Dict:
     """
-    Upload text chunks with embeddings to Qdrant vector database.
-
-    Creates or updates a Qdrant collection with text chunks and their vector embeddings.
-    Automatically creates the collection if it doesn't exist, using COSINE distance metric.
-    Uploads points in batches of 100 to optimize network performance and memory usage.
-
-    Each chunk is stored as a PointStruct with:
-        - UUID-based unique identifier
-        - Vector embedding for semantic search
-        - Payload containing text, metadata (title, author, domain, language),
-          ingestion timestamp, and chunking strategy
-
-    Args:
-        chunks: List of chunk dictionaries containing 'text' and optional metadata
-               (book_title, author, language). Each chunk represents a semantic segment
-               from the ingested book.
-        embeddings: List of embedding vectors corresponding to chunks (same length).
-                   Each embedding is a list of floats with dimensionality matching
-                   the model (384 for all-MiniLM-L6-v2).
-        domain: Domain classification for the book (e.g., 'technical', 'philosophy',
-               'literature'). Used for filtering and retrieval optimization.
-        collection_name: Name of the Qdrant collection to upload to. Created if
-                        it doesn't exist.
-        qdrant_host: Qdrant server hostname or IP address.
-        qdrant_port: Qdrant server port number.
+    Upload chunks to Qdrant vector database.
 
     Returns:
-        None. Logs success message upon completion with upload statistics.
-
-    Note:
-        - Early returns if chunks list is empty (no-op)
-        - Collection uses COSINE distance for similarity search
-        - Batch size is hardcoded to 100 points per upload
-        - All points receive unique UUIDs to prevent ID collisions
-        - Ingestion timestamp is stored in ISO format for audit trails
+        Dict with 'success' (bool) and 'error' (str) if failed
     """
-    if not chunks: return
+    if not chunks:
+        return {'success': True, 'uploaded': 0}
 
-    client = QdrantClient(host=qdrant_host, port=qdrant_port)
-    
-    # Ensure collection
-    collections = [c.name for c in client.get_collections().collections]
-    if collection_name not in collections:
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=len(embeddings[0]), distance=Distance.COSINE)
-        )
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
+    if not is_connected:
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
 
+    try:
+        # Wrap QdrantClient instantiation
+        client = QdrantClient(host=qdrant_host, port=qdrant_port)
+    except Exception as e:
+        error_detail = f"""
+❌ Cannot instantiate Qdrant client at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network issue - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
+        logger.error(f"QdrantClient instantiation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
+    try:
+        # Wrap collection operations
+        collections = [c.name for c in client.get_collections().collections]
+        if collection_name not in collections:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=len(embeddings[0]), distance=Distance.COSINE)
+            )
+    except Exception as e:
+        error_detail = f"""
+❌ Failed to check/create collection '{collection_name}' at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. Network connection lost mid-operation - Check network stability
+  2. Insufficient permissions - Verify Qdrant server permissions
+  3. Server overloaded - Check Qdrant server resources
+  4. Invalid collection configuration - Verify vector dimensions
+
+Collection error: {str(e)}
+"""
+        logger.error(f"Qdrant collection operation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
+    # Build points
     points = []
     for chunk, embedding in zip(chunks, embeddings):
         points.append(PointStruct(
@@ -450,38 +299,31 @@ def upload_to_qdrant(
             }
         ))
 
-    # Batch upload
-    for i in range(0, len(points), 100):
-        client.upsert(collection_name=collection_name, points=points[i:i+100])
-    
+    try:
+        # Wrap batch upload operations
+        for i in range(0, len(points), 100):
+            client.upsert(collection_name=collection_name, points=points[i:i+100])
+    except Exception as e:
+        error_detail = f"""
+❌ Failed to upload points to '{collection_name}' at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. Network connection lost during upload - Check network stability
+  2. Server timeout - Large batch may exceed timeout limits
+  3. Insufficient disk space on Qdrant server - Check server storage
+  4. Server crashed mid-operation - Verify server status
+
+Upload error: {str(e)}
+"""
+        logger.error(f"Qdrant upsert operation failed: {str(e)}")
+        return {'success': False, 'error': error_detail.strip()}
+
     logger.info(f"✅ Uploaded {len(points)} semantic chunks to '{collection_name}'")
+    return {'success': True, 'uploaded': len(points)}
 
 
 def _get_calibre_db() -> Optional[CalibreDB]:
-    """
-    Lazy-load and return singleton CalibreDB instance for metadata enrichment.
-
-    Initializes a connection to the Calibre library database on first call and
-    caches the instance for subsequent calls to avoid repeated database connections.
-    Handles connection errors gracefully by returning None if the Calibre library
-    is unavailable or inaccessible.
-
-    The Calibre library path is read from the module-level CALIBRE_LIBRARY_PATH
-    constant. If the database connection fails, appropriate warnings/errors are
-    logged and metadata enrichment will be skipped for the current ingestion session.
-
-    Returns:
-        CalibreDB instance if connection successful, None if connection fails.
-        Returns None in these cases:
-            - Calibre library path does not exist (FileNotFoundError)
-            - Database file is corrupted or inaccessible (generic Exception)
-            - metadata.db file is missing from the library path
-
-    Note:
-        This is a private helper function that implements the singleton pattern.
-        The global calibre_db_instance is initialized once and reused across
-        multiple book ingestion operations to improve performance.
-    """
+    """Lazy-loads and returns a CalibreDB instance."""
     global calibre_db_instance
     if calibre_db_instance is None:
         try:
@@ -496,43 +338,8 @@ def _get_calibre_db() -> Optional[CalibreDB]:
 
 def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
     """
-    Enrich book metadata with high-quality data from Calibre library if available.
-
-    Attempts to match the book file against the Calibre library database using
-    filename matching. If a match is found, enriches the metadata dictionary with
-    Calibre's curated metadata (title, author, language, format), but only overwrites
-    fields that contain 'Unknown' or 'unknown' values to preserve higher-quality
-    metadata from other sources.
-
-    The function performs a non-destructive merge: existing valid metadata values
-    are retained, while missing or low-quality values are replaced with Calibre data.
-    Language codes from Calibre are automatically standardized using the
-    standardize_language_code() function to ensure consistency.
-
-    Args:
-        filepath: Path to the book file (used for filename-based matching).
-                 Only the filename component is used for matching, not the full path.
-        metadata: Dictionary containing current book metadata with keys:
-                 title, author, language, format. Values may be 'Unknown' or 'unknown'
-                 if not extracted from the book file.
-
-    Returns:
-        Dictionary with enriched metadata. Returns the original metadata unchanged if:
-            - Calibre database connection is unavailable
-            - No matching book is found in Calibre library
-            - Calibre book record lacks the requested metadata fields
-
-        Modified metadata fields (only if current value is 'Unknown' or 'unknown'):
-            - title (str): Book title from Calibre
-            - author (str): Author name(s) from Calibre (handles multiple authors)
-            - language (str): Standardized language code from Calibre
-            - format (str): Uppercase file format from Calibre's format list
-
-    Note:
-        This is a private helper function used during book ingestion. It does not
-        modify the original metadata dictionary - a new dictionary is returned.
-        The function gracefully handles missing Calibre database connections by
-        returning the original metadata without raising exceptions.
+    Attempts to enrich metadata from Calibre DB if a match is found.
+    Prioritizes Calibre data for title, author, and language if current metadata is 'Unknown' or 'unknown'.
     """
     db = _get_calibre_db()
     if not db:
@@ -554,7 +361,7 @@ def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
         if metadata.get('language', 'unknown') == 'unknown':
             # Use standardized language from Calibre if available and current is 'unknown'
             metadata['language'] = standardize_language_code(calibre_book.language)
-
+        
         # Also ensure format is consistent (take first format from Calibre and uppercase it)
         if calibre_book.formats and metadata.get('format', 'unknown') == 'unknown':
              metadata['format'] = calibre_book.formats[0].upper()
@@ -567,36 +374,8 @@ def _enrich_metadata_from_calibre(filepath: str, metadata: Dict) -> Dict:
 
 def extract_metadata_only(filepath: str) -> Dict:
     """
-    Extract book metadata without processing full text content.
-
-    Efficiently retrieves metadata (title, author, language, format) from book files
-    without performing full text extraction or chunking. Supports EPUB, PDF, TXT, and
-    Markdown formats. Automatically enriches metadata from Calibre library if available.
-
-    The function performs path normalization with Windows long path support, validates
-    file accessibility, extracts basic metadata from the file format, and optionally
-    enriches it with Calibre library data when a matching book is found.
-
-    Args:
-        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
-                 Can be relative, absolute, or use ~ for home directory.
-
-    Returns:
-        Dictionary containing either metadata or error information:
-            On success:
-                - title (str): Book title from file metadata or Calibre
-                - author (str): Author name from file metadata or Calibre
-                - language (str): Standardized language code (e.g., 'en', 'hr')
-                - format (str): File format ('EPUB', 'PDF', or 'TXT')
-                - filepath (str): Normalized absolute path to the file
-            On error:
-                - error (str): Error message describing the failure
-                - filepath (str): Normalized absolute path to the file
-
-    Note:
-        This function is optimized for metadata-only extraction and does not
-        perform text chunking or embedding generation, making it suitable for
-        preview, validation, or batch metadata collection workflows.
+    Extracts only metadata (title, author, language) from a file without processing content.
+    Returns: Dict with 'title', 'author', 'language', 'format', or 'error' if unsupported/failed.
     """
     normalized_path, display_path, _, _ = normalize_file_path(filepath)
 
@@ -633,69 +412,6 @@ def ingest_book(
     title_override: Optional[str] = None,
     author_override: Optional[str] = None
 ):
-    r"""
-    Complete end-to-end pipeline for ingesting books into Alexandria vector database.
-
-    Orchestrates the full ingestion workflow: file validation, text extraction, metadata
-    enrichment from Calibre library, universal semantic chunking, embedding generation,
-    and upload to Qdrant. Supports EPUB, PDF, TXT, and Markdown formats with automatic
-    format detection. Handles Windows long paths and Streamlit compatibility.
-
-    The pipeline performs these steps:
-    1. Path normalization with Windows long path support (\\?\ prefix for paths >= 248 chars)
-    2. File access validation to ensure readability
-    3. Text extraction and metadata parsing from book file
-    4. Metadata enrichment from Calibre library (skipped if overrides provided)
-    5. Application of metadata overrides (language, title, author)
-    6. Universal semantic chunking with domain-specific thresholds
-    7. Batch embedding generation using cached SentenceTransformer model
-    8. Upload to Qdrant with semantic search optimized metadata
-
-    Args:
-        filepath: Path to the book file (supports .epub, .pdf, .txt, .md extensions).
-                 Can be relative, absolute, or use ~ for home directory. Automatically
-                 handles Windows long path limitations.
-        domain: Domain classification for chunking and retrieval optimization
-               ('technical', 'philosophy', 'literature'). Philosophy uses stricter
-               semantic threshold (0.45) for tighter conceptual coherence. Default: 'technical'.
-        collection_name: Name of the Qdrant collection to upload chunks to. Created
-                        automatically if it doesn't exist. Default: 'alexandria'.
-        qdrant_host: Qdrant server hostname or IP address. Default: 'localhost'.
-        qdrant_port: Qdrant server port number. Default: 6333.
-        language_override: Override extracted language metadata with specific ISO 639-1 code
-                          (e.g., 'en', 'hr'). If provided, skips Calibre enrichment.
-                          Defaults to None (use extracted/enriched metadata).
-        title_override: Override extracted title metadata. If provided with author_override,
-                       skips Calibre enrichment entirely. Defaults to None (use extracted/enriched).
-        author_override: Override extracted author metadata. If provided with title_override,
-                        skips Calibre enrichment entirely. Defaults to None (use extracted/enriched).
-
-    Returns:
-        Dictionary containing ingestion results and statistics:
-            On success:
-                - success (bool): True
-                - title (str): Final book title (extracted, enriched, or overridden)
-                - author (str): Final author name (extracted, enriched, or overridden)
-                - language (str): Final language code (extracted, enriched, or overridden)
-                - chunks (int): Number of semantic chunks created and uploaded
-                - sentences (int): Approximate sentence count (rough estimate via '. ' splits)
-                - strategy (str): Chunking strategy used ('Universal Semantic')
-                - file_size_mb (float): Book file size in megabytes
-                - filepath (str): Normalized absolute path to the ingested file
-                - debug_author (dict): Debug information tracking author metadata through pipeline
-            On error:
-                - success (bool): False
-                - error (str): Error message describing the failure
-
-    Note:
-        - Calibre enrichment is automatically skipped when both title_override and
-          author_override are provided (indicates metadata already sourced from Calibre)
-        - Semantic chunking thresholds: philosophy (0.45), all others (0.55)
-        - Chunk size constraints: min 200 chars, max 1200 chars
-        - All chunks receive unique UUIDs and ingestion timestamps
-        - Progress bars are disabled globally (TQDM_DISABLE=1) for Streamlit compatibility
-        - Function is safe to call from Streamlit - no sys.stderr usage
-    """
     # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
     logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
 
@@ -765,7 +481,17 @@ def ingest_book(
 
     # 3. Embed & Upload
     embeddings = generate_embeddings([c['text'] for c in chunks])
-    upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
+    upload_result = upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
+
+    # Check if upload failed
+    if not upload_result.get('success'):
+        logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
+        return {
+            'success': False,
+            'error': upload_result.get('error'),
+            'title': metadata.get('title', 'Unknown'),
+            'filepath': display_path
+        }
 
     result = {
         'success': True,
@@ -785,22 +511,6 @@ def ingest_book(
     return result
 
 def main():
-    """
-    Command-line interface entry point for book ingestion.
-
-    Parses command-line arguments and invokes the ingest_book() pipeline
-    to process a single book file into the Alexandria vector database.
-
-    Command-line Arguments:
-        --file: Path to the book file (required)
-        --domain: Domain classification (default: 'technical')
-        --collection: Qdrant collection name (default: 'alexandria')
-        --host: Qdrant server hostname (default: '192.168.0.151')
-        --port: Qdrant server port (default: 6333)
-
-    Usage:
-        python ingest_books.py --file "path/to/book.epub" --domain philosophy
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument('--file', required=True)
     parser.add_argument('--domain', default='technical')

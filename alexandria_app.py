@@ -611,23 +611,30 @@ def check_qdrant_health(host: str, port: int, timeout: int = 5) -> tuple[bool, s
     Returns:
         Tuple of (is_healthy, message)
         - is_healthy: True if Qdrant is reachable, False otherwise
-        - message: Status message ("Connected" or error description)
+        - message: Status message ("Connected" or error description with debugging hints)
     """
     try:
         from qdrant_client import QdrantClient
+        import requests.exceptions
+
         client = QdrantClient(host=host, port=port, timeout=timeout)
         # Test connection by fetching collections
         client.get_collections()
         return True, "Connected"
+    except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+        error_msg = f"""❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network timeout ({timeout}s) - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+        return False, error_msg
     except Exception as e:
-        error_msg = str(e)
-        # Simplify common error messages
-        if "Connection refused" in error_msg or "Failed to connect" in error_msg:
-            return False, f"Cannot reach {host}:{port}"
-        elif "timeout" in error_msg.lower():
-            return False, f"Timeout connecting to {host}:{port}"
-        else:
-            return False, f"Error: {error_msg[:50]}"
+        error_msg = f"Unexpected error connecting to Qdrant at {host}:{port}: {str(e)}"
+        return False, error_msg
 
 
 # ============================================
@@ -2292,9 +2299,22 @@ with tab_calibre:
                         # Verify ingestion by checking collection
                         try:
                             from qdrant_client import QdrantClient
+                            import requests.exceptions
+
                             client = QdrantClient(host=qdrant_host, port=qdrant_port)
                             collection_info = client.get_collection(calibre_collection)
                             st.info(f"🔍 Collection '{calibre_collection}' now has {collection_info.points_count:,} total points")
+                        except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+                            error_msg = f"""❌ Cannot verify collection - Qdrant server at {qdrant_host}:{qdrant_port} is unreachable
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network timeout - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+                            st.warning(error_msg)
                         except Exception as e:
                             st.warning(f"⚠️ Could not verify collection: {e}")
 
@@ -2455,6 +2475,8 @@ with tab_ingestion:
             collection_model_locked = False
             try:
                 from qdrant_client import QdrantClient
+                import requests.exceptions
+
                 client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
                 # Try to get collection info
@@ -2467,8 +2489,19 @@ with tab_ingestion:
                 except Exception:
                     # Collection doesn't exist yet
                     collection_is_empty = True
+            except (ConnectionError, TimeoutError, requests.exceptions.ConnectionError) as e:
+                error_msg = f"""❌ Cannot connect to Qdrant server at {qdrant_host}:{qdrant_port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {qdrant_port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{qdrant_host}:{qdrant_port}/dashboard
+  4. Network timeout - Server may be slow or unreachable
+
+Connection error: {str(e)}"""
+                st.warning(error_msg)
             except Exception as e:
-                st.warning(f"⚠️ Cannot connect to Qdrant: {e}")
+                st.warning(f"⚠️ Unexpected error checking collection: {e}")
 
             embedding_models = ["all-MiniLM-L6-v2", "all-mpnet-base-v2", "multi-qa-MiniLM-L6-cos-v1"]
             embedding_model_default = st.session_state.get('embedding_model', "all-MiniLM-L6-v2")

@@ -497,6 +497,7 @@ def perform_rag_query(
     collection_name: str = 'alexandria',
     limit: int = 5,
     domain_filter: Optional[str] = None,
+    author_filter: Optional[str] = None,
     threshold: float = 0.5,
     enable_reranking: bool = False,
     rerank_model: Optional[str] = None,
@@ -516,6 +517,7 @@ def perform_rag_query(
         collection_name: Qdrant collection to search
         limit: Number of final results to return
         domain_filter: Optional domain filter (technical, psychology, etc.)
+        author_filter: Optional author filter (e.g., "Len Silverston", "Haruki Murakami")
         threshold: Similarity score threshold (0.0-1.0)
         enable_reranking: Whether to rerank with LLM
         rerank_model: Model for reranking (required if enable_reranking=True)
@@ -546,7 +548,7 @@ def perform_rag_query(
             collection_name=collection_name,
             limit=limit,
             domain_filter=domain_filter,
-            author_filter=None,
+            author_filter=author_filter,
             threshold=threshold,
             host=host,
             port=port,

@@ -172,6 +172,12 @@ def copy_collection(
     Copy collection to a new collection.
     Optionally filter by domain.
     """
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     # Get source collection info
@@ -253,6 +259,14 @@ def delete_collection_and_artifacts(collection_name: str, host: str, port: int) 
         A dictionary with the results of the deletion operations.
     """
     results = {'qdrant': False, 'manifest': False, 'csv': False, 'progress': False, 'errors': []}
+
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        results['errors'].append(f"Connection failed: {error_msg}")
+        return results
+
     client = QdrantClient(host=host, port=port)
 
     # 1. Delete Qdrant collection
@@ -301,6 +315,14 @@ def delete_collection_preserve_artifacts(collection_name: str, host: str, port: 
     them into logs/deleted with a timestamp suffix.
     """
     results = {'qdrant': False, 'manifest': False, 'csv': False, 'progress': False, 'errors': []}
+
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        results['errors'].append(f"Connection failed: {error_msg}")
+        return results
+
     client = QdrantClient(host=host, port=port)
 
     # 1. Delete Qdrant collection
@@ -357,6 +379,12 @@ def delete_collection(
     with_artifacts: bool = False
 ):
     """Delete a collection (with confirmation)"""
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     if not confirm:
         logger.warning(f"⚠️  This will DELETE collection '{collection_name}'")
         if with_artifacts:
@@ -417,6 +445,12 @@ def delete_points_by_filter(
     port: int = 6333
 ):
     """Delete points from collection based on filter"""
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     conditions = []
@@ -462,6 +496,12 @@ def search_collection(
     port: int = 6333
 ):
     """Search collection using semantic similarity"""
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding

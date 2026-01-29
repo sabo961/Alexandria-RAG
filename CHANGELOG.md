@@ -6,6 +6,41 @@ For active work items, see [TODO.md](TODO.md).
 
 ---
 
+## 2026-01-29
+
+### Security Hardening: XSRF Protection + CORS Configuration
+**Duration:** <15 minutes
+**Lines of Code:** 2 LOC modified (config)
+**Goal:** Enable critical security controls to protect against Cross-Site Request Forgery attacks
+
+**Deliverables:**
+- ✅ Enabled XSRF (Cross-Site Request Forgery) protection in Streamlit configuration
+- ✅ Enabled CORS (Cross-Origin Resource Sharing) with proper origin validation
+- ✅ Added explanatory comments in configuration file
+
+**Files Modified:**
+- `.streamlit/config.toml` (lines 9-10: `enableCORS = true`, `enableXsrfProtection = true`)
+
+**Security Impact:**
+- 🔒 **HIGH PRIORITY FIX:** Application was previously vulnerable to CSRF attacks
+- Server binds to `0.0.0.0` (all network interfaces) making it accessible to entire network
+- Without XSRF protection, malicious sites could trick users into performing unintended actions
+- CORS validation ensures only legitimate origins can interact with the application
+
+**Rationale:**
+- Previous configuration disabled both security features (`enableCORS = false`, `enableXsrfProtection = false`)
+- Network-accessible application without CSRF protection is a critical security vulnerability
+- XSRF tokens prevent attackers from forging requests on behalf of authenticated users
+- CORS headers prevent unauthorized cross-origin access
+
+**Verification:**
+- ✅ Streamlit application starts without errors
+- ✅ XSRF tokens present in browser cookies/headers
+- ✅ CORS headers present in HTTP responses
+- ✅ All application features remain functional
+
+---
+
 ## 2026-01-23 (Late Evening)
 
 ### Qdrant Health Check on Startup

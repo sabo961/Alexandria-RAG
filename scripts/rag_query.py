@@ -551,6 +551,18 @@ def perform_rag_query(
             fetch_multiplier=fetch_multiplier
         )
     except Exception as e:
+        # Create detailed error message with debugging hints
+        error_detail = f"""
+❌ Cannot connect to Qdrant server at {host}:{port}
+
+Possible causes:
+  1. VPN not connected - Verify VPN connection if server is remote
+  2. Firewall blocking port {port} - Check firewall rules
+  3. Qdrant server not running - Verify server status at http://{host}:{port}/dashboard
+  4. Network issue - Server may be slow or unreachable
+
+Connection error: {str(e)}
+"""
         logger.error(f"Qdrant search failed: {str(e)}")
         return RAGResult(
             query=query,
@@ -558,7 +570,7 @@ def perform_rag_query(
             filtered_count=0,
             initial_count=0,
             reranked=False,
-            error=f"Qdrant search failed: {str(e)}"
+            error=error_detail.strip()
         )
 
     if len(filtered_results) == 0:

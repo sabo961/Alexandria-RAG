@@ -109,6 +109,12 @@ def get_collection_stats(
     port: int = 6333
 ):
     """Get detailed statistics for a collection"""
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(host, port)
+    if not is_connected:
+        logger.error(error_msg)
+        return
+
     client = QdrantClient(host=host, port=port)
 
     try:

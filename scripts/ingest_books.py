@@ -1026,19 +1026,25 @@ def compare_chunking(
             'sample_breaks': break_points[:3]  # First 3 break points as samples
         })
 
-    # Recommendation logic based on semantic quality
-    # Prefer: high coherence, few forced breaks, reasonable chunk count
+    # Recommendation logic: PURE SEMANTIC QUALITY
+    # Forced breaks destroy content integrity - they cut mid-topic to meet size limits
+    # Coherence measures how semantically related sentences are within chunks
+    # NO preference for chunk count - that's a symptom, not a goal
     best = None
     best_score = -1
     for r in results:
-        # Score: coherence matters most, penalize forced breaks
-        score = r['coherence'] * 100 - (r['forced_breaks'] * 5)
-        # Slight preference for middle chunk counts (not too few, not too many)
-        if 30 <= r['chunks'] <= 150:
-            score += 5
+        # Coherence is king, forced breaks are the enemy of content integrity
+        score = r['coherence'] * 100 - (r['forced_breaks'] * 20)
         if score > best_score:
             best_score = score
             best = r['threshold']
+
+    # Build recommendation reason
+    best_result = next(r for r in results if r['threshold'] == best)
+    if best_result['forced_breaks'] == 0:
+        reason = f"Highest coherence ({best_result['coherence']}) with pure semantic breaks"
+    else:
+        reason = f"Best coherence ({best_result['coherence']}) but {best_result['forced_breaks']} forced breaks - consider increasing max_chunk_size"
 
     return {
         'success': True,
@@ -1055,7 +1061,7 @@ def compare_chunking(
         },
         'comparisons': results,
         'recommendation': best,
-        'recommendation_reason': f'Best semantic coherence ({next(r["coherence"] for r in results if r["threshold"] == best)}) with minimal forced breaks'
+        'recommendation_reason': reason
     }
 
 

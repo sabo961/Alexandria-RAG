@@ -29,42 +29,10 @@ class TestAppStartup:
         expect(main_container).to_be_visible()
 
 
-class TestNavigationTabs:
-    """Tests for main navigation tabs."""
-
-    def test_calibre_ingestion_tab_visible(self, app_page: Page):
-        """Test that Calibre ingestion tab is visible."""
-        tab = app_page.locator('button[role="tab"]').filter(has_text="Calibre ingestion")
-        expect(tab).to_be_visible()
-
-    def test_folder_ingestion_tab_visible(self, app_page: Page):
-        """Test that Folder ingestion tab is visible."""
-        tab = app_page.locator('button[role="tab"]').filter(has_text="Folder ingestion")
-        expect(tab).to_be_visible()
-
-    def test_qdrant_collections_tab_visible(self, app_page: Page):
-        """Test that Qdrant collections tab is visible."""
-        tab = app_page.locator('button[role="tab"]').filter(has_text="Qdrant collections")
-        expect(tab).to_be_visible()
-
-    def test_speakers_corner_tab_visible(self, app_page: Page):
-        """Test that Speaker's corner tab is visible."""
-        tab = app_page.locator('button[role="tab"]').filter(has_text="Speaker's corner")
-        expect(tab).to_be_visible()
-
-    def test_can_navigate_between_tabs(self, app_page: Page):
-        """Test that clicking tabs changes the active tab."""
-        # Find and click the Speaker's corner tab
-        speaker_tab = app_page.locator('button[role="tab"]').filter(has_text="Speaker's corner")
-        speaker_tab.click()
-
-        # Verify it's now selected
-        expect(speaker_tab).to_have_attribute("aria-selected", "true")
-
-        # Navigate back to first tab
-        calibre_tab = app_page.locator('button[role="tab"]').filter(has_text="Calibre ingestion")
-        calibre_tab.click()
-        expect(calibre_tab).to_have_attribute("aria-selected", "true")
+# NOTE: TestNavigationTabs removed (2026-01-30)
+# GUI refactored to single-page interface without tabs.
+# See ADR-0003: GUI is now secondary query-only interface.
+# Old tabs (Calibre ingestion, Folder ingestion, etc.) no longer exist.
 
 
 class TestSidebar:

@@ -261,7 +261,7 @@ def upload_to_qdrant(
         client = QdrantClient(host=qdrant_host, port=qdrant_port)
     except Exception as e:
         error_detail = f"""
-❌ Cannot instantiate Qdrant client at {qdrant_host}:{qdrant_port}
+[ERROR] Cannot instantiate Qdrant client at {qdrant_host}:{qdrant_port}
 
 Possible causes:
   1. VPN not connected - Verify VPN connection if server is remote
@@ -284,7 +284,7 @@ Connection error: {str(e)}
             )
     except Exception as e:
         error_detail = f"""
-❌ Failed to check/create collection '{collection_name}' at {qdrant_host}:{qdrant_port}
+[ERROR] Failed to check/create collection '{collection_name}' at {qdrant_host}:{qdrant_port}
 
 Possible causes:
   1. Network connection lost mid-operation - Check network stability
@@ -320,7 +320,7 @@ Collection error: {str(e)}
             client.upsert(collection_name=collection_name, points=points[i:i+100])
     except Exception as e:
         error_detail = f"""
-❌ Failed to upload points to '{collection_name}' at {qdrant_host}:{qdrant_port}
+[ERROR] Failed to upload points to '{collection_name}' at {qdrant_host}:{qdrant_port}
 
 Possible causes:
   1. Network connection lost during upload - Check network stability
@@ -333,7 +333,7 @@ Upload error: {str(e)}
         logger.error(f"Qdrant upsert operation failed: {str(e)}")
         return {'success': False, 'error': error_detail.strip()}
 
-    logger.info(f"✅ Uploaded {len(points)} semantic chunks to '{collection_name}'")
+    logger.info(f"[OK] Uploaded {len(points)} semantic chunks to '{collection_name}'")
     return {'success': True, 'uploaded': len(points)}
 
 
@@ -432,7 +432,7 @@ def upload_hierarchical_to_qdrant(
     try:
         for i in range(0, len(parent_points), 100):
             client.upsert(collection_name=collection_name, points=parent_points[i:i+100])
-        logger.info(f"✅ Uploaded {len(parent_points)} parent chunks")
+        logger.info(f"[OK] Uploaded {len(parent_points)} parent chunks")
     except Exception as e:
         logger.error(f"Parent upload failed: {str(e)}")
         return {'success': False, 'error': f"Parent upload failed: {str(e)}"}
@@ -441,12 +441,12 @@ def upload_hierarchical_to_qdrant(
     try:
         for i in range(0, len(child_points), 100):
             client.upsert(collection_name=collection_name, points=child_points[i:i+100])
-        logger.info(f"✅ Uploaded {len(child_points)} child chunks")
+        logger.info(f"[OK] Uploaded {len(child_points)} child chunks")
     except Exception as e:
         logger.error(f"Child upload failed: {str(e)}")
         return {'success': False, 'error': f"Child upload failed: {str(e)}"}
 
-    logger.info(f"✅ Hierarchical upload complete: {len(parent_points)} parents, {len(child_points)} children")
+    logger.info(f"[OK] Hierarchical upload complete: {len(parent_points)} parents, {len(child_points)} children")
     return {
         'success': True,
         'parent_count': len(parent_points),
@@ -782,7 +782,7 @@ def ingest_book(
             'hierarchical': False
         }
 
-    logging.info(f"✅ Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {result['chunks']} chunks)")
+    logging.info(f"[OK] Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {result['chunks']} chunks)")
 
     return result
 
@@ -916,7 +916,7 @@ def main():
         )
 
         if not result['success']:
-            print(f"❌ Error: {result['error']}")
+            print(f"[ERROR] Error: {result['error']}")
             return
 
         print("\n" + "=" * 70)
@@ -942,7 +942,7 @@ def main():
                 print(sample['preview'])
 
         print("\n" + "=" * 70)
-        print("✅ Dry run complete. No data uploaded to Qdrant.")
+        print("[OK] Dry run complete. No data uploaded to Qdrant.")
         print("=" * 70 + "\n")
     else:
         # Normal ingest mode

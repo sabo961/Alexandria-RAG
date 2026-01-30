@@ -306,7 +306,7 @@ def search_qdrant(
     client = QdrantClient(host=host, port=port)
 
     # Generate query embedding
-    logger.info(f"🔍 Query: '{query}'")
+    logger.info(f"[SEARCH] Query: '{query}'")
     query_vector = generate_embeddings([query])[0]
 
     # Build filter
@@ -315,14 +315,14 @@ def search_qdrant(
         conditions.append(
             FieldCondition(key="book_title", match=MatchValue(value=book_filter))
         )
-        logger.info(f"📖 Filtering by book: {book_filter}")
+        logger.info(f"[BOOK] Filtering by book: {book_filter}")
 
     # NEW: Filter by chunk level (for hierarchical retrieval)
     if chunk_level_filter:
         conditions.append(
             FieldCondition(key="chunk_level", match=MatchValue(value=chunk_level_filter))
         )
-        logger.info(f"📊 Filtering by chunk_level: {chunk_level_filter}")
+        logger.info(f"[FILTER] Filtering by chunk_level: {chunk_level_filter}")
 
     query_filter = Filter(must=conditions) if conditions else None
 
@@ -338,7 +338,7 @@ def search_qdrant(
         query_filter=query_filter
     ).points
 
-    logger.info(f"✅ Retrieved {len(initial_results)} initial results")
+    logger.info(f"[OK] Retrieved {len(initial_results)} initial results")
 
     # Apply similarity threshold filter
     filtered_results = [r for r in initial_results if r.score >= threshold]
@@ -376,7 +376,7 @@ def fetch_parent_chunks(
         logger.debug("No parent IDs found in child results")
         return {}
 
-    logger.info(f"📖 Fetching {len(parent_ids)} parent chunks for context...")
+    logger.info(f"[BOOK] Fetching {len(parent_ids)} parent chunks for context...")
 
     # Fetch parent chunks by ID
     parent_chunks = {}
@@ -399,7 +399,7 @@ def fetch_parent_chunks(
                 'chunk_level': point.payload.get('chunk_level', 'parent')
             }
 
-        logger.info(f"✅ Retrieved {len(parent_chunks)} parent chunks")
+        logger.info(f"[OK] Retrieved {len(parent_chunks)} parent chunks")
 
     except Exception as e:
         logger.warning(f"Failed to fetch parent chunks: {e}")
@@ -470,7 +470,7 @@ Respond with only a number from 0-10."""
     rerank_scores.sort(key=lambda x: x[1], reverse=True)
     reranked_results = [r[0] for r in rerank_scores[:limit]]
 
-    logger.info(f"✅ Reranked to top {len(reranked_results)} most relevant chunks")
+    logger.info(f"[OK] Reranked to top {len(reranked_results)} most relevant chunks")
     return reranked_results
 
 
@@ -543,7 +543,7 @@ def generate_answer(
 
     if response.status_code == 200:
         answer = response.json()["choices"][0]["message"]["content"]
-        logger.info("✅ Answer generated successfully")
+        logger.info("[OK] Answer generated successfully")
         return answer
     else:
         error_msg = f"OpenRouter API error {response.status_code}: {response.text}"
@@ -640,7 +640,7 @@ def perform_rag_query(
         parent_chunks = fetch_parent_chunks(filtered_results, collection_name, client)
 
     if len(filtered_results) == 0:
-        logger.warning(f"⚠️ No results above similarity threshold {threshold:.2f}")
+        logger.warning(f"[WARN] No results above similarity threshold {threshold:.2f}")
         return RAGResult(
             query=query,
             results=[],
@@ -774,10 +774,10 @@ def print_results(result: RAGResult, format: str = 'markdown'):
             print(f"**Chapters:** {stats.get('unique_chapters', 0)} unique chapters, {stats.get('parent_chunks_fetched', 0)} parent chunks fetched")
 
         if result.answer:
-            print("\n## 💡 Answer\n")
+            print("\n## Answer\n")
             print(result.answer)
 
-        print("\n## 📚 Sources\n")
+        print("\n## Sources\n")
         for idx, r in enumerate(result.results, 1):
             print(f"### Source {idx} (Relevance: {r['score']:.4f})")
             print(f"- **Book:** {r['book_title']}")
@@ -869,7 +869,7 @@ def main():
         print_results(result, format=args.format)
 
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
+        logger.error(f"[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
         exit(1)

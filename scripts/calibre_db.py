@@ -146,16 +146,8 @@ class CalibreDB:
             # Replace comma separator with ' & ' for authors (DISTINCT uses default comma)
             authors_str = row['authors'] or 'Unknown'
 
-            # Debug for Son of Hamas
-            if 'Son of Hamas' in (row['title'] or ''):
-                logger.info(f"DEBUG Son of Hamas: row['authors']={repr(row['authors'])}")
-                logger.info(f"DEBUG Son of Hamas: authors_str before replace={repr(authors_str)}")
-
             if authors_str != 'Unknown':
                 authors_str = authors_str.replace(',', ' &')
-
-            if 'Son of Hamas' in (row['title'] or ''):
-                logger.info(f"DEBUG Son of Hamas: authors_str after replace={repr(authors_str)}")
 
             # Parse tags (DISTINCT uses default comma separator)
             tags_list = []

@@ -623,6 +623,11 @@ def ingest_book(
     else:
         debug_info['final_author'] = metadata.get('author')
 
+    # Log START of ingestion with title and author
+    title = metadata.get('title', 'Unknown')
+    author = metadata.get('author', 'Unknown')
+    logging.info(f"Ingesting: \"{title}\" by {author}")
+
     # Setup chunker
     embedder = EmbeddingGenerator()
     chunker = UniversalChunker(
@@ -1150,14 +1155,14 @@ def main():
             return
 
         print("\n" + "=" * 70)
-        print(f"📚 CHUNKING TEST: {result['title']}")
+        print(f"CHUNKING TEST: {result['title']}")
         print(f"   Author: {result['author']}")
         print("=" * 70)
-        print(f"\n📊 Parameters:")
+        print(f"\nParameters:")
         print(f"   threshold:      {result['parameters']['threshold']}")
         print(f"   min_chunk_size: {result['parameters']['min_chunk_size']} words")
         print(f"   max_chunk_size: {result['parameters']['max_chunk_size']} words")
-        print(f"\n📈 Statistics:")
+        print(f"\nStatistics:")
         stats = result['stats']
         print(f"   Total chunks:   {stats['total_chunks']}")
         print(f"   Total words:    {stats['total_words']:,}")
@@ -1166,7 +1171,7 @@ def main():
         print(f"   Max words:      {stats['max_words']}")
 
         if result['samples']:
-            print(f"\n📝 Sample Chunks:")
+            print(f"\nSample Chunks:")
             for sample in result['samples']:
                 print(f"\n--- Chunk #{sample['index']} ({sample['word_count']} words) ---")
                 print(sample['preview'])

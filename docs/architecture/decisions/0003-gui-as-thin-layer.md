@@ -1,9 +1,13 @@
 # ADR 0003: GUI as Thin Presentation Layer
 
 ## Status
-**Superseded** - GUI development abandoned in favor of MCP-first approach (2026-01-30)
+**Accepted** (Updated 2026-01-30)
 
-The core principle (all logic in `scripts/`) remains valid, but the interface is now MCP Server instead of Streamlit GUI.
+Architecture clarified after re-evaluation:
+- **MCP Server = Primary interface** (full functionality including ingest)
+- **Streamlit GUI = Secondary interface** (query-only, no ingest operations)
+
+The core principle (all logic in `scripts/`) remains valid. GUI calls the same functions that MCP tools use.
 
 See: [docs/reference/mcp-server.md](../../mcp-server.md)
 
@@ -38,7 +42,7 @@ Alexandria needs to support multiple interfaces:
 
 ### Scripts Responsibilities (ALL LOGIC)
 - Book ingestion and processing
-- Domain-specific chunking
+- Universal semantic chunking (threshold-based)
 - Semantic search and RAG queries
 - Collection management
 - Calibre database integration
@@ -155,7 +159,7 @@ st.write(result.answer)
 
 ## Related Decisions
 - [ADR 0001: Use Qdrant Vector DB](0001-use-qdrant-vector-db.md) - Scripts interact with Qdrant
-- [ADR 0002: Domain-Specific Chunking](0002-domain-specific-chunking.md) - Chunking logic in scripts
+- [ADR 0007: Universal Semantic Chunking](0007-universal-semantic-chunking.md) - Chunking logic in scripts
 
 ## References
 - **C4 Container Diagram:** [02-container.md](../c4/02-container.md)

@@ -105,7 +105,6 @@ To search Alexandria curated books:
    cd c:/Users/goran/source/repos/Temenos/Akademija/Alexandria/scripts
    python rag_query.py "What does Silverston say about shipment patterns?" \
        --collection alexandria \
-       --domain technical \
        --limit 5
    ```
 

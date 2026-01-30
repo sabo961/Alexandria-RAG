@@ -103,12 +103,13 @@ python rag_query.py "What does Silverston say about shipments?" --limit 5
 ### 2. Ingest Remaining Books
 
 ```bash
-# Batch ingest all 3 Silverston books (automatically logs to manifest)
-python batch_ingest.py \
-  --directory ../ingest \
-  --domain technical \
-  --collection alexandria \
-  --resume
+# Ingest books via MCP tools (recommended) or CLI
+# MCP: alexandria_batch_ingest(author="Silverston", collection="alexandria")
+
+# Or ingest single book via CLI
+python ingest_books.py \
+  --file "../ingest/Silverston Vol 1.pdf" \
+  --collection alexandria
 
 # Check what was ingested
 python collection_manifest.py show alexandria
@@ -127,17 +128,16 @@ python rag_query.py "database normalization patterns" --limit 5
 python qdrant_utils.py search alexandria "normalization" --limit 5
 ```
 
-### 4. Experiment with Chunking (Optional)
+### 4. Test Chunking Parameters (Optional)
 
 ```bash
-python experiment_chunking.py \
+# Dry-run to test chunking without uploading
+python ingest_books.py \
   --file "../ingest/Silverston Vol 1.pdf" \
-  --strategies small,medium,large \
-  --collection-prefix test
+  --dry-run \
+  --threshold 0.55
 
-# Compare results
-python qdrant_utils.py search test_small "your query" --limit 3
-python qdrant_utils.py search test_large "your query" --limit 3
+# Or via MCP: alexandria_test_chunking(book_id=123, threshold=0.55)
 ```
 
 ---
@@ -150,12 +150,12 @@ python qdrant_utils.py search test_large "your query" --limit 3
 - ⏳ **Silverston Vol 2 (PDF)** - Ready to ingest
 
 ### Collections
-- **alexandria_test** - 153 chunks (Silverston Vol 3, technical domain)
+- **alexandria_test** - 153 chunks (Silverston Vol 3)
 - **alexandria** - Production collection (to be populated)
 
 ### Test Results (Silverston Vol 3)
 - ✅ EPUB extraction: 20 chapters
-- ✅ Chunking: 153 chunks, avg ~1450 tokens (perfect for technical domain)
+- ✅ Chunking: 153 chunks, avg ~1450 tokens (semantic chunking)
 - ✅ Embedding generation: 3 seconds
 - ✅ Qdrant upload: 1 second
 - ✅ Semantic search: 0.38-0.64 relevance scores
@@ -168,13 +168,14 @@ python qdrant_utils.py search test_large "your query" --limit 3
 
 ```bash
 # 1. Copy books to ingest folder
-# 2. Run batch ingestion
+# 2. Run ingestion via MCP (recommended)
+# alexandria_batch_ingest(author="Author Name", collection="alexandria")
+
+# Or via CLI for single book
 cd scripts
-python batch_ingest.py \
-  --directory ../ingest \
-  --domain technical \
-  --collection alexandria \
-  --resume
+python ingest_books.py \
+  --file "../ingest/book.epub" \
+  --collection alexandria
 
 # 3. Verify results
 python qdrant_utils.py stats alexandria
@@ -183,10 +184,15 @@ python qdrant_utils.py stats alexandria
 ### Development: Test Single Book
 
 ```bash
+# Test chunking first (dry-run)
+python ingest_books.py \
+  --file "../ingest/test_book.pdf" \
+  --dry-run \
+  --threshold 0.55
+
 # Ingest with test collection
 python ingest_books.py \
   --file "../ingest/test_book.pdf" \
-  --domain psychology \
   --collection test_collection
 
 # Query results
@@ -196,19 +202,16 @@ python rag_query.py "test query" --collection test_collection --limit 5
 python qdrant_utils.py delete test_collection --confirm
 ```
 
-### Research: Compare Chunking Strategies
+### Research: Compare Chunking Parameters
 
 ```bash
-# Run experiment
-python experiment_chunking.py \
-  --file "../ingest/book.epub" \
-  --strategies small,medium,large,technical_default
+# Test different thresholds to find optimal semantic boundaries
+python ingest_books.py --file "../ingest/book.epub" --dry-run --threshold 0.45
+python ingest_books.py --file "../ingest/book.epub" --dry-run --threshold 0.55
+python ingest_books.py --file "../ingest/book.epub" --dry-run --threshold 0.60
 
-# Compare retrieval quality
-for strategy in small medium large technical_default; do
-  echo "=== Testing $strategy ==="
-  python qdrant_utils.py search "experiment_$strategy" "your test query" --limit 3
-done
+# Or via MCP: alexandria_test_chunking(book_id=123, threshold=0.45)
+# Compare chunk counts and sample content to find best semantic grouping
 ```
 
 ---
@@ -277,9 +280,10 @@ pwd  # Should show .../Alexandria/scripts
 ## Next Steps (PoC Phase)
 
 ### Immediate (This Week)
-- [ ] Run batch ingestion on all 3 Silverston books
+- [ ] Run ingestion on remaining Silverston books
   ```bash
-  python batch_ingest.py --directory ../ingest --domain technical --collection alexandria
+  # Via MCP: alexandria_batch_ingest(author="Silverston", collection="alexandria")
+  # Or single: python ingest_books.py --file "../ingest/book.pdf" --collection alexandria
   ```
 - [ ] Test PDF ingestion quality (compare to EPUB results)
 - [ ] Query testing with real questions

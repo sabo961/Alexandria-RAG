@@ -138,7 +138,7 @@ python -c "from qdrant_client import QdrantClient; client = QdrantClient(host='1
 **Step 3: Check configuration**
 ```bash
 # Verify host/port in your command
-python ingest_books.py --file book.epub --domain technical --host 192.168.0.151 --port 6333
+python ingest_books.py --file book.epub --host 192.168.0.151 --port 6333
 
 # Or check qdrant_utils.py default values
 grep -n "DEFAULT_HOST\|DEFAULT_PORT" qdrant_utils.py

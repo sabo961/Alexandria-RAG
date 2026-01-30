@@ -20,7 +20,7 @@
 3. **[Common Workflows](./how-to/common-workflows.md)** - Command cheat sheet for daily use
 
 **For AI Agents:**
-- **[Project Context](../_bmad-output/project-context.md)** - **MANDATORY READ** - 45 implementation rules
+- **[Project Context](./project-context.md)** - **MANDATORY READ** - 45 implementation rules
 - **[AGENTS.md](../AGENTS.md)** - Navigation hub for AI assistants
 
 ---

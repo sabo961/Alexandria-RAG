@@ -1,0 +1,146 @@
+# Workflow Status - Alexandria
+# Synced with docs/ reality on 2026-01-30
+generated: "2026-01-30"
+project_name: "Alexandria"
+user_description: |-
+  Alexandria je RAG (Retrieval-Augmented Generation) sustav za semantičko pretraživanje
+  9,000+ knjiga iz Temenos Academy knjižnice. MCP-first arhitektura - primarni interface
+  je MCP Server za Claude Code integraciju. GUI (Streamlit) napušten u korist MCP pristupa.
+
+  Ključne značajke:
+  - Hijerarhijsko chunkanje (parent chapters + child semantic chunks)
+  - Universal Semantic Chunking (ADR 0007) - topic boundary detection
+  - Calibre integracija za metadata
+  - Collection-specific manifesti za tracking
+project_type: "software"
+selected_track: "method"
+field_type: "brownfield"
+workflow_path: "_bmad/bmm/workflows/workflow-status/paths/method-brownfield.yaml"
+
+# SYNC NOTE: Projekt je evoluirao izvan BMAD workflowa s "godp. Primarius" (Opus).
+# Dokumentacija u docs/ je authoritative source of truth.
+
+workflow_status:
+  - phase: 0
+    name: "Documentation"
+    workflows:
+      - id: "document-project"
+        status: "completed"
+        completed_date: "2026-01-24"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:document-project"
+        artifacts:
+          - "docs/index.md"
+          - "docs/source-tree.md"
+          - "docs/project-context.md"
+        notes: "Initial scan. Later expanded significantly outside BMAD."
+
+  - phase: 1
+    name: "Analysis"
+    workflows:
+      - id: "brainstorm-project"
+        status: "completed"
+        completed_date: "2026-01-25"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:brainstorming"
+        artifacts:
+          - "docs/analysis/brainstorming-session-2026-01-25.md"
+        notes: "Session completed. Ideas fed into architecture decisions."
+
+  - phase: 2
+    name: "Planning"
+    workflows:
+      - id: "prd"
+        status: "skipped"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:prd"
+        notes: |-
+          Formal PRD not created. Project direction established through:
+          - docs/project-overview.md (informal product vision)
+          - TODO.md (prioritized backlog)
+          - ADRs (architecture decisions capture requirements implicitly)
+          Brownfield project with clear existing scope - PRD deemed unnecessary.
+
+  - phase: 3
+    name: "Solutioning"
+    workflows:
+      - id: "create-architecture"
+        status: "completed"
+        completed_date: "2026-01-30"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:create-architecture"
+        artifacts:
+          - "docs/architecture/README.md (790 lines, comprehensive)"
+          - "docs/architecture/decisions/0001-0007 (7 ADRs)"
+          - "docs/architecture/c4/ (Context, Container, Component)"
+          - "docs/architecture/technical/ (data models, chunking specs)"
+          - "docs/architecture/workspace.dsl (Structurizr)"
+        notes: "Extensive architecture created with Opus outside BMAD workflow."
+
+      - id: "create-epics-and-stories"
+        status: "skipped"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-epics-and-stories"
+        notes: |-
+          No formal epics/stories. Work tracked via:
+          - TODO.md (prioritized backlog HIGH/MEDIUM/LOW)
+          - CHANGELOG.md (completed work archive)
+          Suitable for solo/small team brownfield maintenance.
+
+      - id: "implementation-readiness"
+        status: "implicit-pass"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:check-implementation-readiness"
+        notes: "Not formally run, but system is in production with MCP server operational."
+
+  - phase: 4
+    name: "Implementation"
+    workflows:
+      - id: "sprint-planning"
+        status: "not-applicable"
+        agent: "sm"
+        command: "/bmad:bmm:workflows:sprint-planning"
+        notes: |-
+          Continuous development model, not sprint-based.
+          Work tracked in TODO.md with priorities.
+
+      - id: "active-development"
+        status: "in-progress"
+        agent: "dev"
+        notes: |-
+          Current focus areas (from TODO.md):
+          - Ingest quality improvements
+          - Chunking parameter optimization
+          - MCP server enhancements
+
+          Recent completions (from CHANGELOG.md):
+          - MCP-first architecture migration
+          - Universal Semantic Chunking (ADR 0007)
+          - Hierarchical chunking implementation
+
+# Documentation sync status
+documentation_sources:
+  primary: "docs/"
+  structure: "Diataxis-compliant (tutorials, how-to, reference, explanation)"
+  last_major_update: "2026-01-30"
+
+  key_documents:
+    - path: "docs/project-context.md"
+      purpose: "AI agent implementation rules (45 rules)"
+      status: "current"
+    - path: "docs/architecture/README.md"
+      purpose: "System architecture overview"
+      status: "current"
+    - path: "docs/index.md"
+      purpose: "Documentation hub"
+      status: "current"
+    - path: "TODO.md"
+      purpose: "Prioritized backlog"
+      status: "current"
+    - path: "CHANGELOG.md"
+      purpose: "Completed work archive"
+      status: "current"
+
+  deprecated:
+    - path: "_bmad-output/project-knowledge/"
+      reason: "Superseded by docs/ - delete or ignore"

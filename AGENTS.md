@@ -9,7 +9,7 @@
 All AI agents working on Alexandria should read:
 
 **Primary Reference (MANDATORY):**
-- **[_bmad-output/project-context.md](_bmad-output/project-context.md)** - Critical implementation rules, technology stack, patterns, and conventions
+- **[docs/project-context.md](docs/project-context.md)** - Critical implementation rules, technology stack, patterns, and conventions
 
 **Project Documentation:**
 - **[README.md](README.md)** - Project overview, features, quick start
@@ -81,8 +81,8 @@ datasette "G:/My Drive/alexandria/metadata.db" --port 8002
 
 | Topic | Location |
 |-------|----------|
-| **Implementation rules** | [_bmad-output/project-context.md](_bmad-output/project-context.md) |
-| **Technology stack** | [_bmad-output/project-context.md](_bmad-output/project-context.md) |
+| **Implementation rules** | [docs/project-context.md](docs/project-context.md) |
+| **Technology stack** | [docs/project-context.md](docs/project-context.md) |
 | **Architecture decisions (ADRs)** | [docs/architecture/decisions/](docs/architecture/decisions/) |
 | **Architecture overview** | [docs/architecture/README.md](docs/architecture/README.md) |
 | **Script documentation** | [scripts/README.md](scripts/README.md) |
@@ -114,7 +114,7 @@ See [docs/architecture/mcp-server.md](docs/architecture/mcp-server.md)
 - Exception: Only use Croatian if explicitly requested
 
 ### Before Starting Work
-1. **Read** [_bmad-output/project-context.md](_bmad-output/project-context.md) for implementation rules
+1. **Read** [docs/project-context.md](docs/project-context.md) for implementation rules
 2. **Check** [TODO.md](TODO.md) for current tasks and context
 3. **Verify** working directory: `Alexandria/scripts`
 

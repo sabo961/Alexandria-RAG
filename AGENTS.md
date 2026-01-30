@@ -87,7 +87,7 @@ datasette "G:/My Drive/alexandria/metadata.db" --port 8002
 | **Architecture overview** | [docs/architecture/README.md](docs/architecture/README.md) |
 | **Script documentation** | [scripts/README.md](scripts/README.md) |
 | **Logging system** | [logs/README.md](logs/README.md) |
-| **Quick command reference** | [docs/guides/common-workflows.md](docs/guides/common-workflows.md) |
+| **Quick command reference** | [docs/how-to/common-workflows.md](docs/how-to/common-workflows.md) |
 | **Current tasks** | [TODO.md](TODO.md) |
 | **Project overview** | [README.md](README.md) |
 | **MCP Server docs** | [docs/architecture/mcp-server.md](docs/architecture/mcp-server.md) |

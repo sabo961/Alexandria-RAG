@@ -24,6 +24,8 @@ from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition,
 from sentence_transformers import SentenceTransformer
 import requests.exceptions
 
+from config import QDRANT_HOST, QDRANT_PORT
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -75,7 +77,7 @@ Connection error: {str(e)}
 # COLLECTION MANAGEMENT
 # ============================================================================
 
-def list_collections(host: str = 'localhost', port: int = 6333):
+def list_collections(host: str = QDRANT_HOST, port: int = QDRANT_PORT):
     """List all Qdrant collections with basic stats"""
     # Check connection first
     is_connected, error_msg = check_qdrant_connection(host, port)
@@ -105,8 +107,8 @@ def list_collections(host: str = 'localhost', port: int = 6333):
 
 def get_collection_stats(
     collection_name: str,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT
 ):
     """Get detailed statistics for a collection"""
     # Check connection first
@@ -164,8 +166,8 @@ def get_collection_stats(
 def copy_collection(
     source: str,
     target: str,
-    host: str = 'localhost',
-    port: int = 6333,
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT,
     filter_domain: Optional[str] = None
 ):
     """
@@ -373,8 +375,8 @@ def delete_collection_preserve_artifacts(collection_name: str, host: str, port: 
 
 def delete_collection(
     collection_name: str,
-    host: str = 'localhost',
-    port: int = 6333,
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT,
     confirm: bool = False,
     with_artifacts: bool = False
 ):
@@ -415,8 +417,8 @@ def delete_collection(
 def create_alias(
     collection_name: str,
     alias_name: str,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT
 ):
     """Create an alias for a collection"""
     client = QdrantClient(host=host, port=port)
@@ -441,8 +443,8 @@ def delete_points_by_filter(
     collection_name: str,
     domain: Optional[str] = None,
     book_title: Optional[str] = None,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT
 ):
     """Delete points from collection based on filter"""
     # Check connection first
@@ -492,8 +494,8 @@ def search_collection(
     query: str,
     limit: int = 10,
     domain_filter: Optional[str] = None,
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT
 ):
     """Search collection using semantic similarity"""
     # Check connection first
@@ -560,14 +562,14 @@ def main():
     )
     parser.add_argument(
         '--host',
-        default='192.168.0.151',
-        help='Qdrant host'
+        default=QDRANT_HOST,
+        help=f'Qdrant host (default: {QDRANT_HOST})'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=6333,
-        help='Qdrant port'
+        default=QDRANT_PORT,
+        help=f'Qdrant port (default: {QDRANT_PORT})'
     )
     parser.add_argument(
         '--limit',
@@ -577,7 +579,7 @@ def main():
     )
     parser.add_argument(
         '--domain',
-        help='Filter by domain'
+        help='(Deprecated) Filter by domain - no longer used'
     )
     parser.add_argument(
         '--book',
@@ -608,7 +610,7 @@ def main():
 
     elif args.command == 'copy':
         if len(args.args) < 2:
-            logger.error("Usage: qdrant_utils.py copy <source> <target> [--domain <domain>]")
+            logger.error("Usage: qdrant_utils.py copy <source> <target>")
             return
         copy_collection(args.args[0], args.args[1], args.host, args.port, args.domain)
 
@@ -626,13 +628,13 @@ def main():
 
     elif args.command == 'search':
         if len(args.args) < 2:
-            logger.error("Usage: qdrant_utils.py search <collection_name> <query> [--limit 10] [--domain <domain>]")
+            logger.error("Usage: qdrant_utils.py search <collection_name> <query> [--limit 10]")
             return
         search_collection(args.args[0], args.args[1], args.limit, args.domain, args.host, args.port)
 
     elif args.command == 'delete-points':
         if len(args.args) < 1:
-            logger.error("Usage: qdrant_utils.py delete-points <collection_name> --domain <domain> [--book <title>]")
+            logger.error("Usage: qdrant_utils.py delete-points <collection_name> --book <title>")
             return
         delete_points_by_filter(args.args[0], args.domain, args.book, args.host, args.port)
 

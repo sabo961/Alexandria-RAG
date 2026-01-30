@@ -36,6 +36,9 @@ requests>=2.31.0  # OpenRouter API calls
 # Utilities
 tqdm==4.66.1  # Progress bars (disabled globally via TQDM_DISABLE=1)
 
+# MCP Server
+mcp>=1.0.0  # Model Context Protocol SDK for Claude Code integration
+
 # GUI
 streamlit>=1.29.0  # Web interface (binds to 0.0.0.0:8501)
 

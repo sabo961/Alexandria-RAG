@@ -32,6 +32,7 @@ from ingest_books import (
     DOMAIN_CHUNK_SIZES
 )
 from qdrant_utils import search_collection
+from config import QDRANT_HOST, QDRANT_PORT
 
 logging.basicConfig(
     level=logging.INFO,
@@ -124,8 +125,8 @@ def experiment_chunking(
     custom_sizes: List[Tuple[int, int, int]] = None,
     domain: str = 'technical',
     collection_prefix: str = 'experiment',
-    host: str = 'localhost',
-    port: int = 6333
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT
 ):
     """
     Run chunking experiments with different strategies.
@@ -335,14 +336,14 @@ def main():
     parser.add_argument(
         '--host',
         type=str,
-        default='192.168.0.151',
-        help='Qdrant server host (default: 192.168.0.151)'
+        default=QDRANT_HOST,
+        help=f'Qdrant server host (default: {QDRANT_HOST})'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=6333,
-        help='Qdrant server port (default: 6333)'
+        default=QDRANT_PORT,
+        help=f'Qdrant server port (default: {QDRANT_PORT})'
     )
 
     args = parser.parse_args()

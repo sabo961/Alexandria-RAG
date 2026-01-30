@@ -12,6 +12,8 @@ from pathlib import Path
 from collections import Counter
 from typing import Dict, List, Tuple
 
+from config import CALIBRE_LIBRARY_PATH
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(message)s'
@@ -169,8 +171,8 @@ def main():
     parser.add_argument(
         '--directory',
         type=str,
-        default='G:\\My Drive\\alexandria',
-        help='Directory to scan (default: G:\\My Drive\\alexandria)'
+        default=CALIBRE_LIBRARY_PATH,
+        help=f'Directory to scan (default: {CALIBRE_LIBRARY_PATH})'
     )
     parser.add_argument(
         '--no-recursive',

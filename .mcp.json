@@ -7,6 +7,21 @@
         "--package=agentvibes",
         "agentvibes-mcp-server"
       ]
+    },
+    "alexandria": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "C:/Users/goran/source/repos/Temenos/Akademija/Alexandria",
+        "python",
+        "scripts/mcp_server.py"
+      ],
+      "env": {
+        "QDRANT_HOST": "192.168.0.151",
+        "QDRANT_PORT": "6333",
+        "CALIBRE_LIBRARY_PATH": "G:\\My Drive\\alexandria"
+      }
     }
   }
 }

@@ -27,6 +27,7 @@ from datetime import datetime
 
 from qdrant_client import QdrantClient
 from qdrant_utils import check_qdrant_connection
+from config import QDRANT_HOST, QDRANT_PORT
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,7 +76,7 @@ class CollectionManifest:
             'collections': {}
         }
 
-    def verify_collection_exists(self, collection_name: str, qdrant_host: str = '192.168.0.151', qdrant_port: int = 6333) -> bool:
+    def verify_collection_exists(self, collection_name: str, qdrant_host: str = QDRANT_HOST, qdrant_port: int = QDRANT_PORT) -> bool:
         """
         Verify collection exists in Qdrant. If not, reset manifest for this collection.
 
@@ -140,7 +141,7 @@ class CollectionManifest:
 
             # Header
             writer.writerow([
-                'Collection', 'Book Title', 'Author', 'Language', 'Domain', 'File Type',
+                'Collection', 'Book Title', 'Author', 'Language', 'File Type',
                 'Chunks', 'Size (MB)', 'File Name', 'Ingested At'
             ])
 
@@ -161,7 +162,6 @@ class CollectionManifest:
                         book['book_title'],
                         book['author'],
                         language,
-                        book['domain'],
                         file_type,
                         book['chunks_count'],
                         book['file_size_mb'],
@@ -171,7 +171,7 @@ class CollectionManifest:
 
             # Summary row
             writer.writerow([])
-            writer.writerow(['TOTAL', '', '', '', '', '',  # Extra '' for Language and File Type columns
+            writer.writerow(['TOTAL', '', '', '', '',
                            sum(c['total_chunks'] for c in self.manifest['collections'].values()),
                            sum(c['total_size_mb'] for c in self.manifest['collections'].values()),
                            '', ''])
@@ -183,7 +183,6 @@ class CollectionManifest:
         book_path: str,
         book_title: str,
         author: str,
-        domain: str,
         chunks_count: int,
         file_size_mb: float,
         ingested_at: Optional[str] = None,
@@ -194,7 +193,6 @@ class CollectionManifest:
         if collection_name not in self.manifest['collections']:
             self.manifest['collections'][collection_name] = {
                 'created_at': datetime.now().isoformat(),
-                'domain': domain,
                 'books': [],
                 'total_chunks': 0,
                 'total_size_mb': 0.0
@@ -222,7 +220,6 @@ class CollectionManifest:
             'file_name': Path(book_path).name,
             'book_title': book_title,
             'author': author,
-            'domain': domain,
             'file_type': file_type,
             'language': language or 'unknown',
             'chunks_count': chunks_count,
@@ -273,7 +270,6 @@ class CollectionManifest:
         logger.info("=" * 80)
         logger.info(f"📚 Collection: {collection_name}")
         logger.info("=" * 80)
-        logger.info(f"Domain: {collection.get('domain', 'N/A')}")
         logger.info(f"Created: {collection.get('created_at', 'N/A')}")
         logger.info(f"Total books: {len(collection['books'])}")
         logger.info(f"Total chunks: {collection['total_chunks']}")
@@ -292,7 +288,6 @@ class CollectionManifest:
             logger.info(f"\n{idx}. {book['book_title']}")
             logger.info(f"   Author: {book['author']}")
             logger.info(f"   File: {book['file_name']}")
-            logger.info(f"   Domain: {book['domain']}")
             logger.info(f"   Chunks: {book['chunks_count']}")
             logger.info(f"   Size: {book['file_size_mb']} MB")
             logger.info(f"   Ingested: {book['ingested_at'][:10]}")
@@ -320,7 +315,6 @@ class CollectionManifest:
 
         for name, collection in self.manifest['collections'].items():
             logger.info(f"📁 {name}")
-            logger.info(f"   Domain: {collection.get('domain', 'N/A')}")
             logger.info(f"   Books: {len(collection['books'])}")
             logger.info(f"   Chunks: {collection['total_chunks']}")
             logger.info(f"   Size: {collection['total_size_mb']:.2f} MB")
@@ -366,13 +360,11 @@ class CollectionManifest:
             payload = point.payload
             book_title = payload.get('book_title', 'Unknown')
             author = payload.get('author', 'Unknown')
-            domain = payload.get('domain', 'unknown')
 
             if book_title not in books:
                 books[book_title] = {
                     'title': book_title,
                     'author': author,
-                    'domain': domain,
                     'chunks': 0
                 }
             books[book_title]['chunks'] += 1
@@ -383,7 +375,6 @@ class CollectionManifest:
         if collection_name not in self.manifest['collections']:
             self.manifest['collections'][collection_name] = {
                 'created_at': datetime.now().isoformat(),
-                'domain': domain,
                 'books': [],
                 'total_chunks': 0,
                 'total_size_mb': 0.0
@@ -450,14 +441,14 @@ def main():
     )
     parser.add_argument(
         '--host',
-        default='192.168.0.151',
-        help='Qdrant host (for sync command)'
+        default=QDRANT_HOST,
+        help=f'Qdrant host (default: {QDRANT_HOST})'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=6333,
-        help='Qdrant port (for sync command)'
+        default=QDRANT_PORT,
+        help=f'Qdrant port (default: {QDRANT_PORT})'
     )
 
     args = parser.parse_args()

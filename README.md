@@ -12,27 +12,44 @@ Semantic RAG library that connects 9000 multidisciplinary books (technical, psyc
 
 ## Quick Start
 
-### GUI (Recommended)
-```bash
-streamlit run alexandria_app.py
-# Open browser to http://localhost:8501
-# Browse Calibre library, ingest books, query collection
+### MCP Server (Primary - via Claude Code)
+
+Configure `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "alexandria": {
+      "command": "uv",
+      "args": ["run", "--directory", "C:/path/to/Alexandria", "python", "scripts/mcp_server.py"],
+      "env": {
+        "QDRANT_HOST": "192.168.0.151",
+        "CALIBRE_LIBRARY_PATH": "G:\\My Drive\\alexandria"
+      }
+    }
+  }
+}
 ```
 
-### CLI (Advanced)
+**Usage:**
+```
+User: What does Silverston say about shipment patterns?
+Claude: [calls alexandria_query("shipment pattern", context_mode="contextual")]
+
+User: Ingest all Nietzsche books
+Claude: [calls alexandria_batch_ingest(author="Nietzsche", limit=10)]
+```
+
+### CLI (Secondary)
 ```bash
 cd scripts
 # Check what's been ingested
 python collection_manifest.py show alexandria
 
 # Query books
-python rag_query.py "your question here" --limit 5
-
-# Batch ingest
-python batch_ingest.py --directory ../ingest --domain technical
+python rag_query.py "your question here" --limit 5 --context-mode contextual
 ```
 
-**📖 For detailed guides:** See [docs/how-to-guides/common-workflows.md](docs/how-to-guides/common-workflows.md)
+**📖 For detailed guides:** See [docs/guides/common-workflows.md](docs/guides/common-workflows.md)
 
 ---
 
@@ -50,11 +67,11 @@ python batch_ingest.py --directory ../ingest --domain technical
 
 ## Key Features
 
-### 🖥️ Streamlit GUI
-- Calibre library browser with filters and pagination
-- Direct ingestion from Calibre (no file copying)
-- RAG-powered Q&A with OpenRouter LLM integration
-- Advanced query settings (similarity, temperature, reranking)
+### 🤖 MCP Server (Primary Interface)
+- Direct integration with Claude Code via Model Context Protocol
+- Query tools: `alexandria_query`, `alexandria_search`, `alexandria_book`, `alexandria_stats`
+- Ingest tools: `alexandria_ingest`, `alexandria_batch_ingest`, `alexandria_ingest_file`
+- Context modes: precise, contextual, comprehensive
 
 ### 🔧 Python CLI
 - Batch ingestion with automatic resume on failure
@@ -68,19 +85,19 @@ python batch_ingest.py --directory ../ingest --domain technical
 
 ### 🧠 Universal Semantic Chunking
 - Splits by semantic similarity, not word count
-- Domain-specific thresholds (philosophy vs technical)
-- Author-specific patterns (Mishima, Nietzsche, Cioran)
-- See [technical spec](docs/reference/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)
+- Configurable threshold, min/max chunk sizes
+- Hierarchical chunking (parent=chapter, child=semantic)
+- See [technical spec](docs/architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)
 
 ---
 
 ## Technology Stack
 
-- **GUI:** Streamlit (web interface, binds to 0.0.0.0:8501)
+- **Interface:** MCP Server (Model Context Protocol via FastMCP)
 - **Vector DB:** Qdrant (192.168.0.151:6333)
 - **Embeddings:** sentence-transformers (all-MiniLM-L6-v2, 384-dim)
-- **LLM:** OpenRouter API (configurable models)
-- **Testing:** pytest + Playwright (unit tests + browser UI tests)
+- **LLM:** OpenRouter API (optional, for RAG answers)
+- **Testing:** pytest (unit tests + integration tests)
 - **DB Explorer:** Datasette (web UI for Calibre SQLite exploration)
 - **Python:** 3.14+
 
@@ -143,67 +160,67 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 
 ### 🚀 For New Users
 - **[Quick Start](#quick-start)** - Get running in 5 minutes (above)
-- **[Common Workflows](docs/how-to-guides/common-workflows.md)** - Command cheat sheet
-- **[Track Ingestion Guide](docs/how-to-guides/track-ingestion.md)** - Track ingested books
-- **[Professional Setup Guide](docs/tutorials/professional-setup.md)** - Complete production guide
+- **[Common Workflows](docs/guides/common-workflows.md)** - Command cheat sheet
+- **[Track Ingestion Guide](docs/guides/track-ingestion.md)** - Track ingested books
+- **[Professional Setup Guide](docs/guides/professional-setup.md)** - Complete production guide
 
 ### 🤖 For AI Agents
 - **[AGENTS.md](AGENTS.md)** - Navigation hub (start here)
 - **[_bmad-output/project-context.md](_bmad-output/project-context.md)** - Critical rules & patterns (implementation bible)
 
 ### 🔒 Security
-- **[SECURITY.md](docs/SECURITY.md)** - XSS prevention, HTML sanitization, safe coding guidelines
-- **[Unsafe HTML Audit](docs/unsafe_html_audit.md)** - Complete audit of unsafe_allow_html usage
+- **[SECURITY.md](docs/security/SECURITY.md)** - XSS prevention, HTML sanitization, safe coding guidelines
+- **[Unsafe HTML Audit](docs/security/unsafe_html_audit.md)** - Complete audit of unsafe_allow_html usage
 
 ### 👨‍💻 For Contributors
 - **[TODO.md](TODO.md)** - Prioritized backlog (P0-P3)
 - **[CHANGELOG.md](CHANGELOG.md)** - Completed work archive
 
 ### 🛠️ Developer Tools
-- **[PowerShell Setup](docs/development/powershell-setup.md)** - Git/dotnet/npm/docker aliases + enhanced prompt
-- **[Git Workflow](docs/development/git-workflow.md)** - Branching strategy & Auto-Claude integration
+- **[PowerShell Setup](docs/guides/powershell-setup.md)** - Git/dotnet/npm/docker aliases + enhanced prompt
+- **[Git Workflow](docs/guides/git-workflow.md)** - Branching strategy & Auto-Claude integration
 
 ### 🏗️ For Architecture
-- **[Architecture Overview](docs/architecture/README.md)** - C4 diagrams + ADRs
+- **[Architecture Overview](docs/architecture/README.md)** - Complete system architecture
 - **[System Context](docs/architecture/c4/01-context.md)** - C4 Level 1
 - **[Containers](docs/architecture/c4/02-container.md)** - C4 Level 2
 - **[Components](docs/architecture/c4/03-component.md)** - C4 Level 3
 - **[ADRs](docs/architecture/decisions/README.md)** - Architecture Decision Records
-- **[Structurizr Workspace](docs/architecture/workspace.dsl)** - Interactive diagrams (run `scripts/start-structurizr.bat`)
+- **[MCP Server Reference](docs/architecture/mcp-server.md)** - Complete MCP tool documentation
 
 ### 🔬 Research
 - **[Project Proposal](docs/research/alexandria-qdrant-project-proposal.md)** - Original vision
 - **[Philosophical Chunking](docs/research/argument_based_chunking_for_philosophical_texts_alexandria_rag.md)** - Argument-based approach
-- **[Hierarchical Chunking](docs/backlog/Hierarchical Chunking for Alexandria RAG.md)** - Research proposal
 
 ---
 
-## 📚 Generated Documentation (AI-Ready)
+## 📚 Documentation Structure
 
-**Generated:** 2026-01-26 by `document-project` workflow (exhaustive scan)
-**Total:** 7 files, 9,614 words (~38 pages), 89 KB
+| Section | Purpose |
+|---------|---------|
+| **[docs/index.md](docs/index.md)** | Documentation hub - Start here |
+| **[docs/architecture/](docs/architecture/)** | C4 diagrams, ADRs, technical specs |
+| **[docs/guides/](docs/guides/)** | Setup & workflow guides |
+| **[docs/ideas/](docs/ideas/)** | Future visions (not yet in TODO) |
+| **[docs/backlog/](docs/backlog/)** | Detailed docs for active TODO items |
+| **[docs/research/](docs/research/)** | Research papers and analysis |
 
-| Document | Size | Purpose |
-|----------|------|---------|
-| **[docs/index.md](docs/index.md)** | 13 KB | 🔹 **Master documentation index** - Start here for navigation |
-| **[docs/architecture.md](docs/architecture.md)** | 21 KB | Complete system architecture (data flow, algorithms, constraints) |
-| **[docs/project-overview.md](docs/project-overview.md)** | 12 KB | Executive summary & quick reference |
-| **[docs/data-models-alexandria.md](docs/data-models-alexandria.md)** | 14 KB | API reference for all scripts/ modules |
-| **[docs/source-tree-analysis.md](docs/source-tree-analysis.md)** | 15 KB | Annotated codebase structure with entry points |
-| **[docs/development-guide-alexandria.md](docs/development-guide-alexandria.md)** | 12 KB | Setup, workflow, CLI usage, debugging |
-| **[docs/project-scan-report.json](docs/project-scan-report.json)** | 2.4 KB | Workflow state & scan metadata |
+**Key documents:**
+- **[MCP Server Reference](docs/architecture/mcp-server.md)** - Complete tool documentation
+- **[Architecture Overview](docs/architecture/README.md)** - System design
+- **[Common Workflows](docs/guides/common-workflows.md)** - Quick reference
 
-**Primary entry point:** [docs/index.md](docs/index.md) - Master index with links to all documentation
-
-**Why useful:**
-- ✅ AI agents get complete codebase context (API reference, architecture, data models)
-- ✅ New developers can onboard without Q&A sessions
-- ✅ BMad PRD workflow can reference detailed architecture
-- ✅ Future you (6 months from now) remembers how everything works
+**For AI agents:**
+- **[Project Context](_bmad-output/project-context.md)** - Implementation rules
+- **[AGENTS.md](AGENTS.md)** - Navigation hub
 
 ---
 
 ## Configuration
+
+**MCP Server:**
+- Configure in `.mcp.json`
+- Entry point: `scripts/mcp_server.py`
 
 **Qdrant Server:**
 - Host: 192.168.0.151
@@ -213,11 +230,10 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 **Python Environment:**
 - Version: Python 3.14+
 - Dependencies: requirements.txt
-- Virtual Env: Not used (system Python)
+- Package manager: uv (recommended)
 
-**OpenRouter API:**
-- Configure in `.streamlit/secrets.toml` (gitignored)
-- Or set `OPENROUTER_API_KEY` environment variable
+**OpenRouter API (optional):**
+- Set `OPENROUTER_API_KEY` environment variable
 
 **For complete configuration details:** See [_bmad-output/project-context.md](_bmad-output/project-context.md)
 
@@ -227,11 +243,13 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 
 **Latest completed work:** See [CHANGELOG.md](CHANGELOG.md)
 
-**Recent features (2026-01-23):**
-- ✅ Qdrant health check on startup
-- ✅ Philosophical argument-based chunking
-- ✅ GUI polish + manifest bug fixes
-- ✅ Calibre integration enhancements
+**Recent features (2026-01-30):**
+- ✅ MCP-first architecture (simplified GUI for browsing)
+- ✅ Hierarchical chunking (parent/child chunks)
+- ✅ Context modes (precise, contextual, comprehensive)
+- ✅ Batch ingestion via MCP
+- ✅ Response patterns for RAG discipline (direct, synthesis, critical...)
+- ✅ Configurable chunking parameters
 
 **Active work:** See [TODO.md](TODO.md)
 
@@ -247,6 +265,6 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 
 ---
 
-**Last Updated:** 2026-01-25
-**Phase:** 1 - Production Ready
-**Status:** ✅ Streamlit GUI + Python CLI + Calibre Integration + RAG Query System
+**Last Updated:** 2026-01-30
+**Phase:** 2 - MCP-First
+**Status:** ✅ MCP Server + Python CLI + Calibre Integration + Hierarchical RAG

@@ -17,11 +17,11 @@ BASIC USAGE (CLI)
 Simple query:
     python rag_query.py "What does Silverston say about shipments?"
 
-With domain filter:
-    python rag_query.py "cognitive load" --domain psychology
-
 With similarity threshold:
     python rag_query.py "database design" --threshold 0.6
+
+Filter by book:
+    python rag_query.py "cognitive load" --book "Thinking, Fast and Slow"
 
 ADVANCED USAGE (CLI)
 --------------------
@@ -43,13 +43,10 @@ Use specific model:
 Combine all features:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database design patterns" \
-        --domain technical \
         --threshold 0.6 \
         --rerank \
-        --rerank-model "meta-llama/llama-3.2-3b-instruct:free" \
         --answer \
         --model "gpt-4o-mini" \
-        --fetch-multiplier 5 \
         --format json
 
 PYTHON MODULE USAGE
@@ -68,7 +65,6 @@ Simple retrieval:
 Full RAG with reranking:
     result = perform_rag_query(
         query="Explain database normalization",
-        domain_filter="technical",
         threshold=0.6,
         enable_reranking=True,
         rerank_model="meta-llama/llama-3.2-3b-instruct:free",
@@ -89,7 +85,6 @@ For AI agents calling this tool:
         query="user's question",
         collection_name="alexandria",
         limit=5,
-        domain_filter="technical",  # or psychology, philosophy, history, literature
         threshold=0.5
     )
 
@@ -121,7 +116,7 @@ Required:
 Search options:
     --collection NAME     Qdrant collection (default: alexandria)
     --limit N             Number of results (default: 5)
-    --domain DOMAIN       Filter by domain: technical, psychology, philosophy, history, literature
+    --book TITLE          Filter by book title
     --threshold FLOAT     Similarity threshold 0.0-1.0 (default: 0.5)
     --fetch-multiplier N  Fetch limit×N results for filtering (default: 3, min fetch: 20)
 
@@ -148,8 +143,8 @@ Output:
     --format FORMAT       Output format: markdown, text, json (default: markdown)
 
 Qdrant:
-    --host HOST           Qdrant host (default: 192.168.0.151)
-    --port PORT           Qdrant port (default: 6333)
+    --host HOST           Qdrant host (from config)
+    --port PORT           Qdrant port (from config)
 
 AVAILABLE MODELS
 ----------------
@@ -165,27 +160,17 @@ Paid models (better quality):
     anthropic/claude-3.5-sonnet
     anthropic/claude-3.5-haiku
 
-DOMAINS
--------
-Available domain filters:
-    technical     - Programming, databases, data modeling, engineering
-    psychology    - Psychology, therapy, human behavior
-    philosophy    - Philosophy, ethics, existentialism
-    history       - Historical works, biographies
-    literature    - Fiction, novels (Mishima, Murakami, etc.)
-
 EXAMPLES
 --------
 1. Basic semantic search:
     python rag_query.py "What is the shipment pattern?"
 
-2. Domain-filtered search:
-    python rag_query.py "cognitive load theory" --domain psychology --limit 3
+2. Search specific book:
+    python rag_query.py "cognitive load" --book "Thinking, Fast and Slow" --limit 3
 
 3. High-quality retrieval (with reranking):
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "database normalization" \
-        --domain technical \
         --threshold 0.6 \
         --rerank \
         --limit 5
@@ -193,14 +178,12 @@ EXAMPLES
 4. Full RAG answer:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "Explain Mishima's philosophy" \
-        --domain literature \
         --answer \
         --model "gpt-4o-mini"
 
 5. JSON output for scripting:
     export OPENROUTER_API_KEY="sk-or-v1-..."
     python rag_query.py "data modeling patterns" \
-        --domain technical \
         --answer \
         --format json > output.json
 
@@ -214,7 +197,7 @@ RETURN VALUES (Python module)
 ------------------------------
 RAGResult object with:
     .query            - Original query string
-    .results          - List of dicts with: score, book_title, author, domain, section_name, text
+    .results          - List of dicts with: score, book_title, author, section_name, text
     .answer           - Generated answer (if generate_llm_answer=True)
     .filtered_count   - Number of initial results before filtering
     .reranked         - Boolean, whether reranking was used
@@ -225,7 +208,6 @@ TIPS
 - Use reranking for critical queries where quality > speed
 - Free models are fast and good enough for most queries
 - Paid models (gpt-4o-mini) offer better answer quality
-- Domain filters significantly improve precision
 - JSON output is ideal for AI agents and scripting
 - Increase --fetch-multiplier (4-5) for better quality when using reranking
 - Lower --fetch-multiplier (2) for faster queries when quality is sufficient
@@ -234,7 +216,6 @@ TROUBLESHOOTING
 ---------------
 "No results above threshold":
     → Lower --threshold value (try 0.3)
-    → Remove --domain filter
     → Check if collection has relevant content
 
 "API key required":
@@ -242,8 +223,9 @@ TROUBLESHOOTING
     → Get key from https://openrouter.ai/keys
 
 "Qdrant connection error":
-    → Check if Qdrant is running: http://192.168.0.151:6333
+    → Check if Qdrant is running (see .env for host)
     → Verify --host and --port parameters
+    → Run: python scripts/configure.py --test
 
 ARCHITECTURE
 ------------
@@ -259,10 +241,13 @@ Single source of truth for RAG logic.
 import argparse
 import logging
 import os
-from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
+from typing import List, Optional, Dict, Any, Literal
+from dataclasses import dataclass, field
 
 from qdrant_client import QdrantClient
+
+# Import from central config
+from config import QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION, OPENROUTER_API_KEY
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from ingest_books import generate_embeddings
 
@@ -284,6 +269,12 @@ class RAGResult:
     initial_count: int = 0
     error: Optional[str] = None
 
+    # Hierarchical metadata
+    context_mode: str = "precise"
+    parent_chunks: List[Dict[str, Any]] = field(default_factory=list)
+    total_context_tokens: int = 0
+    hierarchy_stats: Dict[str, Any] = field(default_factory=dict)
+
     @property
     def sources(self) -> List[Dict[str, Any]]:
         """Alias for results (for backward compatibility with GUI)"""
@@ -294,15 +285,20 @@ def search_qdrant(
     query: str,
     collection_name: str,
     limit: int,
-    domain_filter: Optional[str],
     book_filter: Optional[str],
     threshold: float,
     host: str,
     port: int,
-    fetch_multiplier: int = 3
+    fetch_multiplier: int = 3,
+    chunk_level_filter: Optional[str] = None  # NEW: Filter by chunk_level (child/parent)
 ) -> tuple[List[Any], int]:
     """
     Search Qdrant and apply similarity threshold filtering.
+
+    Args:
+        chunk_level_filter: If set, filter to only "child" or "parent" chunks.
+                           For hierarchical retrieval, use "child" to search
+                           only semantic chunks (not chapter-level parents).
 
     Returns:
         (filtered_results, initial_count)
@@ -315,16 +311,19 @@ def search_qdrant(
 
     # Build filter
     conditions = []
-    if domain_filter and domain_filter != "all":
-        conditions.append(
-            FieldCondition(key="domain", match=MatchValue(value=domain_filter))
-        )
-        logger.info(f"📚 Filtering by domain: {domain_filter}")
     if book_filter:
         conditions.append(
             FieldCondition(key="book_title", match=MatchValue(value=book_filter))
         )
         logger.info(f"📖 Filtering by book: {book_filter}")
+
+    # NEW: Filter by chunk level (for hierarchical retrieval)
+    if chunk_level_filter:
+        conditions.append(
+            FieldCondition(key="chunk_level", match=MatchValue(value=chunk_level_filter))
+        )
+        logger.info(f"📊 Filtering by chunk_level: {chunk_level_filter}")
+
     query_filter = Filter(must=conditions) if conditions else None
 
     # Fetch more results than needed for better filtering/reranking
@@ -348,6 +347,64 @@ def search_qdrant(
         logger.info(f"🎯 Filtered to {len(filtered_results)} results above threshold ({threshold:.2f})")
 
     return filtered_results, len(initial_results)
+
+
+def fetch_parent_chunks(
+    child_results: List[Any],
+    collection_name: str,
+    client: QdrantClient
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Fetch parent chunk content for hierarchical context.
+
+    Args:
+        child_results: List of child chunk search results
+        collection_name: Qdrant collection name
+        client: Qdrant client instance
+
+    Returns:
+        Dict mapping parent_id -> parent chunk data (text, title, full_text)
+    """
+    # Collect unique parent IDs from child results
+    parent_ids = set()
+    for result in child_results:
+        parent_id = result.payload.get('parent_id')
+        if parent_id:
+            parent_ids.add(parent_id)
+
+    if not parent_ids:
+        logger.debug("No parent IDs found in child results")
+        return {}
+
+    logger.info(f"📖 Fetching {len(parent_ids)} parent chunks for context...")
+
+    # Fetch parent chunks by ID
+    parent_chunks = {}
+    try:
+        # Retrieve points by their IDs
+        points = client.retrieve(
+            collection_name=collection_name,
+            ids=list(parent_ids),
+            with_payload=True
+        )
+
+        for point in points:
+            parent_chunks[str(point.id)] = {
+                'id': str(point.id),
+                'text': point.payload.get('text', ''),
+                'full_text': point.payload.get('full_text', point.payload.get('text', '')),
+                'section_name': point.payload.get('section_name', 'Unknown'),
+                'book_title': point.payload.get('book_title', 'Unknown'),
+                'author': point.payload.get('author', 'Unknown'),
+                'chunk_level': point.payload.get('chunk_level', 'parent')
+            }
+
+        logger.info(f"✅ Retrieved {len(parent_chunks)} parent chunks")
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch parent chunks: {e}")
+
+    return parent_chunks
 
 
 def rerank_with_llm(
@@ -422,7 +479,8 @@ def generate_answer(
     results: List[Any],
     model: str,
     openrouter_api_key: str,
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    system_prompt: Optional[str] = None
 ) -> str:
     """
     Generate answer using OpenRouter LLM.
@@ -433,6 +491,7 @@ def generate_answer(
         model: OpenRouter model ID
         openrouter_api_key: API key
         temperature: Controls randomness (0.0-2.0)
+        system_prompt: Optional custom system prompt (overrides default)
 
     Returns:
         Generated answer text
@@ -451,12 +510,13 @@ def generate_answer(
     rag_context = "\n---\n".join(context_parts)
 
     # Build prompt
-    system_prompt = (
+    default_system_prompt = (
         "You are Alexandria, a helpful assistant with access to a knowledge base of books. "
         "Answer the user's question based on the provided context from the knowledge base. "
         "If the context doesn't contain enough information, say so. "
         "Always cite your sources by mentioning the book title and author."
     )
+    effective_system_prompt = system_prompt if system_prompt else default_system_prompt
 
     user_prompt = f"Context from knowledge base:\n\n{rag_context}\n\nUser Question: {query}\n\nPlease provide a comprehensive answer based on the context above."
 
@@ -473,7 +533,7 @@ def generate_answer(
         json={
             "model": model,
             "messages": [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": effective_system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": temperature
@@ -495,7 +555,6 @@ def perform_rag_query(
     query: str,
     collection_name: str = 'alexandria',
     limit: int = 5,
-    domain_filter: Optional[str] = None,
     book_filter: Optional[str] = None,
     threshold: float = 0.5,
     enable_reranking: bool = False,
@@ -503,19 +562,21 @@ def perform_rag_query(
     generate_llm_answer: bool = False,
     answer_model: Optional[str] = None,
     openrouter_api_key: Optional[str] = None,
-    host: str = '192.168.0.151',
-    port: int = 6333,
+    host: str = QDRANT_HOST,
+    port: int = QDRANT_PORT,
     fetch_multiplier: int = 3,
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    context_mode: Literal["precise", "contextual", "comprehensive"] = "precise",
+    system_prompt: Optional[str] = None
 ) -> RAGResult:
     """
-    Unified RAG query function.
+    Unified RAG query function with hierarchical context support.
 
     Args:
         query: Natural language question
         collection_name: Qdrant collection to search
         limit: Number of final results to return
-        domain_filter: Optional domain filter (technical, psychology, etc.)
+        book_filter: Optional filter by book title
         threshold: Similarity score threshold (0.0-1.0)
         enable_reranking: Whether to rerank with LLM
         rerank_model: Model for reranking (required if enable_reranking=True)
@@ -527,6 +588,11 @@ def perform_rag_query(
         fetch_multiplier: How many times 'limit' to fetch from Qdrant (default: 3)
                          Fetches limit * fetch_multiplier results for better filtering/reranking
                          Min fetch is always 20 to ensure quality pool
+        context_mode: Hierarchical context retrieval mode:
+                     - "precise": Return only matched child chunks (default, fastest)
+                     - "contextual": Include parent chapter context for each match
+                     - "comprehensive": Include parent + sibling chunks (most context)
+        system_prompt: Optional custom system prompt for answer generation (overrides default)
 
     Returns:
         RAGResult object with results and optional answer
@@ -540,17 +606,21 @@ def perform_rag_query(
         raise ValueError("openrouter_api_key required for LLM features")
 
     # Step 1: Search Qdrant with threshold filtering
+    # For hierarchical collections, search only child chunks (semantic segments)
+    # Parent chunks (chapters) are retrieved separately for context
+    chunk_level = "child" if context_mode != "precise" else None
+
     try:
         filtered_results, initial_count = search_qdrant(
             query=query,
             collection_name=collection_name,
             limit=limit,
-            domain_filter=domain_filter,
             book_filter=book_filter,
             threshold=threshold,
             host=host,
             port=port,
-            fetch_multiplier=fetch_multiplier
+            fetch_multiplier=fetch_multiplier,
+            chunk_level_filter=chunk_level
         )
     except Exception as e:
         logger.error(f"Qdrant search failed: {str(e)}")
@@ -562,6 +632,12 @@ def perform_rag_query(
             reranked=False,
             error=f"Qdrant search failed: {str(e)}"
         )
+
+    # Step 1b: Fetch parent chunks for contextual/comprehensive modes
+    parent_chunks = {}
+    if context_mode in ("contextual", "comprehensive") and filtered_results:
+        client = QdrantClient(host=host, port=port)
+        parent_chunks = fetch_parent_chunks(filtered_results, collection_name, client)
 
     if len(filtered_results) == 0:
         logger.warning(f"⚠️ No results above similarity threshold {threshold:.2f}")
@@ -593,18 +669,42 @@ def perform_rag_query(
         final_results = filtered_results[:limit]
         reranked = False
 
-    # Convert results to dict format
+    # Convert results to dict format with hierarchical context
     results_data = []
+    total_context_tokens = 0
+
     for result in final_results:
         p = result.payload
-        results_data.append({
+        result_dict = {
             'score': result.score,
             'book_title': p.get('book_title', 'Unknown'),
             'author': p.get('author', 'Unknown'),
-            'domain': p.get('domain', 'Unknown'),
             'section_name': p.get('section_name', 'Unknown'),
-            'text': p.get('text', '')
-        })
+            'text': p.get('text', ''),
+            'chunk_level': p.get('chunk_level', 'unknown'),
+            'parent_id': p.get('parent_id')
+        }
+
+        # Add parent context if available
+        parent_id = p.get('parent_id')
+        if parent_id and parent_id in parent_chunks:
+            parent = parent_chunks[parent_id]
+            result_dict['parent_context'] = {
+                'section_name': parent.get('section_name', 'Unknown'),
+                'text': parent.get('text', ''),  # Truncated for embedding
+                'full_text': parent.get('full_text', '')  # Full chapter text
+            }
+            # Estimate tokens (rough: 1.3 tokens per word)
+            total_context_tokens += len(parent.get('full_text', '').split()) * 1.3
+
+        results_data.append(result_dict)
+
+    # Build hierarchy stats
+    hierarchy_stats = {
+        'context_mode': context_mode,
+        'parent_chunks_fetched': len(parent_chunks),
+        'unique_chapters': len(set(r.get('parent_id') for r in results_data if r.get('parent_id')))
+    }
 
     # Step 3: Optional answer generation
     answer = None
@@ -615,7 +715,8 @@ def perform_rag_query(
                 results=final_results,
                 model=answer_model,
                 openrouter_api_key=openrouter_api_key,
-                temperature=temperature
+                temperature=temperature,
+                system_prompt=system_prompt
             )
         except Exception as e:
             logger.error(f"Failed to generate answer: {str(e)}")
@@ -626,7 +727,11 @@ def perform_rag_query(
                 filtered_count=len(filtered_results),
                 initial_count=initial_count,
                 reranked=reranked,
-                error=str(e)
+                error=str(e),
+                context_mode=context_mode,
+                parent_chunks=list(parent_chunks.values()),
+                total_context_tokens=int(total_context_tokens),
+                hierarchy_stats=hierarchy_stats
             )
 
     return RAGResult(
@@ -635,7 +740,11 @@ def perform_rag_query(
         answer=answer,
         filtered_count=len(filtered_results),
         initial_count=initial_count,
-        reranked=reranked
+        reranked=reranked,
+        context_mode=context_mode,
+        parent_chunks=list(parent_chunks.values()),
+        total_context_tokens=int(total_context_tokens),
+        hierarchy_stats=hierarchy_stats
     )
 
 
@@ -659,6 +768,10 @@ def print_results(result: RAGResult, format: str = 'markdown'):
         print(f"\n**Query:** {result.query}")
         print(f"**Retrieved:** {len(result.results)} chunks (filtered from {result.filtered_count})")
         print(f"**Reranked:** {'Yes' if result.reranked else 'No'}")
+        print(f"**Context Mode:** {result.context_mode}")
+        if result.hierarchy_stats:
+            stats = result.hierarchy_stats
+            print(f"**Chapters:** {stats.get('unique_chapters', 0)} unique chapters, {stats.get('parent_chunks_fetched', 0)} parent chunks fetched")
 
         if result.answer:
             print("\n## 💡 Answer\n")
@@ -669,8 +782,13 @@ def print_results(result: RAGResult, format: str = 'markdown'):
             print(f"### Source {idx} (Relevance: {r['score']:.4f})")
             print(f"- **Book:** {r['book_title']}")
             print(f"- **Author:** {r['author']}")
-            print(f"- **Domain:** {r['domain']}")
             print(f"- **Section:** {r['section_name']}")
+
+            # Show chapter context if available (contextual/comprehensive mode)
+            if r.get('parent_context'):
+                parent = r['parent_context']
+                print(f"- **Chapter:** {parent.get('section_name', 'Unknown')}")
+
             print(f"\n> {r['text'][:500]}{'...' if len(r['text']) > 500 else ''}\n")
             print("---\n")
 
@@ -697,7 +815,6 @@ def main():
     # Search options
     parser.add_argument('--collection', type=str, default='alexandria', help='Qdrant collection')
     parser.add_argument('--limit', type=int, default=5, help='Number of results')
-    parser.add_argument('--domain', type=str, help='Filter by domain')
     parser.add_argument('--book', type=str, help='Filter by book title')
     parser.add_argument('--threshold', type=float, default=0.5, help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--fetch-multiplier', type=int, default=3,
@@ -717,8 +834,13 @@ def main():
     parser.add_argument('--format', type=str, choices=['markdown', 'text', 'json'],
                        default='markdown', help='Output format')
 
+    # Hierarchical context
+    parser.add_argument('--context-mode', type=str, choices=['precise', 'contextual', 'comprehensive'],
+                       default='precise', help='Context retrieval mode: precise (child chunks only), '
+                       'contextual (+ chapter context), comprehensive (+ siblings)')
+
     # Qdrant
-    parser.add_argument('--host', type=str, default='192.168.0.151', help='Qdrant host')
+    parser.add_argument('--host', type=str, default=QDRANT_HOST, help=f'Qdrant host (default: {QDRANT_HOST})')
     parser.add_argument('--port', type=int, default=6333, help='Qdrant port')
 
     args = parser.parse_args()
@@ -731,7 +853,6 @@ def main():
             query=args.query,
             collection_name=args.collection,
             limit=args.limit,
-            domain_filter=args.domain,
             book_filter=args.book,
             threshold=args.threshold,
             enable_reranking=args.rerank,
@@ -741,7 +862,8 @@ def main():
             openrouter_api_key=api_key,
             host=args.host,
             port=args.port,
-            fetch_multiplier=args.fetch_multiplier
+            fetch_multiplier=args.fetch_multiplier,
+            context_mode=args.context_mode
         )
 
         print_results(result, format=args.format)

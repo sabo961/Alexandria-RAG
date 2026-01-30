@@ -1,0 +1,133 @@
+{
+  "synthesis": [
+    {
+      "id": "cross_perspective",
+      "name": "Cross-perspective synthesis",
+      "template": "Compare different perspectives from the sources on this topic. Use at least two different sources. Explicitly label each perspective with its source. Find similarities, contradictions, and unexpected connections. If a perspective is not supported by retrieved sources, explicitly state that.",
+      "temperature": 0.7,
+      "max_temperature": 0.75,
+      "use_case": "When you have multiple sources on the same topic",
+      "min_sources": 2
+    },
+    {
+      "id": "theory_to_practice",
+      "name": "Theory to practice",
+      "template": "How would the principles from these sources apply to a real-world situation? Cite which source supports each principle. Give concrete examples grounded in the source material. If practical applications are not discussed in sources, acknowledge this gap.",
+      "temperature": 0.7,
+      "max_temperature": 0.75,
+      "use_case": "When you need practical application of theory",
+      "min_sources": 1
+    },
+    {
+      "id": "build_mental_model",
+      "name": "Build mental model",
+      "template": "Based on the sources, construct a mental model or framework for understanding this topic. Label each component with its source. What are the key components and how do they relate? Only include elements explicitly present in retrieved sources.",
+      "temperature": 0.6,
+      "max_temperature": 0.75,
+      "use_case": "When you want to deeply understand a concept",
+      "min_sources": 1
+    }
+  ],
+  "extraction": [
+    {
+      "id": "key_principles",
+      "name": "Extract key principles",
+      "template": "Extract 3-5 key principles from the retrieved sources. For each principle provide: (1) the claim in one sentence, (2) the source [Author, Title], (3) whether it appears in single or multiple sources. Do not add principles not present in sources.",
+      "temperature": 0.3,
+      "max_temperature": 0.4,
+      "use_case": "When you need a summary, not elaboration"
+    },
+    {
+      "id": "actionable_steps",
+      "name": "Actionable steps",
+      "template": "Based only on the retrieved sources, define concrete actionable steps. For each step: (1) the action, (2) source citation. If the sources don't provide actionable guidance, explicitly state this limitation.",
+      "temperature": 0.4,
+      "max_temperature": 0.4,
+      "use_case": "When you need a TODO list, not theory"
+    },
+    {
+      "id": "tldr",
+      "name": "TL;DR summary",
+      "template": "Summarize the key insights from retrieved sources in 2-3 sentences. Cite which source each insight comes from. If sources don't adequately cover the query, say so.",
+      "temperature": 0.3,
+      "max_temperature": 0.4,
+      "use_case": "Quick overview"
+    }
+  ],
+  "critical": [
+    {
+      "id": "find_contradictions",
+      "name": "Find contradictions",
+      "template": "Examine the retrieved sources for contradictions. If contradictions exist, explain what they are and cite both sources. If NO contradiction exists in the retrieved texts, explicitly state: 'No contradictions found in the retrieved sources.' Do not invent contradictions.",
+      "temperature": 0.4,
+      "max_temperature": 0.5,
+      "use_case": "When validating information",
+      "min_sources": 2
+    },
+    {
+      "id": "steel_man",
+      "name": "Steel man + critique",
+      "template": "First present the strongest version of the argument as found in the sources (cite them). Then critically analyze weaknesses, distinguishing between: (a) weaknesses acknowledged in sources, (b) your analytical observations. If sources don't contain enough material for critique, state this.",
+      "temperature": 0.5,
+      "max_temperature": 0.6,
+      "use_case": "When you want deep analysis",
+      "min_sources": 1
+    },
+    {
+      "id": "assumptions",
+      "name": "Surface assumptions",
+      "template": "What assumptions do the authors make in the retrieved sources? Cite specific passages. Are these assumptions valid? If the sources don't reveal clear assumptions, acknowledge this rather than speculating.",
+      "temperature": 0.5,
+      "max_temperature": 0.5,
+      "use_case": "Critical thinking exercise"
+    }
+  ],
+  "creative": [
+    {
+      "id": "what_if",
+      "name": "What if...",
+      "template": "Based on ideas from the retrieved sources, explore: What if we took this idea to its logical extreme? What unexpected consequences might emerge? You may extrapolate beyond sources, but anchor starting points in cited material.",
+      "temperature": 0.9,
+      "use_case": "Creative exploration",
+      "rag_mode": "soft",
+      "note": "Creative patterns do not guarantee strict source-faithfulness"
+    },
+    {
+      "id": "devil_advocate",
+      "name": "Devil's advocate",
+      "template": "Argue against the main thesis in the sources. Start by citing the thesis and its source, then construct counter-arguments. Counter-arguments may draw on reasoning beyond sources, but clearly distinguish source-based vs. generated arguments.",
+      "temperature": 0.7,
+      "use_case": "Test robustness of ideas",
+      "rag_mode": "soft",
+      "note": "Creative patterns do not guarantee strict source-faithfulness"
+    }
+  ],
+  "direct": [
+    {
+      "id": "just_answer",
+      "name": "Just answer",
+      "template": "Answer the question using ONLY the retrieved sources. Cite which source supports your answer. If the answer is not present in retrieved sources, explicitly state: 'The retrieved sources do not contain information to answer this question.' Do not use knowledge outside the sources.",
+      "temperature": 0.3,
+      "max_temperature": 0.4,
+      "use_case": "Simple factual query"
+    }
+  ],
+  "diagnostic": [
+    {
+      "id": "source_coverage",
+      "name": "Source coverage report",
+      "template": "For each claim in your answer, list: (1) the claim, (2) which retrieved source supports it, (3) confidence level (direct quote / paraphrase / inference). Then list any retrieved sources that were NOT used and briefly explain why.",
+      "temperature": 0.2,
+      "max_temperature": 0.3,
+      "use_case": "Debug retrieval quality - shows which sources contributed to answer"
+    },
+    {
+      "id": "retrieval_gaps",
+      "name": "Retrieval gap analysis",
+      "template": "Analyze what information would be needed to fully answer this query. Compare against what was actually retrieved. List: (1) query aspects well-covered by sources, (2) query aspects with partial coverage, (3) query aspects with no coverage. Do not fill gaps with external knowledge.",
+      "temperature": 0.2,
+      "max_temperature": 0.3,
+      "use_case": "Debug retrieval quality - identifies what's missing"
+    }
+  ]
+}

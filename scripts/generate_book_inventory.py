@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import List, Dict
 from datetime import datetime
 
+from config import CALIBRE_LIBRARY_PATH
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(message)s'
@@ -160,8 +162,8 @@ def main():
     parser.add_argument(
         '--directory',
         type=str,
-        default='G:\\My Drive\\alexandria',
-        help='Calibre library directory (default: G:\\My Drive\\alexandria)'
+        default=CALIBRE_LIBRARY_PATH,
+        help=f'Calibre library directory (default: {CALIBRE_LIBRARY_PATH})'
     )
     parser.add_argument(
         '--output',

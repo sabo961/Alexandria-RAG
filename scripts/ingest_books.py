@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
 import logging
-from scripts.calibre_db import CalibreDB # Import CalibreDB
+from calibre_db import CalibreDB # Import CalibreDB
 
 # Book parsing libraries
 import ebooklib
@@ -32,10 +32,16 @@ from sentence_transformers import SentenceTransformer
 # Qdrant
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from scripts.qdrant_utils import check_qdrant_connection
+from qdrant_utils import check_qdrant_connection
 
 # Universal Semantic Chunking
 from universal_chunking import UniversalChunker
+
+# Hierarchical Chunking
+from chapter_detection import detect_chapters
+
+# Central configuration
+from config import QDRANT_HOST, QDRANT_PORT, CALIBRE_LIBRARY_PATH
 
 # Setup logging - configurable via ALEXANDRIA_LOG_LEVEL environment variable
 # Usage: export ALEXANDRIA_LOG_LEVEL=DEBUG or ALEXANDRIA_LOG_LEVEL=INFO
@@ -47,10 +53,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-logger = logging.getLogger(__name__)
 
-CALIBRE_LIBRARY_PATH = "G:\\My Drive\\alexandria" # Calibre library path
-calibre_db_instance = None # Lazy load
+# Lazy load Calibre DB (uses CALIBRE_LIBRARY_PATH from config)
+calibre_db_instance = None
 
 
 # ============================================================================ 
@@ -142,8 +147,23 @@ def extract_text(filepath: str) -> Tuple[str, Dict]:
     elif ext in ['.txt', '.md']:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             text = f.read()
-        return text, {'title': Path(filepath).stem, 'author': 'Unknown', 'format': 'TXT'}
-    
+        fmt = 'MD' if ext == '.md' else 'TXT'
+        return text, {'title': Path(filepath).stem, 'author': 'Unknown', 'format': fmt}
+
+    elif ext in ['.html', '.htm']:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        soup = BeautifulSoup(content, 'html.parser')
+        # Try to get title from <title> tag
+        title_tag = soup.find('title')
+        title = title_tag.get_text(strip=True) if title_tag else Path(filepath).stem
+        # Try to get author from meta tag
+        author_meta = soup.find('meta', attrs={'name': 'author'})
+        author = author_meta.get('content', 'Unknown') if author_meta else 'Unknown'
+        # Extract text content
+        text = soup.get_text(separator='\n', strip=True)
+        return text, {'title': title, 'author': author, 'format': 'HTML'}
+
     else:
         raise ValueError(f"Unsupported format: {ext}")
 
@@ -217,7 +237,6 @@ def generate_embeddings(texts: List[str]) -> List[List[float]]:
 def upload_to_qdrant(
     chunks: List[Dict],
     embeddings: List[List[float]],
-    domain: str,
     collection_name: str,
     qdrant_host: str,
     qdrant_port: int
@@ -286,16 +305,12 @@ Collection error: {str(e)}
             vector=embedding,
             payload={
                 "text": chunk['text'],
-                "book_title": chunk.get('book_title', 'Unknown'),
+                "book_title": chunk.get('title', chunk.get('book_title', 'Unknown')),
                 "author": chunk.get('author', 'Unknown'),
-                "domain": domain,
+                "section_name": chunk.get('section_name', ''),
                 "language": chunk.get('language', 'unknown'),
                 "ingested_at": datetime.now().isoformat(),
-                "strategy": "universal-semantic",
-                "metadata": {
-                    "source": chunk.get('book_title', 'Unknown'),
-                    "domain": domain
-                }
+                "strategy": "universal-semantic"
             }
         ))
 
@@ -320,6 +335,134 @@ Upload error: {str(e)}
 
     logger.info(f"✅ Uploaded {len(points)} semantic chunks to '{collection_name}'")
     return {'success': True, 'uploaded': len(points)}
+
+
+def upload_hierarchical_to_qdrant(
+    parent_chunks: List[Dict],
+    parent_embeddings: List[List[float]],
+    child_chunks: List[Dict],
+    child_embeddings: List[List[float]],
+    collection_name: str,
+    qdrant_host: str,
+    qdrant_port: int
+) -> Dict:
+    """
+    Upload hierarchical chunks (parents + children) to Qdrant.
+
+    Parents are uploaded first, then children with parent_id references.
+
+    Returns:
+        Dict with 'success', 'parent_count', 'child_count', 'error'
+    """
+    if not parent_chunks and not child_chunks:
+        return {'success': True, 'parent_count': 0, 'child_count': 0}
+
+    # Check connection
+    is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
+    if not is_connected:
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+
+    try:
+        client = QdrantClient(host=qdrant_host, port=qdrant_port)
+    except Exception as e:
+        logger.error(f"QdrantClient instantiation failed: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+    # Ensure collection exists
+    try:
+        collections = [c.name for c in client.get_collections().collections]
+        if collection_name not in collections:
+            # Use parent embedding size (should be same as child)
+            vector_size = len(parent_embeddings[0]) if parent_embeddings else len(child_embeddings[0])
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
+            )
+            logger.info(f"Created collection '{collection_name}'")
+    except Exception as e:
+        logger.error(f"Collection operation failed: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+    # Build parent points
+    parent_points = []
+    for chunk, embedding in zip(parent_chunks, parent_embeddings):
+        parent_points.append(PointStruct(
+            id=chunk['id'],  # Use pre-assigned UUID
+            vector=embedding,
+            payload={
+                "text": chunk.get('text', ''),
+                "full_text": chunk.get('full_text', chunk.get('text', '')),
+                "book_title": chunk.get('book_title', 'Unknown'),
+                "author": chunk.get('author', 'Unknown'),
+                "section_name": chunk.get('section_name', ''),
+                "section_index": chunk.get('section_index', 0),
+                "language": chunk.get('language', 'unknown'),
+                "chunk_level": "parent",
+                "child_count": chunk.get('child_count', 0),
+                "token_count": chunk.get('token_count', 0),
+                "ingested_at": datetime.now().isoformat(),
+                "strategy": "hierarchical"
+            }
+        ))
+
+    # Build child points
+    child_points = []
+    for chunk, embedding in zip(child_chunks, child_embeddings):
+        child_points.append(PointStruct(
+            id=str(uuid.uuid4()),
+            vector=embedding,
+            payload={
+                "text": chunk.get('text', ''),
+                "book_title": chunk.get('book_title', 'Unknown'),
+                "author": chunk.get('author', 'Unknown'),
+                "section_name": chunk.get('section_name', ''),
+                "language": chunk.get('language', 'unknown'),
+                "chunk_level": "child",
+                "parent_id": chunk.get('parent_id', ''),
+                "sequence_index": chunk.get('sequence_index', 0),
+                "sibling_count": chunk.get('sibling_count', 0),
+                "token_count": chunk.get('token_count', len(chunk.get('text', '').split())),
+                "ingested_at": datetime.now().isoformat(),
+                "strategy": "universal-semantic"
+            }
+        ))
+
+    # Upload parents first
+    try:
+        for i in range(0, len(parent_points), 100):
+            client.upsert(collection_name=collection_name, points=parent_points[i:i+100])
+        logger.info(f"✅ Uploaded {len(parent_points)} parent chunks")
+    except Exception as e:
+        logger.error(f"Parent upload failed: {str(e)}")
+        return {'success': False, 'error': f"Parent upload failed: {str(e)}"}
+
+    # Upload children
+    try:
+        for i in range(0, len(child_points), 100):
+            client.upsert(collection_name=collection_name, points=child_points[i:i+100])
+        logger.info(f"✅ Uploaded {len(child_points)} child chunks")
+    except Exception as e:
+        logger.error(f"Child upload failed: {str(e)}")
+        return {'success': False, 'error': f"Child upload failed: {str(e)}"}
+
+    logger.info(f"✅ Hierarchical upload complete: {len(parent_points)} parents, {len(child_points)} children")
+    return {
+        'success': True,
+        'parent_count': len(parent_points),
+        'child_count': len(child_points),
+        'uploaded': len(parent_points) + len(child_points)
+    }
+
+
+def truncate_for_embedding(text: str, max_tokens: int = 8192) -> str:
+    """Truncate text to fit embedding model's token limit."""
+    # Rough estimate: 1.3 tokens per word
+    max_words = int(max_tokens / 1.3)
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return ' '.join(words[:max_words]) + ' [truncated]'
 
 
 def _get_calibre_db() -> Optional[CalibreDB]:
@@ -404,16 +547,39 @@ def extract_metadata_only(filepath: str) -> Dict:
 
 def ingest_book(
     filepath: str,
-    domain: str = 'technical',
     collection_name: str = 'alexandria',
     qdrant_host: str = 'localhost',
     qdrant_port: int = 6333,
     language_override: Optional[str] = None,
     title_override: Optional[str] = None,
-    author_override: Optional[str] = None
+    author_override: Optional[str] = None,
+    hierarchical: bool = True,
+    threshold: float = 0.55,
+    min_chunk_size: int = 200,
+    max_chunk_size: int = 1200
 ):
+    """
+    Ingest a book into Qdrant with optional hierarchical chunking.
+
+    Args:
+        filepath: Path to book file (EPUB, PDF, TXT, MD, HTML)
+        collection_name: Qdrant collection name
+        qdrant_host: Qdrant server host
+        qdrant_port: Qdrant server port
+        language_override: Override detected language
+        title_override: Override detected title
+        author_override: Override detected author
+        hierarchical: If True, create parent (chapter) and child (semantic) chunks.
+                      If False, use flat semantic chunking (legacy behavior).
+        threshold: Similarity threshold for chunking (0.0-1.0). Lower = fewer breaks.
+        min_chunk_size: Minimum words per chunk.
+        max_chunk_size: Maximum words per chunk.
+
+    Returns:
+        Dict with success status, chunk counts, and metadata
+    """
     # NOTE: Cannot use sys.stderr in Streamlit - it causes [Errno 22]
-    logging.debug(f"ingest_book started: {filepath} (domain={domain}, collection={collection_name})")
+    logging.debug(f"ingest_book started: {filepath} (collection={collection_name}, hierarchical={hierarchical})")
 
     try:
         normalized_path, display_path, _, _ = normalize_file_path(filepath)
@@ -427,14 +593,13 @@ def ingest_book(
         logging.error(f"File access validation failed: {err}")
         return {'success': False, 'error': err}
 
-    # 1. Extract
+    # 1. Extract text and metadata
     text, metadata = extract_text(normalized_path)
 
     logging.debug(f"Text extracted. Title: '{metadata.get('title')}', Author: '{metadata.get('author')}'")
     logging.debug(f"Overrides: title_override={title_override}, author_override={author_override}")
 
-    # Enrich metadata from Calibre ONLY if we don't have overrides (i.e., not from Calibre ingestion)
-    # When ingesting from Calibre, metadata already comes from Calibre book object
+    # Enrich metadata from Calibre ONLY if we don't have overrides
     if not (title_override and author_override):
         logging.debug(f"Running Calibre enrichment (no overrides present)")
         metadata = _enrich_metadata_from_calibre(filepath, metadata)
@@ -456,70 +621,332 @@ def ingest_book(
     else:
         debug_info['final_author'] = metadata.get('author')
 
-    # 2. Semantic Chunking
-    # Adjust threshold based on domain (Philosophy needs tighter focus)
-    threshold = 0.45 if domain == 'philosophy' else 0.55
-    
+    # Setup chunker
     embedder = EmbeddingGenerator()
     chunker = UniversalChunker(
-        embedder, 
-        threshold=threshold, 
-        min_chunk_size=200, 
-        max_chunk_size=1200
+        embedder,
+        threshold=threshold,
+        min_chunk_size=min_chunk_size,
+        max_chunk_size=max_chunk_size
     )
-    
+
     # Calculate rough sentence count for stats
     sentence_count = len(text.split('. '))
-    
-    chunks = chunker.chunk(text, metadata=metadata)
 
-    if not chunks:
-        logging.error(f"No chunks created for {metadata.get('title')}")
-        return {'success': False, 'error': 'No chunks created'}
+    if hierarchical:
+        # ========================================
+        # HIERARCHICAL CHUNKING (parent + child)
+        # ========================================
+        logging.info(f"Using hierarchical chunking for '{metadata.get('title')}'")
 
-    logging.debug(f"Chunks created: {len(chunks)} chunks from {len(text)} characters")
+        # 2a. Detect chapters
+        chapters = detect_chapters(normalized_path, text, metadata)
+        logging.info(f"Detected {len(chapters)} chapters via {chapters[0].get('detection_method', 'unknown') if chapters else 'none'}")
 
-    # 3. Embed & Upload
-    embeddings = generate_embeddings([c['text'] for c in chunks])
-    upload_result = upload_to_qdrant(chunks, embeddings, domain, collection_name, qdrant_host, qdrant_port)
+        if not chapters:
+            # Fallback to single parent
+            chapters = [{"title": "Full Book", "text": text, "index": 0, "detection_method": "single"}]
 
-    # Check if upload failed
-    if not upload_result.get('success'):
-        logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
-        return {
-            'success': False,
-            'error': upload_result.get('error'),
+        # 2b. Create parent chunks
+        parent_chunks = []
+        all_child_chunks = []
+
+        for chapter in chapters:
+            parent_id = str(uuid.uuid4())
+            chapter_text = chapter.get('text', '')
+
+            # Truncate for embedding (max 8192 tokens)
+            embed_text = truncate_for_embedding(chapter_text, max_tokens=8192)
+
+            parent_chunk = {
+                'id': parent_id,
+                'text': embed_text,
+                'full_text': chapter_text,
+                'book_title': metadata.get('title', 'Unknown'),
+                'author': metadata.get('author', 'Unknown'),
+                'language': metadata.get('language', 'unknown'),
+                'section_name': chapter.get('title', f"Section {chapter.get('index', 0) + 1}"),
+                'section_index': chapter.get('index', 0),
+                'token_count': int(len(chapter_text.split()) * 1.3),
+                'child_count': 0  # Will be updated after chunking
+            }
+
+            # 2c. Create child chunks for this chapter
+            chapter_metadata = {
+                'parent_id': parent_id,
+                'section_name': parent_chunk['section_name'],
+                'book_title': metadata.get('title', 'Unknown'),
+                'author': metadata.get('author', 'Unknown'),
+                'language': metadata.get('language', 'unknown'),
+            }
+
+            children = chunker.chunk(chapter_text, metadata=chapter_metadata)
+
+            # Add sequence info to children
+            for i, child in enumerate(children):
+                child['chunk_level'] = 'child'
+                child['parent_id'] = parent_id
+                child['sequence_index'] = i
+                child['sibling_count'] = len(children)
+                child['token_count'] = int(len(child.get('text', '').split()) * 1.3)
+
+            parent_chunk['child_count'] = len(children)
+            parent_chunks.append(parent_chunk)
+            all_child_chunks.extend(children)
+
+        if not all_child_chunks:
+            logging.error(f"No child chunks created for {metadata.get('title')}")
+            return {'success': False, 'error': 'No chunks created'}
+
+        logging.info(f"Created {len(parent_chunks)} parent chunks, {len(all_child_chunks)} child chunks")
+
+        # 3. Generate embeddings
+        parent_texts = [p['text'] for p in parent_chunks]
+        child_texts = [c['text'] for c in all_child_chunks]
+
+        logging.debug(f"Generating embeddings for {len(parent_texts)} parents and {len(child_texts)} children")
+        parent_embeddings = generate_embeddings(parent_texts)
+        child_embeddings = generate_embeddings(child_texts)
+
+        # 4. Upload hierarchically
+        upload_result = upload_hierarchical_to_qdrant(
+            parent_chunks, parent_embeddings,
+            all_child_chunks, child_embeddings,
+            collection_name, qdrant_host, qdrant_port
+        )
+
+        if not upload_result.get('success'):
+            logging.error(f"Hierarchical upload failed: {upload_result.get('error')}")
+            return {
+                'success': False,
+                'error': upload_result.get('error'),
+                'title': metadata.get('title', 'Unknown'),
+                'filepath': display_path
+            }
+
+        result = {
+            'success': True,
             'title': metadata.get('title', 'Unknown'),
-            'filepath': display_path
+            'author': metadata.get('author', 'Unknown'),
+            'language': metadata.get('language', 'unknown'),
+            'chunks': len(all_child_chunks),
+            'parent_chunks': len(parent_chunks),
+            'child_chunks': len(all_child_chunks),
+            'sentences': sentence_count,
+            'strategy': 'Hierarchical',
+            'chapter_detection': chapters[0].get('detection_method', 'unknown') if chapters else 'none',
+            'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
+            'filepath': display_path,
+            'debug_author': debug_info,
+            'hierarchical': True
         }
 
-    result = {
-        'success': True,
-        'title': metadata.get('title', 'Unknown'),
-        'author': metadata.get('author', 'Unknown'),
-        'language': metadata.get('language', 'unknown'),
-        'chunks': len(chunks),
-        'sentences': sentence_count,
-        'strategy': 'Universal Semantic',
-        'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
-        'filepath': display_path,
-        'debug_author': debug_info  # Debug: track author through pipeline
-    }
+    else:
+        # ========================================
+        # FLAT CHUNKING (legacy behavior)
+        # ========================================
+        logging.info(f"Using flat semantic chunking for '{metadata.get('title')}'")
 
-    logging.info(f"✅ Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {len(chunks)} chunks)")
+        chunks = chunker.chunk(text, metadata=metadata)
+
+        if not chunks:
+            logging.error(f"No chunks created for {metadata.get('title')}")
+            return {'success': False, 'error': 'No chunks created'}
+
+        logging.debug(f"Chunks created: {len(chunks)} chunks from {len(text)} characters")
+
+        # Embed & Upload (legacy)
+        embeddings = generate_embeddings([c['text'] for c in chunks])
+        upload_result = upload_to_qdrant(chunks, embeddings, collection_name, qdrant_host, qdrant_port)
+
+        if not upload_result.get('success'):
+            logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
+            return {
+                'success': False,
+                'error': upload_result.get('error'),
+                'title': metadata.get('title', 'Unknown'),
+                'filepath': display_path
+            }
+
+        result = {
+            'success': True,
+            'title': metadata.get('title', 'Unknown'),
+            'author': metadata.get('author', 'Unknown'),
+            'language': metadata.get('language', 'unknown'),
+            'chunks': len(chunks),
+            'sentences': sentence_count,
+            'strategy': 'Universal Semantic',
+            'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
+            'filepath': display_path,
+            'debug_author': debug_info,
+            'hierarchical': False
+        }
+
+    logging.info(f"✅ Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {result['chunks']} chunks)")
 
     return result
 
+# ============================================================================
+# CHUNKING TEST MODE
+# ============================================================================
+
+def test_chunking(
+    filepath: str,
+    threshold: float = 0.55,
+    min_chunk_size: int = 200,
+    max_chunk_size: int = 1200,
+    show_samples: int = 3
+) -> Dict:
+    """
+    Test chunking parameters on a single book WITHOUT uploading to Qdrant.
+
+    Args:
+        filepath: Path to the book file
+        threshold: Similarity threshold (0.0-1.0). Lower = fewer breaks, Higher = more breaks
+        min_chunk_size: Minimum words per chunk
+        max_chunk_size: Maximum words per chunk
+        show_samples: Number of sample chunks to include in output
+
+    Returns:
+        Dict with statistics and sample chunks
+    """
+    normalized_path, display_path, _, _ = normalize_file_path(filepath)
+
+    ok, err = validate_file_access(normalized_path, display_path)
+    if not ok:
+        return {'success': False, 'error': err}
+
+    # Extract text and metadata
+    text, metadata = extract_text(normalized_path)
+    metadata = _enrich_metadata_from_calibre(filepath, metadata)
+
+    # Apply chunking with specified parameters
+    embedder = EmbeddingGenerator()
+    chunker = UniversalChunker(
+        embedder,
+        threshold=threshold,
+        min_chunk_size=min_chunk_size,
+        max_chunk_size=max_chunk_size
+    )
+
+    chunks = chunker.chunk(text, metadata=metadata)
+
+    if not chunks:
+        return {'success': False, 'error': 'No chunks created'}
+
+    # Calculate statistics
+    word_counts = [c['word_count'] for c in chunks]
+    char_counts = [len(c['text']) for c in chunks]
+
+    result = {
+        'success': True,
+        'file': display_path,
+        'title': metadata.get('title', 'Unknown'),
+        'author': metadata.get('author', 'Unknown'),
+        'parameters': {
+            'threshold': threshold,
+            'min_chunk_size': min_chunk_size,
+            'max_chunk_size': max_chunk_size
+        },
+        'stats': {
+            'total_chunks': len(chunks),
+            'total_words': sum(word_counts),
+            'total_chars': len(text),
+            'avg_words_per_chunk': round(sum(word_counts) / len(chunks), 1),
+            'min_words': min(word_counts),
+            'max_words': max(word_counts),
+            'avg_chars_per_chunk': round(sum(char_counts) / len(chunks), 1)
+        },
+        'samples': []
+    }
+
+    # Add sample chunks (first N, middle, last)
+    sample_indices = []
+    if show_samples > 0:
+        # First chunk
+        sample_indices.append(0)
+        # Middle chunk(s)
+        if len(chunks) > 2 and show_samples > 1:
+            mid = len(chunks) // 2
+            sample_indices.append(mid)
+        # Last chunk
+        if len(chunks) > 1 and show_samples > 2:
+            sample_indices.append(len(chunks) - 1)
+
+    for idx in sample_indices[:show_samples]:
+        chunk = chunks[idx]
+        result['samples'].append({
+            'index': idx,
+            'word_count': chunk['word_count'],
+            'preview': chunk['text'][:500] + ('...' if len(chunk['text']) > 500 else '')
+        })
+
+    return result
+
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--file', required=True)
-    parser.add_argument('--domain', default='technical')
-    parser.add_argument('--collection', default='alexandria')
-    parser.add_argument('--host', default='192.168.0.151')
-    parser.add_argument('--port', type=int, default=6333)
+    parser = argparse.ArgumentParser(description='Alexandria Book Ingestion')
+    parser.add_argument('--file', required=True, help='Path to book file')
+    parser.add_argument('--collection', default='alexandria', help='Qdrant collection name')
+    parser.add_argument('--host', default=QDRANT_HOST, help=f'Qdrant host (default: {QDRANT_HOST})')
+    parser.add_argument('--port', type=int, default=6333, help='Qdrant port')
+
+    # Chunking test mode
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Test chunking without uploading to Qdrant')
+    parser.add_argument('--threshold', type=float, default=0.55,
+                        help='Similarity threshold (0.0-1.0). Lower=fewer breaks')
+    parser.add_argument('--min-chunk', type=int, default=200,
+                        help='Minimum words per chunk')
+    parser.add_argument('--max-chunk', type=int, default=1200,
+                        help='Maximum words per chunk')
+    parser.add_argument('--samples', type=int, default=3,
+                        help='Number of sample chunks to show')
+
     args = parser.parse_args()
 
-    ingest_book(args.file, args.domain, args.collection, args.host, args.port)
+    if args.dry_run:
+        # Test mode - no upload
+        result = test_chunking(
+            args.file,
+            threshold=args.threshold,
+            min_chunk_size=args.min_chunk,
+            max_chunk_size=args.max_chunk,
+            show_samples=args.samples
+        )
+
+        if not result['success']:
+            print(f"❌ Error: {result['error']}")
+            return
+
+        print("\n" + "=" * 70)
+        print(f"📚 CHUNKING TEST: {result['title']}")
+        print(f"   Author: {result['author']}")
+        print("=" * 70)
+        print(f"\n📊 Parameters:")
+        print(f"   threshold:      {result['parameters']['threshold']}")
+        print(f"   min_chunk_size: {result['parameters']['min_chunk_size']} words")
+        print(f"   max_chunk_size: {result['parameters']['max_chunk_size']} words")
+        print(f"\n📈 Statistics:")
+        stats = result['stats']
+        print(f"   Total chunks:   {stats['total_chunks']}")
+        print(f"   Total words:    {stats['total_words']:,}")
+        print(f"   Avg words/chunk: {stats['avg_words_per_chunk']}")
+        print(f"   Min words:      {stats['min_words']}")
+        print(f"   Max words:      {stats['max_words']}")
+
+        if result['samples']:
+            print(f"\n📝 Sample Chunks:")
+            for sample in result['samples']:
+                print(f"\n--- Chunk #{sample['index']} ({sample['word_count']} words) ---")
+                print(sample['preview'])
+
+        print("\n" + "=" * 70)
+        print("✅ Dry run complete. No data uploaded to Qdrant.")
+        print("=" * 70 + "\n")
+    else:
+        # Normal ingest mode
+        ingest_book(args.file, args.collection, args.host, args.port)
 
 if __name__ == '__main__':
     main()

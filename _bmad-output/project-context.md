@@ -1,7 +1,7 @@
 ---
 project_name: 'Alexandria'
 user_name: 'Sabo'
-date: '2026-01-25'
+date: '2026-01-30'
 sections_completed: ['technology_stack', 'python_rules', 'streamlit_rules', 'testing_rules', 'code_quality', 'workflow_rules', 'critical_rules']
 status: 'complete'
 rule_count: 45
@@ -29,10 +29,18 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **BeautifulSoup 4.12.2** - HTML parsing for EPUB content
 - **lxml 4.9.3** - XML parser for BeautifulSoup
 - **tqdm 4.66.1** - Progress bars (DISABLED globally via `TQDM_DISABLE=1`)
+- **mcp >=1.0.0** - Model Context Protocol SDK for Claude Code integration
 - **pytest 7.4.3** - Testing framework
 - **pytest-playwright >=0.4.0** - Browser/UI testing
 - **black 23.12.1** - Code formatter
 - **flake8 7.0.0** - Linter
+
+### MCP Server (Claude Code Integration)
+- **Script**: `scripts/mcp_server.py` - FastMCP server with 5 read-only tools
+- **Config**: `.mcp.json` - MCP server configuration for Claude Code
+- **Tools**: `alexandria_query`, `alexandria_search`, `alexandria_book`, `alexandria_stats`, `alexandria_domains`
+- **Docs**: `docs/reference/mcp-server.md`
+- **Transport**: stdio (standard for Claude Code)
 
 ### Development Tools (Optional but Useful)
 - **Datasette** - Web UI for exploring Calibre SQLite database
@@ -476,4 +484,4 @@ When a BMad agent starts work:
 
 ---
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-30

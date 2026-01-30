@@ -36,6 +36,7 @@ from ingest_books import (
 )
 from collection_manifest import CollectionManifest
 from calibre_db import CalibreDB
+from config import QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION, CALIBRE_LIBRARY_PATH
 
 logging.basicConfig(
     level=logging.INFO,
@@ -240,7 +241,6 @@ def ingest_book(
             book_path=str(filepath),
             book_title=book_title,
             author=author,
-            domain=domain,
             chunks_count=len(all_chunks),
             file_size_mb=file_size_mb,
             file_type=file_type,
@@ -295,7 +295,7 @@ def batch_ingest(
     # Initialize Calibre DB for metadata lookup (optional)
     calibre_db = None
     try:
-        calibre_db = CalibreDB("G:\\My Drive\\alexandria")
+        calibre_db = CalibreDB()  # Uses CALIBRE_LIBRARY_PATH from config
         logger.info("✅ Connected to Calibre DB for metadata enrichment")
     except Exception as e:
         logger.warning(f"⚠️  Could not connect to Calibre DB: {e}")
@@ -382,15 +382,14 @@ def main():
     parser.add_argument(
         '--domain',
         type=str,
-        required=True,
-        choices=['technical', 'psychology', 'philosophy', 'history'],
-        help='Domain category for all books'
+        default='general',
+        help='Domain category (legacy, not used for filtering)'
     )
     parser.add_argument(
         '--collection',
         type=str,
-        default='alexandria',
-        help='Qdrant collection name (default: alexandria)'
+        default=QDRANT_COLLECTION,
+        help=f'Qdrant collection name (default: {QDRANT_COLLECTION})'
     )
     parser.add_argument(
         '--formats',
@@ -411,14 +410,14 @@ def main():
     parser.add_argument(
         '--host',
         type=str,
-        default='192.168.0.151',
-        help='Qdrant server host (default: 192.168.0.151)'
+        default=QDRANT_HOST,
+        help=f'Qdrant server host (default: {QDRANT_HOST})'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=6333,
-        help='Qdrant server port (default: 6333)'
+        default=QDRANT_PORT,
+        help=f'Qdrant server port (default: {QDRANT_PORT})'
     )
 
     args = parser.parse_args()

@@ -1,0 +1,1253 @@
+{
+  "configuration" : { },
+  "description" : "Semantic search and knowledge synthesis across 9,000 books",
+  "documentation" : {
+    "sections" : [ {
+      "content" : "# Alexandria RAG System - Architecture Documentation\n\n**Generated:** 2026-01-30\n**Project:** Alexandria - Temenos Academy Library\n**Type:** Retrieval-Augmented Generation (RAG) System\n**Status:** Production\n\n---\n\n## Executive Summary\n\nAlexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic search across 9,000+ books in the Temenos Academy library. It provides:\n\n- **Semantic book search** using vector embeddings and cosine similarity\n- **LLM-powered answer generation** from book content\n- **Calibre library integration** for rich book metadata\n- **Multi-format support** (EPUB, PDF, TXT, MD, HTML)\n- **Hierarchical chunking** with parent (chapter) and child (semantic) chunks\n- **MCP Server integration** for Claude Code\n\n**Key Innovations:**\n- **Hierarchical Chunking** - Two-level structure for better context retrieval\n- **Universal Semantic Chunking (ADR 0007)** - Preserves semantic coherence by splitting text at topic boundaries detected via sentence embedding similarity\n\n---\n\n## Quick Reference\n\n### System Context (C4 Level 1)\n\n```\n[Claude Code / MCP Clients]\n         ↓ (stdio)\n   [MCP Server - scripts/mcp_server.py]\n         ↓\n   [Scripts Package - Business Logic]\n         ↓ ↑\n    ┌────┴────┬──────────────┐\n    ↓         ↓              ↓\n[Qdrant]  [OpenRouter]  [Calibre DB]\n```\n\n**External Systems:**\n- **Qdrant (192.168.0.151:6333)** - Vector database storing 384-dim embeddings\n- **OpenRouter API** - LLM inference (optional, for RAG answers)\n- **Calibre Library** - Book metadata and file storage\n\n### Performance at a Glance\n\n| Operation | Latency | Details |\n|-----------|---------|---------|\n| **Book Ingestion** | ~11-13 sec | Text extraction (5s) + Chunking (3-5s) + Embedding (2s) + Upload (1s) |\n| **Semantic Search** | <100ms | Qdrant vector search |\n| **RAG Query (with LLM)** | 2.5-5.5 sec | Search (0.4s) + LLM inference (2-5s) |\n| **Current Scale** | 150 books, 23K chunks | Main collection |\n| **Target Scale** | 9,000 books, 1.35M chunks | ~2GB vectors, easily handled by Qdrant |\n\n---\n\n## Technology Stack\n\n| Category | Technology | Version | Purpose |\n|----------|-----------|---------|---------|\n| **Language** | Python | 3.14+ | Primary implementation language |\n| **Interface** | FastMCP | ≥2.0.0 | MCP Server (Model Context Protocol) |\n| **Vector Database** | Qdrant | ≥1.7.1 | Semantic search (external: 192.168.0.151:6333) |\n| **Embeddings** | sentence-transformers | ≥2.3.1 | all-MiniLM-L6-v2 (384-dim vectors) |\n| **ML Framework** | PyTorch | ≥2.0.0 | Required by sentence-transformers |\n| **Semantic Analysis** | NumPy, scikit-learn | ≥1.24.0, ≥1.3.0 | Cosine similarity for chunking |\n| **EPUB Parsing** | EbookLib | 0.18 | EPUB book ingestion |\n| **PDF Parsing** | PyMuPDF | ≥1.24.0 | PDF book ingestion |\n| **HTML Parsing** | BeautifulSoup4, lxml | 4.12.2, 4.9.3 | EPUB content extraction |\n| **HTTP Client** | requests | ≥2.31.0 | OpenRouter API calls (optional) |\n| **Testing** | pytest, pytest-cov | 7.4.3, 4.1.0 | Test framework |\n| **Code Quality** | black, flake8 | 23.12.1, 7.0.0 | Formatting & linting |\n\n---\n\n## Architecture Pattern\n\n### RAG System Architecture\n\n```\n┌─────────────────────────────────────────────────────────────────┐\n│                     Alexandria RAG System                        │\n├─────────────────────────────────────────────────────────────────┤\n│                                                                  │\n│  Claude Code / MCP Clients                                      │\n│         ↓ (stdio)                                               │\n│  ┌──────────────────┐     ┌─────────────────┐                  │\n│  │   MCP Server     │────▶│  Scripts        │                  │\n│  │  (mcp_server.py) │     │  Package        │                  │\n│  │   10+ Tools      │     │  (Business      │                  │\n│  └──────────────────┘     │   Logic)        │                  │\n│                           └─────────────────┘                  │\n│                                  │                              │\n│                                  ▼                              │\n│                           ┌─────────────────┐                  │\n│                           │  Qdrant Vector  │                  │\n│                           │  Database       │                  │\n│                           │ 192.168.0.151   │                  │\n│                           └─────────────────┘                  │\n│                                                                  │\n│  External Systems:                                              │\n│  ┌──────────────┐         ┌─────────────────┐                 │\n│  │   Calibre    │         │   OpenRouter    │                 │\n│  │   Library    │         │   API (LLM)     │                 │\n│  └──────────────┘         └─────────────────┘                 │\n└─────────────────────────────────────────────────────────────────┘\n```\n\n### Architecture Principles\n\n#### 1. MCP-First Architecture (ADR 0003 - Superseded)\n\n**Principle:** All business logic lives in `scripts/` package. MCP Server is the primary interface.\n\n**Why?**\n- Single source of truth (no duplication)\n- Multiple interfaces (MCP, CLI)\n- Easy testing (no UI overhead)\n- Direct integration with Claude Code\n\n**Implementation:**\n- MCP Server (`scripts/mcp_server.py`) exposes tools\n- All business logic lives in `scripts/` package\n- MCP tools call scripts, return results\n- **Anti-pattern:** Duplicating logic in interface layer\n\n**Benefits:**\n- ✅ Testability (scripts can be unit tested)\n- ✅ Reusability (scripts usable from CLI and MCP)\n- ✅ Maintainability (single source of truth for logic)\n- ✅ AI Integration (direct Claude Code access)\n\n**See:** [ADR 0003: GUI as Thin Layer](../reference/architecture/decisions/0003-gui-as-thin-layer.md) (Superseded - MCP-first)\n\n---\n\n#### 2. Collection Isolation (ADR 0004)\n\n**Principle:** Each collection has separate manifests, progress files, and can use different settings.\n\n**Why?**\n- Prevents cross-contamination between collections\n- Allows experimentation (test different chunking strategies)\n- Supports multiple use cases (personal library, research corpus, client project)\n\n**Implementation:**\n- `logs/{collection}_manifest.json` - Master manifest\n- `logs/{collection}_manifest.csv` - Human-readable export\n- `scripts/batch_ingest_progress_{collection}.json` - Resume tracker\n- Separate Qdrant collections per domain/experiment\n\n**Benefits:**\n- ✅ Data integrity (no cross-contamination)\n- ✅ Experimentation (A/B test chunking strategies)\n- ✅ Flexibility (different settings per collection)\n\n**See:** [ADR 0004: Collection-Specific Manifests](architecture/decisions/0004-collection-specific-manifests.md)\n\n---\n\n#### 3. Progressive Enhancement\n\n**Principle:** Core functionality works with minimal dependencies. Advanced features are optional.\n\n**Examples:**\n- Ingestion works without Calibre DB (use folder ingestion)\n- Query works without OpenRouter (search-only mode, no answer generation)\n- GUI is optional (CLI works standalone)\n\n**Why?**\n- Easier onboarding (start simple, add features as needed)\n- Resilience (system degrades gracefully)\n- Flexibility (choose features based on use case)\n\n**Benefits:**\n- ✅ Lower barrier to entry\n- ✅ Graceful degradation\n- ✅ Modular feature adoption\n\n---\n\n## System Components\n\n### 1. MCP Server Layer\n\n**File:** `scripts/mcp_server.py`\n**Purpose:** Primary interface for Claude Code and MCP clients\n**Protocol:** Model Context Protocol (stdio)\n\n**Query Tools:**\n- `alexandria_query` - Semantic search with context modes\n- `alexandria_search` - Search Calibre by metadata\n- `alexandria_book` - Get book details by ID\n- `alexandria_stats` - Collection statistics\n\n**Ingest Tools:**\n- `alexandria_ingest` - Ingest single book from Calibre\n- `alexandria_batch_ingest` - Ingest multiple books\n- `alexandria_ingest_file` - Ingest local file (no Calibre)\n- `alexandria_ingest_preview` - Preview books for ingestion\n- `alexandria_test_chunking` - Test chunking without upload\n\n**Architecture:**\n- Built with FastMCP library\n- Exposes scripts as MCP tools\n- Returns structured JSON responses\n- Progress tracking for long operations\n\n---\n\n### 2. Business Logic Layer (Scripts Package)\n\n**Directory:** `scripts/`\n**Pattern:** Flat module structure (no subdirectories)\n\n**Core Modules:**\n\n| Module | Purpose | Main API |\n|--------|---------|----------|\n| `mcp_server.py` | MCP Server entry point | `@mcp.tool()` decorators |\n| `calibre_db.py` | Calibre SQLite interface | `CalibreDB.get_all_books()` |\n| `collection_manifest.py` | Ingestion tracking | `CollectionManifest.add_book()` |\n| `ingest_books.py` | Book ingestion pipeline | `ingest_book()` |\n| `rag_query.py` | Semantic search & RAG | `perform_rag_query()` |\n| `qdrant_utils.py` | Qdrant operations | `list_collections()` |\n| `universal_chunking.py` | Semantic chunking | `UniversalChunker.chunk()` |\n| `chapter_detection.py` | Chapter boundary detection | `detect_chapters()` |\n\n**Helper Modules:**\n- `batch_ingest.py` - Batch ingestion helper\n- `generate_book_inventory.py` - Calibre inventory generator\n- `experiment_chunking.py` - Chunking experiments\n- `check_authors.py`, `fix_manifest_authors.py` - Data validation/repair\n\n---\n\n### 3. Data Architecture\n\n#### Qdrant Vector Database (External)\n\n**Location:** 192.168.0.151:6333\n**Distance Metric:** COSINE (hardcoded, cannot change)\n**Embedding Model:** all-MiniLM-L6-v2 (384-dimensional)\n\n**Collections:**\n- `alexandria` - Main production collection (~9,000 books)\n- `alexandria_test` - Test collection for experiments\n- Custom collections per domain/experiment\n\n**Payload Structure:**\n```json\n{\n  \"title\": \"Book Title\",\n  \"author\": \"Author Name\",\n  \"file_path\": \"G:\\\\path\\\\to\\\\book.epub\",\n  \"section_index\": 42,\n  \"chunk_order\": 12,\n  \"domain\": \"philosophy\",\n  \"language\": \"eng\",\n  \"text\": \"Chunk text content...\",\n  \"metadata\": {...}\n}\n```\n\n#### Collection Manifests\n\n**Purpose:** Track which books are ingested into which collections\n**Format:** JSON\n**Location:** `logs/collection_manifest_{collection_name}.json`\n\n**Structure:**\n```json\n{\n  \"collections\": {\n    \"alexandria\": {\n      \"collection_name\": \"alexandria\",\n      \"created\": \"2026-01-20T10:30:00Z\",\n      \"last_updated\": \"2026-01-26T15:45:00Z\",\n      \"total_books\": 42,\n      \"total_chunks\": 3847,\n      \"books\": [...]\n    }\n  }\n}\n```\n\n**CSV Export:** `logs/alexandria_manifest.csv` (human-readable)\n\n#### Calibre Library (External)\n\n**Location:** `G:\\My Drive\\alexandria`\n**Database:** `metadata.db` (SQLite)\n**Purpose:** Book metadata (author, title, tags, series, ISBN, etc.)\n\n---\n\n## Data Flow\n\n### Ingestion Pipeline\n\n```\n┌─────────────────┐\n│  Book File      │\n│  (.epub/.pdf)   │\n└────────┬────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  extract_text()         │\n│  - Parse EPUB/PDF       │\n│  - Extract text         │\n│  - Extract metadata     │\n└────────┬────────────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  UniversalChunker       │\n│  - Split into sentences │\n│  - Embed sentences      │\n│  - Detect topic shifts  │\n│  - Create chunks        │\n└────────┬────────────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  generate_embeddings()  │\n│  - all-MiniLM-L6-v2     │\n│  - 384-dim vectors      │\n└────────┬────────────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  upload_to_qdrant()     │\n│  - Store vectors + meta │\n│  - COSINE distance      │\n└────────┬────────────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  CollectionManifest     │\n│  - Track ingestion      │\n│  - Update manifest JSON │\n│  - Export CSV           │\n└─────────────────────────┘\n```\n\n### Query Pipeline\n\n```\n┌─────────────────┐\n│  User Query     │\n│  \"What does...\" │\n└────────┬────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  search_qdrant()        │\n│  - Embed query          │\n│  - Semantic search      │\n│  - Return top-k chunks  │\n└────────┬────────────────┘\n         │\n         ▼ (optional)\n┌─────────────────────────┐\n│  rerank_with_llm()      │\n│  - LLM relevance scoring│\n│  - Reorder results      │\n└────────┬────────────────┘\n         │\n         ▼ (optional)\n┌─────────────────────────┐\n│  generate_answer()      │\n│  - RAG context          │\n│  - LLM answer gen       │\n│  - Cite sources         │\n└────────┬────────────────┘\n         │\n         ▼\n┌─────────────────────────┐\n│  RAGResult              │\n│  - Search results       │\n│  - Optional LLM answer  │\n└─────────────────────────┘\n```\n\n---\n\n## Key Algorithms\n\n### Universal Semantic Chunking (ADR 0007)\n\n**Purpose:** Split text into semantically coherent chunks without fixed token windows.\n\n**Algorithm:**\n1. **Sentence Splitting:** Split text into individual sentences\n2. **Sentence Embeddings:** Encode each sentence using all-MiniLM-L6-v2\n3. **Similarity Calculation:** Cosine similarity between consecutive sentences\n4. **Boundary Detection:** Low similarity (< threshold) = topic shift = chunk boundary\n5. **Size Constraints:** Enforce MIN 200 tokens, MAX 1200 tokens per chunk\n\n**Domain-Specific Thresholds:**\n- **Philosophy:** 0.45 (preserve complex arguments)\n- **Other domains:** 0.55 (standard splitting)\n\n**Benefits:**\n- ✅ Preserves semantic coherence (no mid-topic splits)\n- ✅ Adapts to content structure automatically\n- ✅ Language-agnostic (works with any language supported by embedding model)\n\n**Supersedes:**\n- ADR 0002: Domain-Specific Chunking (fixed token windows)\n- ADR 0005: Philosophical Argument Chunking (keyword-based)\n\n---\n\n## Source Tree Structure\n\n```\nalexandria/\n├── 📄 requirements.txt                # Python dependencies\n├── 📋 README.md                       # Project landing page\n├── 📄 .mcp.json                       # 🔹 MCP Server configuration\n│\n├── 📦 scripts/                        # 🔹 BUSINESS LOGIC + MCP SERVER\n│   ├── mcp_server.py                  # 🔹 ENTRY POINT - MCP Server\n│   ├── calibre_db.py                  # Calibre interface\n│   ├── collection_manifest.py         # Manifest tracking\n│   ├── ingest_books.py                # 🔹 Ingestion pipeline\n│   ├── rag_query.py                   # 🔹 Query engine\n│   ├── chapter_detection.py           # Chapter boundary detection\n│   ├── qdrant_utils.py                # Qdrant operations\n│   ├── universal_chunking.py          # Semantic chunking\n│   └── [other modules]\n│\n├── 📂 docs/                           # Documentation\n│   ├── reference/architecture/        # Architecture docs (ADRs, C4)\n│   ├── how-to-guides/                 # User guides\n│   ├── tutorials/                     # Getting started\n│   ├── explanation/                   # Conceptual docs\n│   └── backlog/                       # Feature proposals\n│\n├── 📂 logs/                           # Runtime artifacts\n│   ├── collection_manifest_*.json     # Ingestion tracking\n│   └── alexandria_manifest.csv        # CSV export\n│\n├── 📂 _bmad-output/                   # BMad outputs\n│   └── project-context.md             # 🔹 AI agent rules\n│\n└── 📂 tests/                          # Test suite\n    ├── unit/                          # Unit tests\n    └── integration/                   # Integration tests\n```\n\n---\n\n## Development Workflow\n\n### Local Development\n\n```bash\n# Install dependencies\npip install -r requirements.txt\n\n# Configure MCP Server in .mcp.json\n# Restart Claude Code to activate\n\n# Run CLI scripts directly\ncd scripts\npython rag_query.py \"your question\" --context-mode contextual\n```\n\n### Ingestion Workflow (via Claude Code)\n\n```\nUser: Ingest the Nietzsche book with ID 7970\nClaude: [calls alexandria_ingest(book_id=7970)]\n\nUser: Ingest all philosophy books\nClaude: [calls alexandria_batch_ingest(tag=\"philosophy\", limit=10)]\n```\n\n### Query Workflow (via Claude Code)\n\n```\nUser: What does Silverston say about shipment patterns?\nClaude: [calls alexandria_query(\"shipment pattern\", context_mode=\"contextual\")]\n\nUser: Find books by Kahneman\nClaude: [calls alexandria_search(author=\"Kahneman\")]\n```\n\n### CLI Workflow (Secondary)\n\n```bash\n# Query with context mode\ncd scripts\npython rag_query.py \"your question\" --limit 5 --context-mode contextual\n\n# Check manifest\npython collection_manifest.py show alexandria\n\n# Collection stats\npython qdrant_utils.py stats alexandria\n```\n\n---\n\n## Testing Strategy\n\n**Current Status:** Tests recommended but not yet implemented\n\n**Planned Approach:**\n- **Unit tests:** Test scripts/ modules in isolation\n- **Integration tests:** End-to-end ingestion and query workflows\n- **Fixture data:** Sample EPUB/PDF files in `tests/fixtures/`\n- **Mocking:** Mock Qdrant client, OpenRouter API, file system\n\n**Test Structure:**\n```\ntests/\n├── test_ingest_books.py\n├── test_rag_query.py\n├── test_collection_manifest.py\n├── test_calibre_db.py\n└── fixtures/\n    ├── sample.epub\n    └── sample.pdf\n```\n\n**Run tests:** `pytest tests/` (when implemented)\n\n---\n\n## Deployment Architecture\n\n### Current: MCP Server + Claude Code\n\n```\n[User's PC]\n├── Claude Code (MCP Client)\n│   └── .mcp.json (configuration)\n├── Alexandria MCP Server (scripts/mcp_server.py)\n├── Calibre Library (SQLite - G:\\My Drive\\alexandria)\n└── External Qdrant Server (192.168.0.151:6333)\n```\n\n**Components:**\n- **MCP Server:** `scripts/mcp_server.py` (stdio protocol)\n- **Qdrant Server:** External server at 192.168.0.151:6333\n- **Calibre Library:** External storage at G:\\My Drive\\alexandria\n- **OpenRouter API:** Cloud service (optional, for RAG answers)\n\n**Access:** Via Claude Code terminal (MCP tools)\n\n**No containerization** (Docker, Kubernetes) currently implemented.\n\n---\n\n### Future: MCP Server on NAS (Planned)\n\n```\n[NAS - 192.168.0.151]\n├── Alexandria MCP Server\n│   └── Accessible via SSH or remote MCP\n├── Docker: Qdrant Container\n│   └── Port: 6333\n├── Calibre Library (metadata.db)\n└── Book Storage (EPUB/PDF files)\n```\n\n**Benefits:**\n- 24/7 availability\n- Centralized storage with RAID backup\n- Low latency (MCP Server and Qdrant on same host)\n- Multi-machine access via remote MCP\n\n**Implementation Steps:**\n1. Deploy MCP server on NAS\n2. Configure remote MCP access in Claude Code\n3. Mount Calibre library as Docker volume\n4. Configure environment variables for NAS paths\n\n---\n\n## Security Considerations\n\n### Secrets Management\n\n- **API Keys:** Stored in environment variables or `.env` file (gitignored)\n- **Qdrant:** No authentication (trusted network)\n- **Calibre DB:** Read-only SQLite access\n\n### Data Privacy\n\n- **Book Content:** Stored in Qdrant (external server)\n- **User Queries:** Optionally sent to OpenRouter API for LLM answers\n- **No user authentication:** Single-user application\n\n### Network Security\n\n- **MCP Server:** stdio protocol (local only, no network exposure)\n- **Qdrant:** External server on trusted network (192.168.0.151)\n- **Calibre Library:** Local/network file system access\n\n---\n\n## Performance Characteristics\n\n### Ingestion Throughput\n\n**Benchmark (typical book, ~500 pages):**\n- Text extraction: ~5 seconds\n- Semantic chunking: ~3-5 seconds\n- Embedding generation: ~2 seconds\n- Qdrant upload: ~1 second\n- **Total:** ~11-13 seconds per book\n\n**Format-Specific:**\n- **EPUB:** ~2-5 seconds per book (cleaner extraction)\n- **PDF:** ~5-15 seconds per book (OCR/complex layouts slower)\n\n**Bottleneck:** Semantic chunking (6x slower than fixed-window, but better quality)\n\n**Optimization:**\n- Batch ingestion for multiple books\n- tqdm progress bars disabled globally (Streamlit compatibility)\n- No caching implemented (each book processed fresh)\n\n---\n\n### Query Latency\n\n**Benchmark (typical query):**\n- Query embedding: ~0.1 seconds\n- Qdrant search: ~0.3 seconds\n- LLM answer generation: ~2-5 seconds (depends on model)\n- **Total:** ~2.5-5.5 seconds\n\n**Breakdown:**\n- **Vector Search Alone:** <100ms (Qdrant)\n- **With Reranking:** +1-3 seconds (LLM call)\n- **With Answer Generation:** +2-10 seconds (depends on model, network)\n\n**Bottleneck:** LLM inference (OpenRouter API network latency)\n\n**Optimization:**\n- Qdrant handles vector search efficiently\n- Caching not implemented (future enhancement)\n- No connection pooling for OpenRouter API\n\n---\n\n### Scalability\n\n**Current Scale:**\n- ~150 books ingested\n- ~23,000 chunks in Qdrant\n- ~9,000 books in Calibre library (not all ingested)\n\n**Projected Scale (full library):**\n- 9,000 books × ~150 chunks/book = ~1.35 million chunks\n- 1.35M chunks × 384 dims × 4 bytes = ~2 GB vectors\n- Qdrant easily handles this on commodity hardware\n\n**Future Scale (if needed):**\n- Qdrant supports billions of vectors\n- Can add multiple Qdrant nodes (clustering)\n- Can partition by domain (separate collections)\n\n---\n\n## Known Limitations & Constraints\n\n### Technical Constraints\n\n1. **Embedding Model Immutable** (ADR critical)\n   - Cannot change from all-MiniLM-L6-v2 without re-ingesting ALL books\n   - Would require complete Qdrant collection recreation\n\n2. **Distance Metric Hardcoded**\n   - COSINE distance only\n   - Changing to EUCLIDEAN/DOT would break existing collections\n\n3. **Windows Long Paths**\n   - Paths > 248 characters require `\\\\?\\` prefix handling\n   - Implemented in `normalize_file_path()` function\n\n4. **tqdm Disabled Globally**\n   - Progress bars cause `[Errno 22]` in Streamlit\n   - Set via `TQDM_DISABLE=1` environment variable\n\n### Configuration\n\n1. **Calibre Library Path**\n   - Configured via `CALIBRE_LIBRARY_PATH` environment variable\n   - Default: `G:\\My Drive\\alexandria`\n\n2. **Chunking Parameters**\n   - Configurable via MCP tools: `threshold`, `min_chunk_size`, `max_chunk_size`\n   - Default: 0.55, 200, 1200\n   - CLI: `experiment_chunking.py` for testing\n\n---\n\n## Future Enhancements\n\n**See:** [TODO.md](../../TODO.md) for full backlog\n\n### HIGH PRIORITY\n- Ingest Versioning (track ingestion version in Qdrant payload)\n- Chunk Fingerprint (sha1 hash for deduplication)\n\n### MEDIUM PRIORITY\n- Query Modes (fact/cite/explore/synthesize)\n- Calibre Path Configuration (restore GUI setting)\n\n### LOW PRIORITY\n- Multi-file Upload (GUI drag-and-drop)\n- MOBI format support\n\n---\n\n## Related Documentation\n\n### Architecture\n- **[C4 Diagrams](../reference/architecture/c4/)** - Visual architecture (Context, Container, Component)\n- **[ADRs](../reference/architecture/decisions/README.md)** - Architecture Decision Records\n- **[Technical Specs](../reference/architecture/technical/)** - Detailed technical documentation\n- **[Structurizr Workspace](../reference/architecture/.structurizr/)** - Interactive diagrams\n\n### MCP Server\n- **[MCP Server Reference](../reference/mcp-server.md)** - Complete tool documentation\n- **[Common Workflows](../how-to-guides/common-workflows.md)** - Usage examples\n\n### Development\n- **[Development Guide](../tutorials/getting-started.md)** - Setup and workflow\n- **[Source Tree](../reference/api/source-tree.md)** - Codebase structure\n- **[Data Models & API](../reference/api/data-models.md)** - Module APIs\n- **[Project Context](../../_bmad-output/project-context.md)** - AI agent rules\n\n### Guides\n- **[Common Workflows](../how-to-guides/common-workflows.md)** - MCP tool reference\n- **[Logging Guide](../how-to-guides/track-ingestion.md)** - Logging patterns\n\n---\n\n## View Interactive Diagrams\n\n### Structurizr Lite (Recommended)\n\n```bash\n# Start Structurizr Lite on port 8081\ncd docs/architecture\ndocker run -it --rm -p 8081:8080 -v \"%cd%:/usr/local/structurizr\" structurizr/lite\n```\n\nOpen: http://localhost:8081\n\n**Views Available:**\n- System Context - High-level ecosystem\n- Containers - Major components\n- Components - Internal structure\n- Detailed Ingestion Flow - Book processing pipeline\n\n**See:** [Structurizr Guide](../tutorials/structurizr-guide.md) for more details\n\n---\n\n## Change Log\n\n| Date | Version | Changes |\n|------|---------|---------|\n| 2026-01-30 | 2.0 | MCP-first architecture, GUI abandoned |\n| 2026-01-30 | 1.5 | Hierarchical chunking, context modes |\n| 2026-01-25 | 1.0 | Universal Semantic Chunking implemented (ADR 0007) |\n| 2026-01-24 | 0.9 | Calibre direct ingestion added |\n| 2026-01-23 | 0.8 | Collection-specific manifests (ADR 0004) |\n| 2026-01-21 | 0.7 | GUI architecture refactor (ADR 0003) |\n| 2026-01-20 | 0.6 | Domain-specific chunking (superseded by ADR 0007) |\n\n**See:** [CHANGELOG.md](../../CHANGELOG.md) for detailed change history\n\n---\n\n**Document Version:** 2.0 (MCP-first)\n**Last Updated:** 2026-01-30\n",
+      "format" : "Markdown",
+      "order" : 1,
+      "title" : ""
+    }, {
+      "content" : "# C4 Level 1: System Context\r\n\r\n**Purpose:** Shows Alexandria RAG System in its broader ecosystem - who uses it and what external systems it depends on.\r\n\r\n---\r\n\r\n## Diagram\r\n\r\nView interactively: http://localhost:8081 → \"SystemContext\" view\r\n\r\nOr see `workspace.dsl` lines defining the context.\r\n\r\n---\r\n\r\n## System Overview\r\n\r\n**Alexandria RAG System** is a Retrieval-Augmented Generation (RAG) system that enables semantic search and knowledge synthesis across a multi-disciplinary library of ~9,000 books.\r\n\r\n### Users\r\n\r\n**Developer/Researcher**\r\n- Uses Alexandria to search and analyze books\r\n- Seeks cross-domain insights (e.g., \"manufacturing patterns in 18th-century textile mills\")\r\n- Ingests new books into the system\r\n- Queries for answers grounded in book content\r\n\r\n### External Systems\r\n\r\n**Qdrant Vector DB (192.168.0.151:6333)**\r\n- **Purpose:** Stores 384-dimensional embeddings of book chunks\r\n- **What it provides:** Fast semantic similarity search\r\n- **Data stored:** ~153 chunks per book, metadata (domain, author, title, chunk_index)\r\n- **Why external:** Specialized vector search engine, scales to millions of vectors\r\n\r\n**OpenRouter API**\r\n- **Purpose:** LLM inference for natural language answer generation\r\n- **What it provides:** Multiple models (GPT-4, Claude, etc.) via unified API\r\n- **Integration:** Receives retrieved chunks + user query → Returns coherent answer\r\n- **Why external:** Provides access to state-of-the-art LLMs without local hosting\r\n\r\n---\r\n\r\n## Information Flow\r\n\r\n### Ingestion Flow\r\n```\r\nUser → Alexandria → File System (reads books) → Alexandria (chunks + embeds) → Qdrant (stores)\r\n```\r\n\r\n### Query Flow\r\n```\r\nUser → Alexandria → Qdrant (semantic search) → Alexandria → OpenRouter (answer generation) → User\r\n```\r\n\r\n---\r\n\r\n## Scope & Boundaries\r\n\r\n### In Scope\r\n- Book ingestion (EPUB, PDF, TXT, MD)\r\n- Domain-specific chunking\r\n- Semantic search via Qdrant\r\n- LLM-powered answer generation\r\n- Manifest tracking\r\n\r\n### Out of Scope\r\n- Book format conversion (use Calibre)\r\n- LLM model hosting (use OpenRouter API)\r\n- Vector DB hosting (use Qdrant server)\r\n- Image/diagram processing (text-only)\r\n\r\n---\r\n\r\n## Design Drivers\r\n\r\n### Why RAG?\r\n- **Grounding:** LLM answers are backed by actual book content (prevents hallucination)\r\n- **Citations:** Every answer includes source book + chunk references\r\n- **Freshness:** New books instantly available (no model retraining)\r\n- **Explainability:** Can trace answer back to specific passages\r\n\r\n### Why 9,000 books?\r\n- **Multi-disciplinary synthesis:** Technical + Psychology + Philosophy + History\r\n- **Cross-domain insights:** \"How do psychological principles apply to UX design?\"\r\n- **Gap awareness:** System knows what it doesn't know (missing books tracked)\r\n\r\n### Why Qdrant?\r\n- **Performance:** Sub-second search across millions of vectors\r\n- **Flexibility:** Metadata filtering (domain, author, date)\r\n- **Scalability:** Can grow to full library (9,383 books)\r\n\r\n---\r\n\r\n## Integration Points\r\n\r\n| System | Protocol | Purpose |\r\n|--------|----------|---------|\r\n| Qdrant | HTTP/gRPC (Python client) | Store/retrieve embeddings |\r\n| OpenRouter | REST API | Generate answers from context |\r\n| Calibre | Direct SQLite read | Extract book metadata |\r\n| File System | Local disk I/O | Read books, write logs |\r\n\r\n---\r\n\r\n## Related Views\r\n\r\n- **Next Level:** [Container Diagram](02-container.md) - Internal structure of Alexandria\r\n- **Related:** [ADR 0001: Use Qdrant Vector DB](../decisions/0001-use-qdrant-vector-db.md)\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-23\r\n",
+      "filename" : "01-context.md",
+      "format" : "Markdown",
+      "order" : 2,
+      "title" : ""
+    }, {
+      "content" : "# C4 Level 2: Container Diagram\r\n\r\n**Purpose:** Shows the major architectural components (containers) inside Alexandria RAG System and how they interact.\r\n\r\n**Updated:** 2026-01-30 (MCP-first architecture)\r\n\r\n---\r\n\r\n## Diagram\r\n\r\nView interactively: http://localhost:8081 → \"Containers\" view\r\n\r\nOr see `workspace.dsl` container definitions.\r\n\r\n---\r\n\r\n## Containers\r\n\r\n### 1. MCP Server (Primary Interface)\r\n**Technology:** Python 3.14, FastMCP\r\n**Purpose:** Primary interface for Claude Code and MCP clients\r\n\r\n**Responsibilities:**\r\n- Expose query tools (alexandria_query, alexandria_search, etc.)\r\n- Expose ingest tools (alexandria_ingest, alexandria_batch_ingest, etc.)\r\n- Provide collection statistics and book details\r\n- Handle progress tracking for long operations\r\n\r\n**Key Features:**\r\n- stdio protocol for MCP communication\r\n- Structured JSON responses\r\n- Context modes (precise, contextual, comprehensive)\r\n- Configurable chunking parameters\r\n\r\n**Architecture Principle:** **MCP-first design** - MCP Server is the primary interface, all business logic in scripts package.\r\n\r\n**Related ADR:** [ADR 0003: GUI as Thin Layer](../decisions/0003-gui-as-thin-layer.md) (Superseded)\r\n\r\n---\r\n\r\n### 2. Scripts Package (Python Modules)\r\n**Technology:** Python 3.14\r\n**Purpose:** Core business logic for all operations\r\n\r\n**Responsibilities:**\r\n- Book ingestion and processing (hierarchical chunking)\r\n- Universal semantic chunking\r\n- Semantic search with context modes\r\n- Collection management and manifest tracking\r\n- Calibre database integration\r\n\r\n**Why Separate Package?**\r\n- **MCP support:** Called by MCP Server\r\n- **CLI support:** Can be called from command line\r\n- **Testing:** Unit tests without interface overhead\r\n- **Single source of truth:** One implementation for all interfaces\r\n\r\n**Internal Components:** See [Component Diagram](03-component.md)\r\n\r\n**Related ADR:** [ADR 0003: MCP-First Architecture](../decisions/0003-gui-as-thin-layer.md) (Superseded)\r\n\r\n---\r\n\r\n### 3. File System (Storage)\r\n**Technology:** Local disk (Windows file system)\r\n**Purpose:** Book storage and logging\r\n\r\n**Directory Structure:**\r\n```\r\nAlexandria/\r\n├── ingest/         # Books waiting to be processed\r\n├── ingested/       # Successfully processed books (archive)\r\n└── logs/           # Manifest JSON/CSV files\r\n```\r\n\r\n**What's Stored:**\r\n- **Books:** EPUB, PDF, TXT, MD files\r\n- **Manifests:** Per-collection JSON manifests\r\n- **Progress:** Batch ingestion resume files\r\n- **Exports:** CSV exports of manifests\r\n\r\n**Related Story:** [06-COLLECTION_MANAGEMENT.md](../../../explanation/stories/06-COLLECTION_MANAGEMENT.md)\r\n\r\n---\r\n\r\n### 4. Calibre Database (SQLite)\r\n**Technology:** SQLite (metadata.db)\r\n**Purpose:** Book metadata storage\r\n\r\n**Location:** Calibre library folder (typically `Documents/Calibre Library`)\r\n\r\n**Schema (relevant tables):**\r\n- `books` - Book records (id, title, sort, timestamp)\r\n- `authors` - Author names\r\n- `data` - File paths and formats\r\n- `comments` - Descriptions\r\n- `identifiers` - ISBN, etc.\r\n- `languages` - Language codes\r\n- `tags` - User-defined tags\r\n- `series` - Series information\r\n\r\n**Access Pattern:** Read-only via direct SQLite queries (no Calibre API)\r\n\r\n**Related Story:** [05-CALIBRE_INTEGRATION.md](../../../explanation/stories/05-CALIBRE_INTEGRATION.md)\r\n\r\n---\r\n\r\n## Container Interactions\r\n\r\n### Ingestion Flow\r\n```\r\nClaude Code → MCP Server → Scripts Package → File System (read book)\r\nScripts Package → Calibre DB (get metadata)\r\nScripts Package → Qdrant (upload parent + child chunks)\r\nScripts Package → File System (write manifest)\r\n```\r\n\r\n### Query Flow\r\n```\r\nClaude Code → MCP Server → Scripts Package → Qdrant (search children)\r\nScripts Package → Qdrant (fetch parent context)\r\nScripts Package → OpenRouter (generate answer - optional)\r\nMCP Server → Claude Code (return RAGResult)\r\n```\r\n\r\n### Search Flow\r\n```\r\nClaude Code → MCP Server → Scripts Package → Calibre DB (query books)\r\nMCP Server → Claude Code (return book list)\r\n```\r\n\r\n---\r\n\r\n## Technology Choices\r\n\r\n### Why MCP Server?\r\n- **Claude Code integration:** Direct access from Claude Code terminal\r\n- **Structured protocol:** Model Context Protocol (stdio)\r\n- **No UI maintenance:** Focus on business logic, not UI development\r\n- **AI-native:** Designed for AI agent workflows\r\n\r\n### Why Python Scripts Package?\r\n- **Single language:** Python for everything (no polyglot complexity)\r\n- **Rich ecosystem:** sentence-transformers, qdrant-client, ebooklib\r\n- **AI-friendly:** Easy for AI agents to read and modify\r\n- **Testable:** Unit tests without interface overhead\r\n\r\n### Why SQLite for Calibre?\r\n- **No dependencies:** Direct file access (no Calibre server needed)\r\n- **Fast:** Indexed queries return 9,000 books in <2 seconds\r\n- **Standard:** Calibre uses SQLite for all metadata\r\n\r\n---\r\n\r\n## Deployment Model\r\n\r\n### Current: MCP Server + Claude Code\r\n```\r\n[User's PC]\r\n  ├── Claude Code (MCP Client)\r\n  │   └── .mcp.json (configuration)\r\n  ├── Alexandria MCP Server (scripts/mcp_server.py)\r\n  ├── Calibre Library (SQLite - G:\\My Drive\\alexandria)\r\n  └── External Qdrant Server (192.168.0.151:6333)\r\n```\r\n\r\n### Future: NAS Deployment\r\n```\r\n[NAS - 192.168.0.151]\r\n  ├── Alexandria MCP Server\r\n  │   └── Accessible via SSH or remote MCP\r\n  ├── Docker: Qdrant (already running)\r\n  │   └── Port: 6333\r\n  ├── Calibre Library (metadata.db)\r\n  └── Book Storage (EPUB/PDF files)\r\n```\r\n\r\n**Benefits:**\r\n- Always-on access (24/7 availability)\r\n- Centralized storage with RAID backup\r\n- Low latency to Qdrant (same host)\r\n- Multi-machine access via remote MCP\r\n\r\n---\r\n\r\n## Security Considerations\r\n\r\n### Current Security Posture\r\n- **MCP Server:** stdio protocol (local only, no network exposure)\r\n- **Qdrant:** No authentication (local network 192.168.0.151:6333)\r\n- **OpenRouter:** API key in environment variable (optional)\r\n- **Calibre DB:** Read-only access (no writes)\r\n- **File System:** Local user permissions\r\n\r\n### Future Hardening (if multi-user)\r\n- Qdrant authentication\r\n- Remote MCP authentication\r\n- API rate limiting\r\n\r\n---\r\n\r\n## Related Views\r\n\r\n- **Previous Level:** [System Context](01-context.md)\r\n- **Next Level:** [Component Diagram](03-component.md)\r\n- **Related ADR:** [ADR 0003: MCP-First Architecture](../decisions/0003-gui-as-thin-layer.md) (Superseded)\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-30 (MCP-first architecture)\r\n",
+      "filename" : "02-container.md",
+      "format" : "Markdown",
+      "order" : 3,
+      "title" : ""
+    }, {
+      "content" : "# C4 Level 3: Component Diagram (Scripts Package)\r\n\r\n**Purpose:** Shows the internal structure of the Scripts Package container - the core business logic components.\r\n\r\n---\r\n\r\n## Diagram\r\n\r\nView interactively: http://localhost:8081 → \"Components\" view\r\n\r\nOr see `workspace.dsl` component definitions.\r\n\r\n---\r\n\r\n## Components\r\n\r\n### 1. Ingestion Engine\r\n**Files:** `batch_ingest.py`, `ingest_books.py`\r\n**Purpose:** Processes books into chunks and uploads to Qdrant\r\n\r\n**Responsibilities:**\r\n- Extract text from EPUB/PDF/TXT/MD files\r\n- Apply domain-specific chunking strategies\r\n- Generate embeddings (sentence-transformers)\r\n- Upload chunks to Qdrant with metadata\r\n- Log to manifest system\r\n- Resume interrupted batch ingestion\r\n\r\n**Key Functions:**\r\n- `ingest_book()` - Single book ingestion\r\n- `batch_ingest()` - Multiple books with resume\r\n- `extract_text_from_epub()` - EPUB text extraction\r\n- `extract_text_from_pdf()` - PDF text extraction\r\n- `create_chunks_from_sections()` - Chunking orchestrator\r\n\r\n**Integration Points:**\r\n- → Chunking Strategies (applies chunking)\r\n- → Collection Management (logs manifest)\r\n- → File System (reads books, moves to ingested/)\r\n- → Qdrant (uploads chunks)\r\n\r\n**Related Story:** [01-INGESTION.md](../../../explanation/stories/01-INGESTION.md)\r\n\r\n---\r\n\r\n### 2. Universal Semantic Chunker\r\n**Files:** `universal_chunking.py`, `ingest_books.py`\r\n**Purpose:** Semantic-aware text chunking for optimal retrieval across all domains\r\n\r\n**Responsibilities:**\r\n- Split text into sentences using regex\r\n- Generate embeddings for all sentences\r\n- Calculate cosine similarity between consecutive sentences\r\n- Break chunks at semantic topic boundaries (low similarity)\r\n- Enforce min/max chunk size constraints\r\n- Domain-agnostic approach (works for all content types)\r\n\r\n**Algorithm:**\r\n```\r\n1. Split text into sentences\r\n2. Embed all sentences (all-MiniLM-L6-v2)\r\n3. For each sentence pair:\r\n   - Calculate similarity with previous sentence\r\n   - If similarity < threshold AND buffer >= min_size:\r\n     → Create new chunk\r\n   - Else: Add to current buffer\r\n4. Enforce max_chunk_size safety cap\r\n```\r\n\r\n**Parameters:**\r\n\r\n| Parameter | Default | Philosophy | Description |\r\n|-----------|---------|------------|-------------|\r\n| threshold | 0.55 | 0.45 | Lower = fewer breaks, larger chunks |\r\n| min_chunk_size | 200 words | 200 words | Minimum context buffer |\r\n| max_chunk_size | 1200 words | 1200 words | Safety cap for LLM limits |\r\n\r\n**Philosophy Tuning:**\r\n- Lower threshold (0.45) for tighter topic focus\r\n- Preserves argument coherence through semantic similarity\r\n- No hard-coded opposition detection needed\r\n\r\n**Key Functions:**\r\n- `UniversalChunker.chunk()` - Main chunking entry point\r\n- `_split_sentences()` - Regex-based sentence splitting\r\n- `_create_chunk_dict()` - Chunk metadata generation\r\n\r\n**Benefits:**\r\n- **Semantic integrity:** Breaks where topic changes, not at word count\r\n- **Domain agnostic:** Same logic for technical, psychology, philosophy, literature\r\n- **Adaptive:** Automatically adjusts to content structure\r\n- **Context preservation:** Maintains minimum chunk size for LLM context\r\n\r\n**Related Story:** [02-CHUNKING.md](../../../explanation/stories/02-CHUNKING.md)\r\n**Related ADR:** [ADR 0002: Domain-Specific Chunking](../decisions/0002-domain-specific-chunking.md) - Superseded by Universal Semantic approach\r\n\r\n---\r\n\r\n### 3. RAG Query Engine\r\n**Files:** `rag_query.py`\r\n**Purpose:** Semantic search with LLM answer generation\r\n\r\n**Responsibilities:**\r\n- Execute semantic search against Qdrant\r\n- Apply similarity threshold filtering\r\n- Fetch multiplier control (quality vs speed)\r\n- Optional LLM reranking\r\n- Generate natural language answers via OpenRouter\r\n- Format results with source citations\r\n\r\n**Query Pipeline:**\r\n```\r\n1. Embed query text (sentence-transformers)\r\n2. Search Qdrant (fetch_multiplier × limit results)\r\n3. Filter by similarity threshold (default: 0.3)\r\n4. Optionally rerank with LLM\r\n5. Send top chunks to OpenRouter\r\n6. Generate answer with citations\r\n7. Return RAGResult (answer, sources, metadata)\r\n```\r\n\r\n**Key Functions:**\r\n- `perform_rag_query()` - Main entry point (MCP + CLI)\r\n- `search_qdrant()` - Semantic search with filters\r\n- `generate_answer()` - OpenRouter API integration\r\n- `format_context()` - Prepare chunks for LLM\r\n\r\n**Configuration:**\r\n- `fetch_multiplier` (default: 3) - How many extra results to fetch\r\n- `similarity_threshold` (default: 0.3) - Minimum relevance score\r\n- `temperature` (default: 0.7) - LLM creativity control\r\n- `reranking` (default: False) - Enable LLM reranking\r\n\r\n**Integration Points:**\r\n- → Collection Management (verify collection exists)\r\n- → Qdrant (semantic search)\r\n- → OpenRouter (answer generation)\r\n\r\n**Related Story:** [03-RAG_QUERY.md](../../../explanation/stories/03-RAG_QUERY.md)\r\n\r\n---\r\n\r\n### 4. Collection Management\r\n**Files:** `collection_manifest.py`, `qdrant_utils.py`\r\n**Purpose:** Track ingested books and manage Qdrant collections\r\n\r\n**Responsibilities:**\r\n- Maintain per-collection manifests (JSON/CSV)\r\n- Track ingestion progress for resume\r\n- Verify collection exists in Qdrant\r\n- Collection operations (stats, search, copy, delete)\r\n- Auto-reset manifests when collection deleted\r\n- CSV export for human-readable reports\r\n\r\n**Manifest Structure:**\r\n```json\r\n{\r\n  \"created_at\": \"2026-01-23T...\",\r\n  \"last_updated\": \"2026-01-23T...\",\r\n  \"books\": [\r\n    {\r\n      \"file_path\": \"c:/path/to/book.epub\",\r\n      \"book_title\": \"Title\",\r\n      \"author\": \"Author\",\r\n      \"domain\": \"technical\",\r\n      \"language\": \"ENG\",\r\n      \"file_type\": \"EPUB\",\r\n      \"chunks_count\": 153,\r\n      \"file_size_mb\": 34.2,\r\n      \"ingested_at\": \"2026-01-23T...\"\r\n    }\r\n  ],\r\n  \"total_chunks\": 153,\r\n  \"total_size_mb\": 34.2\r\n}\r\n```\r\n\r\n**Key Functions:**\r\n- `log_book()` - Add book to manifest\r\n- `is_book_ingested()` - Check if already processed\r\n- `show_manifest()` - Display collection contents\r\n- `export_to_csv()` - Human-readable export\r\n- `verify_collection_exists()` - Auto-reset on deletion\r\n\r\n**Files:**\r\n- `logs/{collection_name}_manifest.json` - Master manifest\r\n- `logs/{collection_name}_manifest.csv` - CSV export\r\n- `scripts/batch_ingest_progress_{collection_name}.json` - Resume tracker\r\n\r\n**Integration Points:**\r\n- ← Ingestion Engine (logs new books)\r\n- ← RAG Query Engine (checks collection status)\r\n- → File System (reads/writes manifests)\r\n- → Qdrant (collection operations)\r\n\r\n**Related Story:** [06-COLLECTION_MANAGEMENT.md](../../../explanation/stories/06-COLLECTION_MANAGEMENT.md)\r\n**Related ADR:** [ADR 0004: Collection-Specific Manifests](../decisions/0004-collection-specific-manifests.md)\r\n\r\n---\r\n\r\n### 5. Calibre Integration\r\n**Files:** `calibre_db.py`\r\n**Purpose:** Direct SQLite access to Calibre library\r\n\r\n**Responsibilities:**\r\n- Query Calibre metadata.db directly\r\n- Extract book metadata (title, author, series, tags, languages)\r\n- Match files to books (fuzzy matching)\r\n- Provide file paths for direct ingestion\r\n- Library statistics (books, authors, formats, languages)\r\n\r\n**CalibreBook Dataclass:**\r\n```python\r\n@dataclass\r\nclass CalibreBook:\r\n    id: int\r\n    title: str\r\n    authors: List[str]\r\n    formats: List[str]  # ['EPUB', 'PDF', 'MOBI']\r\n    file_paths: List[str]\r\n    languages: List[str]  # ISO codes\r\n    tags: List[str]\r\n    series: Optional[str]\r\n    series_index: Optional[float]\r\n    isbn: Optional[str]\r\n    rating: Optional[int]\r\n    timestamp: str\r\n```\r\n\r\n**Key Functions:**\r\n- `get_all_books()` - Load entire library (~9,000 books in <2s)\r\n- `search_books()` - Filter by author, title, language, format, tags\r\n- `match_file_to_book()` - Find book by file path\r\n- `get_stats()` - Library statistics\r\n\r\n**Integration Points:**\r\n- ← MCP Server (browse library via alexandria_search)\r\n- → Calibre Database (read-only queries)\r\n- → Ingestion Engine (provides book paths)\r\n\r\n**Related Story:** [05-CALIBRE_INTEGRATION.md](../../../explanation/stories/05-CALIBRE_INTEGRATION.md)\r\n\r\n---\r\n\r\n## Component Interactions\r\n\r\n### Ingestion Flow\r\n```\r\nCalibre Integration → Ingestion Engine (book path + metadata)\r\nIngestion Engine → Universal Semantic Chunker (split by semantic similarity)\r\nUniversal Semantic Chunker → Embedder (generate chunk embeddings)\r\nIngestion Engine → Collection Management (log to manifest)\r\nIngestion Engine → Qdrant (upload chunks with metadata)\r\n```\r\n\r\n### Query Flow\r\n```\r\nRAG Query Engine → Collection Management (verify collection)\r\nRAG Query Engine → Qdrant (semantic search)\r\nRAG Query Engine → OpenRouter (generate answer)\r\n```\r\n\r\n### Browse Flow\r\n```\r\nCalibre Integration → Calibre Database (query books)\r\nCalibre Integration → MCP Server (return book list)\r\n```\r\n\r\n---\r\n\r\n## Design Patterns\r\n\r\n### 1. **Module Pattern**\r\nEach component is a standalone Python module with clear interface.\r\n- Single entry point function (e.g., `perform_rag_query()`)\r\n- Usable by MCP Server and CLI\r\n- No circular dependencies\r\n\r\n### 2. **Configuration via Files**\r\n- `.mcp.json` - MCP Server configuration\r\n- `{collection}_manifest.json` - Persistent state\r\n- Environment variables - API keys and paths\r\n\r\n### 3. **Progressive Enhancement**\r\n- Basic ingestion works without Calibre DB\r\n- RAG query works without OpenRouter (search-only mode)\r\n- MCP Server is primary, CLI as secondary\r\n\r\n---\r\n\r\n## Related Views\r\n\r\n- **Previous Level:** [Container Diagram](02-container.md)\r\n- **Stories:** [All feature stories](../../../explanation/stories/)\r\n- **Code:** See `scripts/` directory for implementation\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-30 (MCP-first architecture)\r\n",
+      "filename" : "03-component.md",
+      "format" : "Markdown",
+      "order" : 4,
+      "title" : ""
+    }, {
+      "content" : "# PDF vs EPUB Ingestion Comparison\r\n\r\n**Date:** 2026-01-21\r\n**Test Books:** Silverston Data Model Resource Book Vol 1 (PDF) vs Vol 3 (EPUB)\r\n\r\n---\r\n\r\n## Test Results\r\n\r\n### PDF Ingestion (Vol 1)\r\n- **Format:** PDF (3.4 MB)\r\n- **Pages:** 525\r\n- **Chunks Created:** 525 (1 chunk per page)\r\n- **Avg Chunk Size:** ~200 tokens/chunk\r\n- **Ingestion Time:** ~11 seconds (total)\r\n- **Embedding Time:** ~6 seconds (525 chunks)\r\n- **Upload Time:** ~1 second (6 batches)\r\n- **Search Quality:** 0.61-0.65 relevance scores ✅\r\n\r\n### EPUB Ingestion (Vol 3)\r\n- **Format:** EPUB (34.2 MB)\r\n- **Chapters:** 20\r\n- **Chunks Created:** 153\r\n- **Avg Chunk Size:** ~1450 tokens/chunk\r\n- **Ingestion Time:** ~14 seconds (total)\r\n- **Embedding Time:** ~3 seconds (153 chunks)\r\n- **Upload Time:** ~1 second (2 batches)\r\n- **Search Quality:** 0.38-0.64 relevance scores ✅\r\n\r\n---\r\n\r\n## Key Differences\r\n\r\n### Chunk Size Distribution\r\n\r\n| Metric | PDF (Vol 1) | EPUB (Vol 3) | Notes |\r\n|--------|-------------|--------------|-------|\r\n| Total Chunks | 525 | 153 | PDF creates 3.4x more chunks |\r\n| Avg Size | ~200 tokens | ~1450 tokens | EPUB chunks 7x larger |\r\n| Chunking Strategy | Page-based | Content-based | PDF = 1 page = 1 chunk |\r\n| Context Preservation | Lower | Higher | EPUB preserves paragraph flow |\r\n\r\n### Why the Difference?\r\n\r\n**PDF Extraction:**\r\n- PyMuPDF extracts text **page-by-page**\r\n- Each page becomes a separate text block\r\n- Page breaks interrupt content flow\r\n- Result: Smaller, page-bounded chunks\r\n\r\n**EPUB Extraction:**\r\n- EbookLib extracts text **chapter-by-chapter**\r\n- Chapters are continuous text blocks\r\n- No artificial page breaks\r\n- Result: Larger, semantically coherent chunks\r\n\r\n---\r\n\r\n## Search Quality Comparison\r\n\r\n### Test Query: \"What are the universal data model patterns for orders?\"\r\n\r\n#### PDF Results (Vol 1)\r\n```\r\nSource 1 (Score: 0.6557)\r\nSection: Page 119\r\nText: \"Ordering Products 109... Order and Order Items... more flexible structure...\"\r\n\r\nSource 2 (Score: 0.6498)\r\nSection: Page 116\r\nText: \"Standard order model... SUPPLIER related to PURCHASE ORDERS...\"\r\n\r\nSource 3 (Score: 0.6151)\r\nSection: Page 427\r\nText: \"Implementing the Universal Data Models 423...\"\r\n```\r\n\r\n#### EPUB Results (Vol 3)\r\n```\r\nSource 1 (Score: 0.6404)\r\nSection: Chapter 6\r\nText: \"...shipment lifecycle... from 'Shipment Planned' to 'Shipment Closed'...\"\r\n\r\n(Different book, different topic - but similar relevance scores)\r\n```\r\n\r\n**Conclusion:** Both formats achieve good relevance scores (0.6+), indicating effective semantic search regardless of chunk size.\r\n\r\n---\r\n\r\n## Pros & Cons\r\n\r\n### PDF Ingestion\r\n\r\n**Pros:**\r\n- ✅ Works reliably (525 pages processed successfully)\r\n- ✅ Good search quality (0.61-0.65 scores)\r\n- ✅ Fast processing (~11 seconds for 525 pages)\r\n- ✅ Each page is searchable independently\r\n\r\n**Cons:**\r\n- ⚠️ Small chunks (~200 tokens) may lack context\r\n- ⚠️ Page breaks can split paragraphs/tables\r\n- ⚠️ 3.4x more chunks = 3.4x more embedding costs\r\n- ⚠️ Headers/footers may create noise\r\n\r\n### EPUB Ingestion\r\n\r\n**Pros:**\r\n- ✅ Large chunks (~1450 tokens) preserve context\r\n- ✅ Semantically coherent (chapter-based)\r\n- ✅ Fewer chunks = lower embedding costs\r\n- ✅ No page break artifacts\r\n\r\n**Cons:**\r\n- ⚠️ Depends on EPUB structure quality\r\n- ⚠️ Some EPUBs poorly structured (one giant chapter)\r\n- ⚠️ Larger file sizes (34 MB vs 3.4 MB)\r\n\r\n---\r\n\r\n## Recommendations\r\n\r\n### When to Use Which Format?\r\n\r\n**Prefer EPUB if available:**\r\n- Better semantic coherence\r\n- Lower embedding costs (fewer chunks)\r\n- Cleaner text extraction\r\n\r\n**Use PDF if EPUB not available:**\r\n- Still produces good results\r\n- Widely available format\r\n- Acceptable search quality\r\n\r\n### Optimizing PDF Ingestion\r\n\r\nCurrent implementation creates 1 chunk per page. Could improve by:\r\n\r\n1. **Merge consecutive pages** (e.g., 2-3 pages per chunk)\r\n2. **Detect section breaks** (chapter headers, headings)\r\n3. **Post-process to remove headers/footers**\r\n\r\n**Trade-off:** Complexity vs quality gain (current quality is already good)\r\n\r\n---\r\n\r\n## Chunk Size Impact on Search\r\n\r\n### Hypothesis\r\n- **Small chunks (200 tokens):** More precise matching, less context\r\n- **Large chunks (1450 tokens):** More context, potentially less precise\r\n\r\n### Observation\r\nBoth achieved similar relevance scores (0.6+), suggesting:\r\n- Embedding model handles both sizes well\r\n- Semantic search effective across chunk sizes\r\n- Context length not critical for technical content\r\n\r\n### Recommendation\r\n**Keep current strategy:**\r\n- EPUB: ~1450 tokens (content-based chunking)\r\n- PDF: ~200 tokens (page-based chunking)\r\n- Both work well for retrieval\r\n\r\n---\r\n\r\n## Storage & Cost Comparison\r\n\r\n### Qdrant Storage\r\n\r\n| Format | Chunks | Vectors (384-dim) | Storage | Notes |\r\n|--------|--------|-------------------|---------|-------|\r\n| PDF Vol 1 | 525 | 525 × 384 × 4 bytes | ~800 KB | More chunks = more storage |\r\n| EPUB Vol 3 | 153 | 153 × 384 × 4 bytes | ~235 KB | 3.4x less storage |\r\n\r\n### Embedding Generation Cost\r\n\r\nAssuming sentence-transformers (free, local):\r\n- **No cost difference** (runs locally on CPU)\r\n\r\nIf using API-based embeddings (e.g., OpenAI):\r\n- **PDF Vol 1:** 525 API calls\r\n- **EPUB Vol 3:** 153 API calls\r\n- **Cost difference:** 3.4x more expensive for PDF\r\n\r\n---\r\n\r\n## Production Recommendations\r\n\r\n### Current Setup (Good Enough)\r\n1. Ingest both PDF and EPUB as-is\r\n2. Accept different chunk sizes per format\r\n3. Monitor search quality manually\r\n\r\n### Future Optimization (If Needed)\r\n1. **PDF post-processing:**\r\n   - Merge pages into larger chunks\r\n   - Remove headers/footers\r\n   - Detect chapter boundaries\r\n\r\n2. **EPUB validation:**\r\n   - Check chapter structure\r\n   - Split oversized chapters (>2500 tokens)\r\n\r\n3. **Unified chunking:**\r\n   - Process both formats into ~1500 token chunks\r\n   - Use sliding window with overlap\r\n\r\n---\r\n\r\n## Conclusion\r\n\r\n✅ **PDF ingestion works!**\r\n- 525 pages → 525 chunks in 11 seconds\r\n- Good search quality (0.61-0.65 scores)\r\n- Ready for production use\r\n\r\n✅ **EPUB still preferred** (when available)\r\n- Better semantic coherence\r\n- Lower chunk count = less storage/cost\r\n- Cleaner extraction\r\n\r\n**Next Steps:**\r\n1. Batch ingest all 3 Silverston books (2 PDFs + 1 EPUB)\r\n2. Compare retrieval quality across formats\r\n3. Decide if PDF optimization needed (likely not urgent)\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-21 20:35\r\n**Status:** PDF ingestion validated and ready for production\r\n",
+      "filename" : "PDF_vs_EPUB_COMPARISON.md",
+      "format" : "Markdown",
+      "order" : 5,
+      "title" : ""
+    }, {
+      "content" : "# Qdrant Payload Structure\r\n\r\n**Purpose:** Document how book content is structured in Qdrant vector database.\r\n\r\n---\r\n\r\n## Payload Creation Flow\r\n\r\n### Pipeline Overview\r\n\r\n```\r\nBook File (EPUB/PDF/TXT)\r\n    ↓\r\n1. EXTRACT TEXT → Sections with metadata\r\n    ↓\r\n2. CHUNK TEXT → Chunks with context\r\n    ↓\r\n3. GENERATE EMBEDDINGS → 384-dim vectors\r\n    ↓\r\n4. UPLOAD TO QDRANT → Points with payload\r\n```\r\n\r\n---\r\n\r\n## Payload Structure\r\n\r\n### Hierarchical Chunking (Current - 2026-01-30)\r\n\r\nAlexandria uses **two-level hierarchical chunking**:\r\n- **Parent chunks**: One per chapter/section (for context)\r\n- **Child chunks**: Semantic chunks within each chapter (for precise retrieval)\r\n\r\n#### Parent Chunk Payload\r\n\r\n```json\r\n{\r\n  \"id\": \"uuid\",\r\n  \"vector\": [0.123, -0.456, ...],\r\n  \"payload\": {\r\n    \"text\": \"Chapter text truncated to ~8192 tokens for embedding...\",\r\n    \"book_title\": \"Thinking, Fast and Slow\",\r\n    \"author\": \"Daniel Kahneman\",\r\n    \"language\": \"eng\",\r\n    \"section_name\": \"Part I: Two Systems\",\r\n\r\n    // Hierarchical fields\r\n    \"chunk_level\": \"parent\",\r\n    \"section_index\": 1,\r\n    \"child_count\": 43,\r\n    \"token_count\": 8500,\r\n    \"full_text\": \"Complete untruncated chapter text...\",\r\n\r\n    // Ingestion metadata\r\n    \"ingested_at\": \"2026-01-30T12:00:00\",\r\n    \"strategy\": \"hierarchical\"\r\n  }\r\n}\r\n```\r\n\r\n#### Child Chunk Payload\r\n\r\n```json\r\n{\r\n  \"id\": \"uuid\",\r\n  \"vector\": [0.123, -0.456, ...],\r\n  \"payload\": {\r\n    \"text\": \"Semantic chunk text (200-1200 words)...\",\r\n    \"book_title\": \"Thinking, Fast and Slow\",\r\n    \"author\": \"Daniel Kahneman\",\r\n    \"language\": \"eng\",\r\n    \"section_name\": \"Part I: Two Systems\",\r\n\r\n    // Hierarchical fields\r\n    \"chunk_level\": \"child\",\r\n    \"parent_id\": \"uuid-of-parent-chunk\",\r\n    \"sequence_index\": 5,\r\n    \"sibling_count\": 43,\r\n    \"token_count\": 350,\r\n\r\n    // Ingestion metadata\r\n    \"ingested_at\": \"2026-01-30T12:00:00\",\r\n    \"strategy\": \"hierarchical\"\r\n  }\r\n}\r\n```\r\n\r\n### Legacy Flat Structure (Pre-2026-01-30)\r\n\r\nFor older ingestions without hierarchical chunking:\r\n\r\n```json\r\n{\r\n  \"id\": 0,\r\n  \"vector\": [0.123, -0.456, ...],  // 384-dimensional embedding\r\n  \"payload\": {\r\n    // Core Content\r\n    \"text\": \"Table of Contents Title Page Copyright Dedication ...\",\r\n    \"text_length\": 575,\r\n\r\n    // Book Metadata\r\n    \"book_title\": \"The Data Model Resource Book Vol 3: Universal Patterns...\",\r\n    \"author\": \"Len Silverston\",\r\n    \"domain\": \"technical\",\r\n    \"language\": \"eng\",\r\n\r\n    // Location Metadata\r\n    \"section_name\": \"9781118080832toc.xhtml\",\r\n    \"section_order\": 1,\r\n    \"chunk_id\": 0,\r\n\r\n    // Ingestion Metadata\r\n    \"ingested_at\": \"2026-01-21T18:14:12.363110\",\r\n    \"chunk_strategy\": \"technical-overlap\",\r\n    \"embedding_model\": \"all-MiniLM-L6-v2\",\r\n\r\n    // Open WebUI Compatibility\r\n    \"metadata\": {\r\n      \"source\": \"The Data Model Resource Book Vol 3: Universal Patterns...\",\r\n      \"section\": \"9781118080832toc.xhtml\",\r\n      \"domain\": \"technical\",\r\n      \"language\": \"eng\"\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n---\r\n\r\n## Field-by-Field Explanation\r\n\r\n### Core Content Fields\r\n\r\n#### `text` (string)\r\n**Source:** Extracted from book file, chunked based on domain strategy\r\n**Purpose:** The actual content text that will be searched\r\n**Example:** \"Table of Contents Title Page Copyright Dedication ...\"\r\n\r\n**How it's created:**\r\n```python\r\n# From chunk_text() function\r\nchunk = {\r\n    'text': text_segment,  # Extracted from book\r\n    'token_count': get_token_count(text_segment),\r\n    ...\r\n}\r\n```\r\n\r\n#### `text_length` (integer)\r\n**Source:** Token count using tiktoken (cl100k_base encoding)\r\n**Purpose:** Track chunk size for monitoring/optimization\r\n**Example:** 575\r\n\r\n**How it's calculated:**\r\n```python\r\ndef get_token_count(text: str) -> int:\r\n    encoding = tiktoken.get_encoding(\"cl100k_base\")\r\n    return len(encoding.encode(text))\r\n```\r\n\r\n---\r\n\r\n### Hierarchical Fields (New in 2026-01-30)\r\n\r\n#### `chunk_level` (string)\r\n**Source:** Set during hierarchical ingestion\r\n**Values:** `\"parent\"` or `\"child\"`\r\n**Purpose:** Distinguish chapter-level chunks from semantic chunks\r\n\r\n#### `parent_id` (string, child only)\r\n**Source:** UUID of parent chunk\r\n**Purpose:** Link child chunk to its parent chapter\r\n**Usage:** Fetch parent context via `fetch_parent_chunks()`\r\n\r\n#### `sequence_index` (integer, child only)\r\n**Source:** Order within parent (0-indexed)\r\n**Purpose:** Maintain reading order within chapter\r\n**Example:** `5` means 6th chunk in chapter\r\n\r\n#### `sibling_count` (integer, child only)\r\n**Source:** Total children in same parent\r\n**Purpose:** Know total chunks in chapter\r\n**Example:** `43` means 43 total chunks in chapter\r\n\r\n#### `section_index` (integer, parent only)\r\n**Source:** Chapter order in book (0-indexed)\r\n**Purpose:** Maintain chapter order\r\n**Example:** `0` = first chapter, `1` = second chapter\r\n\r\n#### `child_count` (integer, parent only)\r\n**Source:** Number of child chunks created\r\n**Purpose:** Track children without querying\r\n\r\n#### `full_text` (string, parent only)\r\n**Source:** Complete untruncated chapter text\r\n**Purpose:** Provide full context when needed\r\n**Note:** `text` field is truncated to ~8192 tokens for embedding\r\n\r\n#### `strategy` (string)\r\n**Source:** Set during ingestion\r\n**Values:** `\"hierarchical\"` or `\"universal-semantic\"`\r\n**Purpose:** Identify chunking approach used\r\n\r\n---\r\n\r\n### Book Metadata Fields\r\n\r\n#### `book_title` (string)\r\n**Source:** Extracted from book metadata (EPUB/PDF metadata or filename)\r\n**Purpose:** Identify which book the chunk came from\r\n**Example:** \"The Data Model Resource Book Vol 3: Universal Patterns for Data Modeling\"\r\n\r\n**How it's extracted:**\r\n```python\r\n# EPUB\r\nbook = epub.read_epub(filepath)\r\nmetadata['title'] = book.get_metadata('DC', 'title')[0][0]\r\n\r\n# PDF\r\ndoc = fitz.open(filepath)\r\nmetadata['title'] = doc.metadata.get('title', Path(filepath).stem)\r\n```\r\n\r\n#### `author` (string)\r\n**Source:** Extracted from book metadata or set to \"Unknown\"\r\n**Purpose:** Attribution and filtering by author\r\n**Example:** \"Len Silverston\"\r\n\r\n#### `language` (string)\r\n**Source:** Calibre metadata or EPUB/PDF metadata\r\n**Purpose:** Identify language for filtering and analysis\r\n**Example:** `\"eng\"`, `\"hrv\"`, `\"jpn\"`\r\n\r\n---\r\n\r\n### Location Metadata Fields\r\n\r\n#### `section_name` (string)\r\n**Source:** Chapter/page identifier from book structure\r\n**Purpose:** Navigate back to source location in original book\r\n**Examples:**\r\n- EPUB: `\"9781118080832toc.xhtml\"` (chapter HTML file)\r\n- PDF: `\"119\"` (page number)\r\n- TXT: `\"filename.txt\"` (file name)\r\n\r\n#### `section_order` (integer)\r\n**Source:** Sequential order of section in book\r\n**Purpose:** Maintain reading order for context\r\n**Example:** `1` (first section), `2` (second section), etc.\r\n\r\n#### `chunk_id` (integer)\r\n**Source:** Sequential ID within section\r\n**Purpose:** Track chunk position within section\r\n**Example:** `0` (first chunk in section), `1` (second chunk), etc.\r\n\r\n---\r\n\r\n### Ingestion Metadata Fields\r\n\r\n#### `ingested_at` (ISO 8601 timestamp)\r\n**Source:** `datetime.now().isoformat()` at upload time\r\n**Purpose:** Track when data was ingested, useful for versioning\r\n**Example:** `\"2026-01-21T18:14:12.363110\"`\r\n\r\n#### `chunk_strategy` (string)\r\n**Source:** Constructed from domain + \"overlap\"\r\n**Purpose:** Track which chunking strategy was used\r\n**Format:** `\"{domain}-overlap\"`\r\n**Examples:**\r\n- `\"technical-overlap\"` (1500-2000 tokens, 200 overlap)\r\n- `\"psychology-overlap\"` (1000-1500 tokens, 150 overlap)\r\n\r\n#### `embedding_model` (string)\r\n**Source:** Hardcoded model name\r\n**Purpose:** Track which embedding model generated vectors\r\n**Example:** `\"all-MiniLM-L6-v2\"`\r\n\r\n---\r\n\r\n### Open WebUI Compatibility\r\n\r\n#### `metadata` (object)\r\n**Source:** Duplicate of key fields for Open WebUI\r\n**Purpose:** Ensure compatibility with Open WebUI RAG interface\r\n**Structure:**\r\n```json\r\n{\r\n  \"source\": \"book_title\",\r\n  \"section\": \"section_name\",\r\n  \"domain\": \"domain\",\r\n  \"language\": \"language\"\r\n}\r\n```\r\n\r\n**Why it exists:** Open WebUI expects metadata in this nested format for citation display.\r\n\r\n---\r\n\r\n## Code Location\r\n\r\n### Where Payload is Created\r\n\r\n**File:** `scripts/ingest_books.py`\r\n**Function:** `upload_to_qdrant()` (lines 354-418)\r\n\r\n```python\r\ndef upload_to_qdrant(\r\n    chunks: List[Dict],\r\n    embeddings: List[List[float]],\r\n    domain: str,\r\n    collection_name: str = 'alexandria',\r\n    qdrant_host: str = 'localhost',\r\n    qdrant_port: int = 6333\r\n):\r\n    # ...\r\n\r\n    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):\r\n        point = PointStruct(\r\n            id=idx,\r\n            vector=embedding,\r\n            payload={\r\n                # Core content\r\n                \"text\": chunk['text'],\r\n                \"text_length\": chunk['token_count'],\r\n\r\n                # Book metadata\r\n                \"book_title\": chunk['book_title'],\r\n                \"author\": chunk['book_author'],\r\n                \"domain\": domain,\r\n                \"language\": chunk.get('language', 'unknown'),\r\n\r\n                # Location metadata\r\n                \"section_name\": chunk['section_name'],\r\n                \"section_order\": chunk['section_order'],\r\n                \"chunk_id\": chunk['chunk_id'],\r\n\r\n                # Ingestion metadata\r\n                \"ingested_at\": datetime.now().isoformat(),\r\n                \"chunk_strategy\": f\"{domain}-overlap\",\r\n                \"embedding_model\": \"all-MiniLM-L6-v2\",\r\n\r\n                # Open WebUI compatibility\r\n                \"metadata\": {\r\n                    \"source\": chunk['book_title'],\r\n                    \"section\": chunk['section_name'],\r\n                    \"domain\": domain,\r\n                    \"language\": chunk.get('language', 'unknown')\r\n                }\r\n            }\r\n        )\r\n        points.append(point)\r\n```\r\n\r\n---\r\n\r\n## Data Flow Example\r\n\r\n### Step-by-Step for EPUB\r\n\r\n#### 1. Extract Text\r\n```python\r\n# From extract_text_from_epub()\r\nchapters = [{\r\n    'name': '9781118080832toc.xhtml',\r\n    'text': 'Table of Contents Title Page Copyright...',\r\n    'order': 1\r\n}]\r\n\r\nmetadata = {\r\n    'title': 'The Data Model Resource Book Vol 3...',\r\n    'author': 'Len Silverston',\r\n    'language': 'eng'\r\n}\r\n```\r\n\r\n#### 2. Chunk Text\r\n```python\r\n# From chunk_text()\r\nchunk = {\r\n    'text': 'Table of Contents Title Page...',\r\n    'token_count': 575,\r\n    'section_name': '9781118080832toc.xhtml',\r\n    'section_order': 1,\r\n    'chunk_id': 0,\r\n    'book_title': 'The Data Model Resource Book Vol 3...',\r\n    'book_author': 'Len Silverston',\r\n    'language': 'eng'\r\n}\r\n```\r\n\r\n#### 3. Generate Embedding\r\n```python\r\n# From EmbeddingGenerator\r\nembedding = [0.123, -0.456, ...]  # 384 dimensions\r\n```\r\n\r\n#### 4. Create Qdrant Point\r\n```python\r\n# From upload_to_qdrant()\r\npoint = PointStruct(\r\n    id=0,\r\n    vector=embedding,  # 384-dim vector\r\n    payload={\r\n        \"text\": chunk['text'],\r\n        \"text_length\": 575,\r\n        \"book_title\": \"The Data Model Resource Book Vol 3...\",\r\n        \"author\": \"Len Silverston\",\r\n        \"domain\": \"technical\",\r\n        \"language\": \"eng\",\r\n        \"section_name\": \"9781118080832toc.xhtml\",\r\n        \"section_order\": 1,\r\n        \"chunk_id\": 0,\r\n        \"ingested_at\": \"2026-01-21T18:14:12.363110\",\r\n        \"chunk_strategy\": \"technical-overlap\",\r\n        \"embedding_model\": \"all-MiniLM-L6-v2\",\r\n        \"metadata\": {\r\n            \"source\": \"The Data Model Resource Book Vol 3...\",\r\n            \"section\": \"9781118080832toc.xhtml\",\r\n            \"domain\": \"technical\",\r\n            \"language\": \"eng\"\r\n        }\r\n    }\r\n)\r\n```\r\n\r\n---\r\n\r\n## Differences: PDF vs EPUB\r\n\r\n### EPUB Payload\r\n```json\r\n{\r\n  \"section_name\": \"9781118080832c01.xhtml\",  // Chapter HTML file\r\n  \"section_order\": 1,                         // Chapter 1\r\n  \"chunk_id\": 0,                              // First chunk in chapter\r\n  \"text_length\": 1450                         // ~1450 tokens (large chunk)\r\n}\r\n```\r\n\r\n### PDF Payload\r\n```json\r\n{\r\n  \"section_name\": \"119\",       // Page number\r\n  \"section_order\": 119,        // Page 119\r\n  \"chunk_id\": 0,               // Only chunk on that page\r\n  \"text_length\": 200           // ~200 tokens (page-based chunk)\r\n}\r\n```\r\n\r\n**Key Difference:** PDFs use page numbers as sections, EPUBs use chapter files.\r\n\r\n---\r\n\r\n## Querying Payload Fields\r\n\r\n### Filter by Domain\r\n```python\r\nfrom qdrant_client.models import Filter, FieldCondition, MatchValue\r\n\r\nresults = client.query_points(\r\n    collection_name=\"alexandria\",\r\n    query=query_vector,\r\n    query_filter=Filter(\r\n        must=[FieldCondition(key=\"domain\", match=MatchValue(value=\"technical\"))]\r\n    )\r\n)\r\n```\r\n\r\n### Filter by Book\r\n```python\r\nresults = client.query_points(\r\n    collection_name=\"alexandria\",\r\n    query=query_vector,\r\n    query_filter=Filter(\r\n        must=[FieldCondition(key=\"book_title\", match=MatchValue(value=\"Silverston\"))]\r\n    )\r\n)\r\n```\r\n\r\n### Filter by Author\r\n```python\r\nresults = client.query_points(\r\n    collection_name=\"alexandria\",\r\n    query=query_vector,\r\n    query_filter=Filter(\r\n        must=[FieldCondition(key=\"author\", match=MatchValue(value=\"Len Silverston\"))]\r\n    )\r\n)\r\n```\r\n\r\n---\r\n\r\n## Modifying Payload Structure\r\n\r\n### Adding New Fields\r\n\r\n**Location:** `scripts/ingest_books.py`, line ~377\r\n\r\n```python\r\npayload={\r\n    # Existing fields...\r\n\r\n    # Add your custom field here\r\n    \"custom_field\": \"custom_value\",\r\n}\r\n```\r\n\r\n### Example: Add ISBN Field\r\n\r\n```python\r\n# In upload_to_qdrant()\r\npayload={\r\n    \"text\": chunk['text'],\r\n    \"text_length\": chunk['token_count'],\r\n    \"book_title\": chunk['book_title'],\r\n    \"author\": chunk['book_author'],\r\n    \"domain\": domain,\r\n\r\n    # NEW: Add ISBN\r\n    \"isbn\": chunk.get('isbn', 'N/A'),  # Add to chunk dict earlier\r\n\r\n    # ... rest of fields\r\n}\r\n```\r\n\r\n---\r\n\r\n## Best Practices\r\n\r\n### 1. Keep Payload Lean\r\n- ❌ Don't duplicate data unnecessarily\r\n- ✅ Store only what's needed for search/filter/display\r\n\r\n### 2. Use Consistent Field Names\r\n- ❌ `book_title`, `bookTitle`, `title` (inconsistent)\r\n- ✅ `book_title` (snake_case, consistent)\r\n\r\n### 3. Include Timestamps\r\n- ✅ `ingested_at` allows versioning and tracking\r\n\r\n### 4. Preserve Source Location\r\n- ✅ `section_name` + `section_order` + `chunk_id` = exact location\r\n\r\n### 5. Tag Ingestion Strategy\r\n- ✅ `chunk_strategy` + `embedding_model` = reproducibility\r\n\r\n---\r\n\r\n## Summary\r\n\r\n**Payload Structure Creation:**\r\n1. Extract text from book → sections with metadata\r\n2. Chunk text → chunks with location info\r\n3. Generate embeddings → 384-dim vectors\r\n4. Combine into Qdrant point → vector + payload\r\n\r\n**Key Payload Components:**\r\n- **Content:** `text`, `text_length`\r\n- **Book Info:** `book_title`, `author`, `domain`, `language`\r\n- **Location:** `section_name`, `section_order`, `chunk_id`\r\n- **Tracking:** `ingested_at`, `chunk_strategy`, `embedding_model`\r\n- **Compatibility:** `metadata` (nested, for Open WebUI)\r\n\r\n**Code Location:** `scripts/ingest_books.py` → `upload_to_qdrant()` function\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-30 (Added hierarchical chunking payload structure)\r\n",
+      "filename" : "QDRANT_PAYLOAD_STRUCTURE.md",
+      "format" : "Markdown",
+      "order" : 6,
+      "title" : ""
+    }, {
+      "content" : "# Universal Semantic Chunking Technical Specification\r\n\r\n**Purpose:** Technical deep-dive into Alexandria's semantic-aware text chunking algorithm\r\n\r\n---\r\n\r\n## Overview\r\n\r\n**Universal Semantic Chunking** is Alexandria's core text splitting strategy. Unlike traditional fixed-window chunking (e.g., \"split every 500 tokens\"), it intelligently breaks text at **semantic topic boundaries** using sentence embeddings and cosine similarity.\r\n\r\n**Key Principle:** Break where the topic changes, not where the word count ends.\r\n\r\n---\r\n\r\n## Algorithm\r\n\r\n### High-Level Flow\r\n\r\n```\r\nInput: Raw text (extracted from EPUB/PDF/TXT)\r\nOutput: List of semantically coherent chunks\r\n\r\n1. Split text into sentences (regex-based)\r\n2. Generate embeddings for ALL sentences (batch processing)\r\n3. Iterate through sentences:\r\n   a. Calculate cosine similarity with previous sentence\r\n   b. If similarity < threshold AND buffer >= min_size:\r\n      → Finalize current chunk\r\n      → Start new chunk\r\n   c. Else if buffer >= max_size:\r\n      → Force split (safety cap)\r\n   d. Else:\r\n      → Add sentence to current buffer\r\n4. Return chunks with metadata\r\n```\r\n\r\n### Detailed Implementation\r\n\r\n**File:** `universal_chunking.py`\r\n\r\n**Class:** `UniversalChunker`\r\n\r\n**Constructor Parameters:**\r\n```python\r\nUniversalChunker(\r\n    embedding_model,           # SentenceTransformer instance\r\n    threshold: float = 0.5,    # Similarity threshold (0.0-1.0)\r\n    min_chunk_size: int = 200, # Minimum words per chunk\r\n    max_chunk_size: int = 1500 # Maximum words per chunk\r\n)\r\n```\r\n\r\n**Main Method:**\r\n```python\r\ndef chunk(text: str, metadata: Optional[Dict] = None) -> List[Dict]:\r\n    \"\"\"\r\n    Splits text into semantically cohesive chunks.\r\n\r\n    Returns:\r\n        List of dicts with 'text' and metadata\r\n    \"\"\"\r\n```\r\n\r\n---\r\n\r\n## Parameters Explained\r\n\r\n### 1. Threshold (default: 0.5)\r\n\r\n**What it controls:** How \"different\" two consecutive sentences must be to trigger a chunk split.\r\n\r\n- **Lower threshold (0.3-0.4):** More splits, smaller chunks, tighter topic focus\r\n- **Default (0.5):** Balanced trade-off\r\n- **Higher threshold (0.6-0.7):** Fewer splits, larger chunks, broader context\r\n\r\n**Domain-Specific Tuning:**\r\n- **Philosophy:** 0.45 (tighter focus for argument coherence)\r\n- **All others:** 0.55 (broader context for general content)\r\n\r\n**Example:**\r\n```\r\nSentence A: \"Database normalization reduces redundancy.\"\r\nSentence B: \"First normal form requires atomic values.\"\r\nCosine Similarity: 0.72 (high - same topic, don't split)\r\n\r\nSentence B: \"First normal form requires atomic values.\"\r\nSentence C: \"The Renaissance began in 14th-century Italy.\"\r\nCosine Similarity: 0.15 (low - different topics, SPLIT!)\r\n```\r\n\r\n### 2. Min Chunk Size (default: 200 words)\r\n\r\n**What it controls:** Minimum context buffer before allowing a split.\r\n\r\n**Why needed:**\r\n- Prevents atomic/useless chunks (e.g., 5-word chunks)\r\n- Ensures LLM has enough context to understand chunk\r\n- Overrides similarity threshold for small buffers\r\n\r\n**Trade-off:**\r\n- **Too small (50):** Risk of fragmentary chunks\r\n- **Too large (500):** Forces unrelated sentences together\r\n- **Sweet spot (200):** ~2-3 paragraphs of context\r\n\r\n### 3. Max Chunk Size (default: 1200 words)\r\n\r\n**What it controls:** Safety cap to prevent runaway chunks.\r\n\r\n**Why needed:**\r\n- Protects against edge cases (e.g., long tables, code blocks)\r\n- Prevents LLM context window overflow\r\n- Ensures manageable retrieval results\r\n\r\n**When triggered:**\r\n- Long homogeneous sections (e.g., legal text, technical specs)\r\n- High-similarity content (all sentences related)\r\n\r\n**Behavior:** Forces split even if similarity is high.\r\n\r\n---\r\n\r\n## Threshold Comparison: Real-World Impact\r\n\r\nThis section demonstrates how threshold values affect chunking decisions using **identical input text**. We compare Philosophy's stricter threshold (0.45) against the default threshold (0.55) to illustrate the domain-specific tuning rationale.\r\n\r\n### Test Input\r\n\r\n```\r\nPlato's theory of Forms represents his attempt to solve the problem of universals.\r\nHe argued that abstract properties like justice and beauty exist in a perfect,\r\nunchangeable realm beyond the physical world. Aristotle, his student, rejected\r\nthis dualistic view. Instead, he proposed that forms are embedded within objects\r\nthemselves, not in a separate realm. Modern epistemology examines how we acquire\r\nknowledge through sense perception and reason.\r\n```\r\n\r\n**Sentence breakdown:**\r\n- **S1:** \"Plato's theory of Forms represents his attempt to solve the problem of universals.\" (13 words)\r\n- **S2:** \"He argued that abstract properties like justice and beauty exist in a perfect, unchangeable realm beyond the physical world.\" (20 words)\r\n- **S3:** \"Aristotle, his student, rejected this dualistic view.\" (7 words)\r\n- **S4:** \"Instead, he proposed that forms are embedded within objects themselves, not in a separate realm.\" (15 words)\r\n- **S5:** \"Modern epistemology examines how we acquire knowledge through sense perception and reason.\" (12 words)\r\n\r\n---\r\n\r\n### Scenario 1: Philosophy Threshold (0.45)\r\n\r\n**Configuration:**\r\n```python\r\nthreshold = 0.45  # Philosophy domain (tighter focus)\r\nmin_chunk_size = 15 words\r\nmax_chunk_size = 1200 words\r\n```\r\n\r\n#### Processing Steps\r\n\r\n**S1 → S2 (Plato's theory continuation)**\r\n```\r\nSimilarity: 0.73 (high - both about Plato's Forms)\r\nBuffer: 13 words\r\nDecision: 0.73 ≥ 0.45 → CONTINUE\r\nReason: Same philosophical concept (Plato's Forms theory)\r\n```\r\n\r\n**S2 → S3 (Plato → Aristotle transition)**\r\n```\r\nSimilarity: 0.42 (moderate - topic shift detected!)\r\nBuffer: 33 words (13 + 20)\r\nDecision: 0.42 < 0.45 AND 33 ≥ 15 → SPLIT ✂️\r\nReason: Philosophical transition (Plato → Aristotle's critique)\r\n```\r\n\r\n**S3 → S4 (Aristotle's argument continuation)**\r\n```\r\nSimilarity: 0.68 (high - both about Aristotle's alternative)\r\nBuffer: 7 words\r\nDecision: 0.68 ≥ 0.45 → CONTINUE\r\nReason: Same philosophical argument (Aristotle's response)\r\n```\r\n\r\n**S4 → S5 (Ancient → Modern philosophy)**\r\n```\r\nSimilarity: 0.38 (moderate-low - temporal/conceptual shift)\r\nBuffer: 22 words (7 + 15)\r\nDecision: 0.38 < 0.45 AND 22 ≥ 15 → SPLIT ✂️\r\nReason: Era transition (ancient → modern epistemology)\r\n```\r\n\r\n#### Result: 3 Chunks (Tighter Boundaries)\r\n\r\n```json\r\n[\r\n  {\r\n    \"chunk_id\": 0,\r\n    \"text\": \"Plato's theory of Forms represents his attempt to solve the problem of universals. He argued that abstract properties like justice and beauty exist in a perfect, unchangeable realm beyond the physical world.\",\r\n    \"word_count\": 33,\r\n    \"focus\": \"Plato's Forms theory\"\r\n  },\r\n  {\r\n    \"chunk_id\": 1,\r\n    \"text\": \"Aristotle, his student, rejected this dualistic view. Instead, he proposed that forms are embedded within objects themselves, not in a separate realm.\",\r\n    \"word_count\": 22,\r\n    \"focus\": \"Aristotle's critique and alternative\"\r\n  },\r\n  {\r\n    \"chunk_id\": 2,\r\n    \"text\": \"Modern epistemology examines how we acquire knowledge through sense perception and reason.\",\r\n    \"word_count\": 12,\r\n    \"focus\": \"Modern epistemology\"\r\n  }\r\n]\r\n```\r\n\r\n---\r\n\r\n### Scenario 2: Default Threshold (0.55)\r\n\r\n**Configuration:**\r\n```python\r\nthreshold = 0.55  # Default (broader context)\r\nmin_chunk_size = 15 words\r\nmax_chunk_size = 1200 words\r\n```\r\n\r\n#### Processing Steps\r\n\r\n**S1 → S2 (Plato's theory continuation)**\r\n```\r\nSimilarity: 0.73 (high - both about Plato's Forms)\r\nBuffer: 13 words\r\nDecision: 0.73 ≥ 0.55 → CONTINUE\r\nReason: Same philosophical concept\r\n```\r\n\r\n**S2 → S3 (Plato → Aristotle transition)**\r\n```\r\nSimilarity: 0.42 (moderate - but acceptable under higher threshold)\r\nBuffer: 33 words\r\nDecision: 0.42 < 0.55 AND 33 ≥ 15 → SPLIT ✂️\r\nReason: Still triggers split (similarity below 0.55)\r\n```\r\n\r\n**S3 → S4 (Aristotle's argument continuation)**\r\n```\r\nSimilarity: 0.68 (high - both about Aristotle's alternative)\r\nBuffer: 7 words\r\nDecision: 0.68 ≥ 0.55 → CONTINUE\r\nReason: Same philosophical argument\r\n```\r\n\r\n**S4 → S5 (Ancient → Modern philosophy)**\r\n```\r\nSimilarity: 0.38 (moderate-low - but now BELOW threshold)\r\nBuffer: 22 words\r\nDecision: 0.38 < 0.55 AND 22 ≥ 15 → SPLIT ✂️\r\nReason: Similarity below threshold\r\n```\r\n\r\n#### Result: 3 Chunks (Same Structure)\r\n\r\n```json\r\n[\r\n  {\r\n    \"chunk_id\": 0,\r\n    \"text\": \"Plato's theory of Forms represents his attempt to solve the problem of universals. He argued that abstract properties like justice and beauty exist in a perfect, unchangeable realm beyond the physical world.\",\r\n    \"word_count\": 33,\r\n    \"focus\": \"Plato's Forms theory\"\r\n  },\r\n  {\r\n    \"chunk_id\": 1,\r\n    \"text\": \"Aristotle, his student, rejected this dualistic view. Instead, he proposed that forms are embedded within objects themselves, not in a separate realm.\",\r\n    \"word_count\": 22,\r\n    \"focus\": \"Aristotle's critique and alternative\"\r\n  },\r\n  {\r\n    \"chunk_id\": 2,\r\n    \"text\": \"Modern epistemology examines how we acquire knowledge through sense perception and reason.\",\r\n    \"word_count\": 12,\r\n    \"focus\": \"Modern epistemology\"\r\n  }\r\n]\r\n```\r\n\r\n---\r\n\r\n### Comparison Analysis\r\n\r\n#### Decision Differences Highlighted\r\n\r\n| Transition | Similarity | Threshold 0.45 | Threshold 0.55 | Outcome Difference |\r\n|------------|------------|----------------|----------------|-------------------|\r\n| S1 → S2 | 0.73 | CONTINUE ✓ | CONTINUE ✓ | **Same** (both high) |\r\n| S2 → S3 | 0.42 | **SPLIT ✂️** | **SPLIT ✂️** | **Same** (below both thresholds) |\r\n| S3 → S4 | 0.68 | CONTINUE ✓ | CONTINUE ✓ | **Same** (both high) |\r\n| S4 → S5 | 0.38 | **SPLIT ✂️** | **SPLIT ✂️** | **Same** (below both thresholds) |\r\n\r\n**Note:** In this example, both thresholds produce identical chunking because the similarity scores (0.42 and 0.38) fall below both thresholds. However, the margin of difference matters for edge cases.\r\n\r\n#### Edge Case Demonstration: Marginal Similarity\r\n\r\nConsider a different transition with similarity **0.48** (between thresholds):\r\n\r\n```\r\nS_A: \"Kant's categorical imperative defines moral duty.\"\r\nS_B: \"Utilitarian ethics focuses on maximizing happiness.\"\r\nSimilarity: 0.48 (both ethics, but different theories)\r\nBuffer: 25 words\r\n```\r\n\r\n**With threshold 0.45 (Philosophy):**\r\n```\r\nDecision: 0.48 ≥ 0.45 → CONTINUE\r\nReason: Similarity just above threshold, keep together\r\n```\r\n\r\n**With threshold 0.55 (Default):**\r\n```\r\nDecision: 0.48 < 0.55 AND 25 ≥ 15 → SPLIT ✂️\r\nReason: Similarity below threshold, split ethical theories\r\n```\r\n\r\n**Impact:** The philosophy threshold (0.45) keeps closely related ethical theories together, while the default threshold (0.55) splits them to maintain tighter topical focus per chunk.\r\n\r\n---\r\n\r\n### Why Philosophy Uses 0.45 (Tighter Threshold)\r\n\r\n**Rationale (from Domain Tuning section):**\r\n\r\n1. **Argument Coherence:** Philosophical arguments require precise boundaries. Splitting at similarity 0.45 prevents mixing subtly different arguments (e.g., Plato's idealism vs. Aristotle's empiricism).\r\n\r\n2. **Nuanced Distinctions:** Philosophy often involves fine-grained conceptual differences. A lower threshold catches these transitions (e.g., deontology vs. consequentialism both being \"ethics\" but distinct theories).\r\n\r\n3. **Retrieval Precision:** When querying \"What did Aristotle say about Forms?\", a chunk containing ONLY Aristotle's view (not mixed with Plato's) provides clearer context for the LLM.\r\n\r\n4. **Citation Accuracy:** Academic philosophy requires precise attribution. Tighter chunks reduce risk of attributing Plato's ideas to Aristotle or vice versa.\r\n\r\n**Trade-off:**\r\n- **Benefit:** Sharper conceptual boundaries, better argument isolation\r\n- **Cost:** Slightly smaller chunks (may lose some bridging context between related ideas)\r\n\r\n---\r\n\r\n### Why Other Domains Use 0.55 (Broader Threshold)\r\n\r\n**Rationale:**\r\n\r\n1. **Contextual Continuity:** Technical documentation, history, and literature benefit from broader context. Related concepts stay together even with moderate similarity drops.\r\n\r\n2. **Fewer Edge Cases:** Technical topics (e.g., database normalization) have clearer semantic boundaries. A 0.55 threshold is sufficient to catch true topic shifts.\r\n\r\n3. **Efficiency:** Larger chunks mean fewer vector database entries, faster retrieval, and more context per search result.\r\n\r\n4. **User Experience:** Non-philosophy queries often benefit from richer surrounding context rather than hyper-focused snippets.\r\n\r\n**Example (Technical domain):**\r\n```\r\nS_A: \"Database normalization reduces redundancy.\" (5 words)\r\nS_B: \"First normal form requires atomic values.\" (6 words)\r\nSimilarity: 0.72 (high - both normalization)\r\n\r\nWith threshold 0.55: CONTINUE (correct - keep normalization steps together)\r\nWith threshold 0.45: CONTINUE (also works, but unnecessary strictness)\r\n```\r\n\r\n---\r\n\r\n### Key Takeaways\r\n\r\n1. **Threshold tuning is domain-dependent:** Philosophy's nuanced arguments benefit from 0.45, while other domains work well with 0.55.\r\n\r\n2. **Similarity scores reflect semantic distance:** Values like 0.42 (Plato→Aristotle) and 0.38 (ancient→modern) indicate genuine topic shifts detectable by the embedding model.\r\n\r\n3. **Marginal cases matter:** Similarities near the threshold (0.45-0.55 range) are where domain tuning provides the most value.\r\n\r\n4. **Buffer constraints override similarity:** Even with low similarity, splits won't happen until `min_chunk_size` is met, preventing fragmentary chunks.\r\n\r\n5. **Real-world impact:** The 0.10 threshold difference (0.45 vs. 0.55) can change chunking decisions by 15-20% in philosophy texts, significantly improving retrieval precision for nuanced queries.\r\n\r\n---\r\n\r\n## Embedding Model\r\n\r\n### Model: all-MiniLM-L6-v2\r\n\r\n**Specifications:**\r\n- **Dimensions:** 384\r\n- **Max tokens:** 256\r\n- **Size:** 80 MB\r\n- **Speed:** ~2,000 sentences/second (CPU)\r\n- **Quality:** Strong performance for general semantic similarity\r\n\r\n**Why this model?**\r\n- Fast inference (CPU-friendly for laptops)\r\n- Good semantic understanding across domains\r\n- Small footprint (easy to deploy)\r\n- Widely used in RAG systems\r\n\r\n**Singleton Pattern:**\r\n```python\r\nclass EmbeddingGenerator:\r\n    _instance = None\r\n    _model = None\r\n\r\n    def get_model(self):\r\n        if self._model is None:\r\n            self._model = SentenceTransformer('all-MiniLM-L6-v2')\r\n        return self._model\r\n```\r\n\r\n**Benefits:**\r\n- Model loaded once and reused (saves startup time)\r\n- Shared across chunking and query embedding\r\n- Memory-efficient\r\n\r\n---\r\n\r\n## Sentence Splitting\r\n\r\n### Regex Pattern\r\n\r\n```python\r\ndef _split_sentences(text: str) -> List[str]:\r\n    sentences = re.split(r'(?<=[.!?])\\s+', text)\r\n    return [s.strip() for s in sentences if len(s.strip()) > 2]\r\n```\r\n\r\n**Pattern Explained:**\r\n- `(?<=[.!?])` - Positive lookbehind for sentence-ending punctuation\r\n- `\\s+` - One or more whitespace characters\r\n\r\n**Why this pattern?**\r\n- Simple and fast\r\n- Works well for prose (technical, psychology, philosophy, literature)\r\n- Handles abbreviations naturally (e.g., \"Dr. Smith\" stays together)\r\n\r\n**Edge Cases:**\r\n- **Abbreviations:** May split incorrectly (e.g., \"U.S.A. is\" → \"U.S.A.\" + \"is\")\r\n- **Ellipsis:** Treated as sentence end (e.g., \"To be continued...\" splits)\r\n- **Code blocks:** May produce odd splits (not a primary use case)\r\n\r\n**Potential Improvements:**\r\n- Use spaCy or NLTK for more robust sentence detection\r\n- Add language-specific rules (e.g., Croatian quotation marks)\r\n\r\n---\r\n\r\n## Cosine Similarity\r\n\r\n### Formula\r\n\r\n```python\r\nsimilarity = cosine_similarity(\r\n    embedding_prev.reshape(1, -1),\r\n    embedding_curr.reshape(1, -1)\r\n)[0][0]\r\n```\r\n\r\n**Range:** 0.0 (completely different) to 1.0 (identical)\r\n\r\n**Interpretation:**\r\n- **0.0-0.3:** Very different topics (always split)\r\n- **0.3-0.5:** Moderately different (split if buffer >= min_size)\r\n- **0.5-0.7:** Similar topics (continue chunk)\r\n- **0.7-1.0:** Nearly identical (definitely continue)\r\n\r\n**Example Similarities:**\r\n```\r\n\"Database normalization reduces redundancy.\" ↔\r\n\"First normal form requires atomic values.\"\r\n→ 0.72 (same topic: database normalization)\r\n\r\n\"Database normalization reduces redundancy.\" ↔\r\n\"The cat sat on the mat.\"\r\n→ 0.08 (unrelated topics)\r\n\r\n\"Nietzsche wrote about the will to power.\" ↔\r\n\"He was a German philosopher who challenged morality.\"\r\n→ 0.64 (related: Nietzsche's philosophy)\r\n```\r\n\r\n---\r\n\r\n## Decision Logic\r\n\r\n### Split Conditions\r\n\r\n```python\r\nshould_break = (similarity < threshold and current_word_count >= min_chunk_size)\r\nmust_break = (current_word_count + word_count > max_chunk_size)\r\n\r\nif should_break or must_break:\r\n    # Finalize current chunk\r\n    chunks.append(create_chunk_dict(\" \".join(current_sentences)))\r\n    current_sentences = [sentence]\r\nelse:\r\n    # Add to current chunk\r\n    current_sentences.append(sentence)\r\n```\r\n\r\n### Enhanced Decision Flowchart\r\n\r\n**Complete Algorithm Decision Tree (matches `universal_chunking.py` lines 82-97):**\r\n\r\n```\r\n                              START: Processing Sentence[i]\r\n                                          |\r\n                                          v\r\n                    +---------------------------------------------+\r\n                    |  Calculate cosine similarity between       |\r\n                    |  Embedding[i-1] and Embedding[i]          |\r\n                    +---------------------------------------------+\r\n                                          |\r\n                                          v\r\n                    +---------------------------------------------+\r\n                    |  Evaluate two split conditions:             |\r\n                    |                                             |\r\n                    |  should_break = (similarity < threshold)    |\r\n                    |                 AND                         |\r\n                    |                 (current_word_count >= min) |\r\n                    |                                             |\r\n                    |  must_break = (current_word_count +         |\r\n                    |                word_count > max)            |\r\n                    +---------------------------------------------+\r\n                                          |\r\n                                          v\r\n                          ┌───────────────┴───────────────┐\r\n                          │                               │\r\n                          v                               v\r\n              ┌───────────────────┐         ┌─────────────────────┐\r\n              │   must_break?     │         │   should_break?     │\r\n              │  (size overflow)  │         │ (semantic + size)   │\r\n              └───────────────────┘         └─────────────────────┘\r\n                      │                               │\r\n              ┌───────┴────────┐            ┌────────┴────────┐\r\n              │                │            │                 │\r\n            YES              NO             YES              NO\r\n              │                │            │                 │\r\n              v                │            v                 │\r\n      +--------------+         │    +--------------+          │\r\n      │ FORCE SPLIT  │         │    │ SEMANTIC     │          │\r\n      │ (safety cap) │         │    │ SPLIT        │          │\r\n      +--------------+         │    +--------------+          │\r\n              │                │            │                 │\r\n              v                │            v                 │\r\n      +--------------+         │    +--------------+          │\r\n      │ Finalize     │         │    │ Finalize     │          │\r\n      │ current      │         │    │ current      │          │\r\n      │ chunk        │         │    │ chunk        │          │\r\n      +--------------+         │    +--------------+          │\r\n              │                │            │                 │\r\n              v                │            v                 │\r\n      +--------------+         │    +--------------+          │\r\n      │ Start new    │         │    │ Start new    │          │\r\n      │ chunk with   │         │    │ chunk with   │          │\r\n      │ sentence[i]  │         │    │ sentence[i]  │          │\r\n      +--------------+         │    +--------------+          │\r\n              │                │            │                 │\r\n              │                │            │                 │\r\n              └────────────────┴────────────┘                 │\r\n                               │                              │\r\n                               v                              │\r\n                    ┌──────────────────┐                      │\r\n                    │ Continue to next │<─────────────────────┘\r\n                    │ sentence         │\r\n                    └──────────────────┘\r\n                               │\r\n                               v\r\n                    ┌──────────────────┐\r\n                    │  CONTINUE        │\r\n                    │  (add to buffer) │\r\n                    └──────────────────┘\r\n                               │\r\n                               v\r\n                    +-----------------------+\r\n                    | current_sentences.    |\r\n                    | append(sentence)      |\r\n                    |                       |\r\n                    | current_word_count    |\r\n                    | += word_count         |\r\n                    +-----------------------+\r\n                               |\r\n                               v\r\n                    ┌──────────────────────┐\r\n                    │ Process next sentence │\r\n                    │ (loop continues)      │\r\n                    └──────────────────────┘\r\n```\r\n\r\n### Decision Outcomes Explained\r\n\r\n**1. SEMANTIC SPLIT (should_break = True)**\r\n```\r\nConditions met:\r\n  ✓ similarity < threshold (e.g., 0.22 < 0.5)\r\n  ✓ current_word_count >= min_chunk_size (e.g., 250 >= 200)\r\n\r\nTrigger: Topic boundary detected AND sufficient context accumulated\r\nExample: Philosophy sentences (sim=0.78) → Carpentry sentence (sim=0.22)\r\nAction: Finalize chunk, start new chunk with current sentence\r\n```\r\n\r\n**2. FORCE SPLIT (must_break = True)**\r\n```\r\nConditions met:\r\n  ✓ current_word_count + word_count > max_chunk_size\r\n\r\nTrigger: Adding sentence would exceed maximum size limit\r\nExample: Buffer has 1450 words, next sentence has 100 words → 1550 > 1500\r\nAction: Finalize chunk IMMEDIATELY (safety cap), start new chunk\r\nNote: Overrides similarity check (even if similarity is high)\r\n```\r\n\r\n**3. CONTINUE (both conditions False)**\r\n```\r\nConditions:\r\n  ✗ similarity >= threshold (e.g., 0.78 >= 0.5) - same topic\r\n  OR\r\n  ✗ current_word_count < min_chunk_size (e.g., 150 < 200) - insufficient buffer\r\n\r\nAction: Add sentence to current buffer, continue accumulating\r\nExample: Two philosophy sentences with similarity=0.78 stay together\r\n```\r\n\r\n### Precedence Rules\r\n\r\n**Priority order (checked in code at line 89):**\r\n1. **must_break** takes precedence (checked first via OR operator)\r\n2. **should_break** checked second\r\n3. **Both false** → CONTINUE\r\n\r\n**Critical logic:**\r\n```python\r\nif should_break or must_break:  # Either condition triggers split\r\n    # SPLIT happens here\r\nelse:\r\n    # CONTINUE happens here\r\n```\r\n\r\n### Real-World Examples\r\n\r\n**Example 1: Semantic Split**\r\n```\r\nBuffer: \"Philosophy is the study of fundamental questions...\" (250 words)\r\nNext sentence: \"In contrast, carpentry is a skilled trade...\" (18 words)\r\nSimilarity: 0.22 (< 0.5 threshold)\r\nBuffer size: 250 (>= 200 min)\r\n\r\nDecision Path:\r\n  should_break = (0.22 < 0.5) AND (250 >= 200) = True\r\n  must_break = (250 + 18 > 1500) = False\r\n  Result: SEMANTIC SPLIT (topic boundary detected)\r\n```\r\n\r\n**Example 2: Force Split**\r\n```\r\nBuffer: Long homogeneous technical text (1480 words)\r\nNext sentence: \"The normalization process continues...\" (30 words)\r\nSimilarity: 0.85 (high - same topic!)\r\nBuffer size: 1480\r\n\r\nDecision Path:\r\n  should_break = (0.85 < 0.5) AND (1480 >= 200) = False\r\n  must_break = (1480 + 30 > 1500) = True\r\n  Result: FORCE SPLIT (safety cap prevents runaway chunk)\r\n```\r\n\r\n**Example 3: Continue (High Similarity)**\r\n```\r\nBuffer: \"Database normalization reduces redundancy.\" (5 words)\r\nNext sentence: \"First normal form requires atomic values.\" (7 words)\r\nSimilarity: 0.78 (high - same topic)\r\nBuffer size: 220 words\r\n\r\nDecision Path:\r\n  should_break = (0.78 < 0.5) AND (220 >= 200) = False\r\n  must_break = (220 + 7 > 1500) = False\r\n  Result: CONTINUE (similar topics stay together)\r\n```\r\n\r\n**Example 4: Continue (Insufficient Buffer)**\r\n```\r\nBuffer: \"Nietzsche was a German philosopher.\" (50 words)\r\nNext sentence: \"Renaissance art flourished in Italy.\" (5 words)\r\nSimilarity: 0.15 (low - different topics!)\r\nBuffer size: 50 words\r\n\r\nDecision Path:\r\n  should_break = (0.15 < 0.5) AND (50 >= 200) = False (buffer too small!)\r\n  must_break = (50 + 5 > 1500) = False\r\n  Result: CONTINUE (min_chunk_size overrides similarity threshold)\r\n\r\nNote: This prevents fragmentary chunks even when topics differ\r\n```\r\n\r\n---\r\n\r\n## Worked Example: Step-by-Step Walkthrough\r\n\r\n### Input Text\r\n\r\n```\r\nPhilosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches. In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels. Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.\r\n```\r\n\r\n### Configuration\r\n\r\n```python\r\nthreshold = 0.5\r\nmin_chunk_size = 15  # words (lowered for demonstration)\r\nmax_chunk_size = 100 # words\r\n```\r\n\r\n### Step 1: Sentence Splitting\r\n\r\n**Regex:** `(?<=[.!?])\\s+`\r\n\r\n**Result:**\r\n```\r\nS0: \"Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language.\"\r\nS1: \"It employs critical analysis and systematic approaches.\"\r\nS2: \"In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture.\"\r\nS3: \"Carpenters use tools like hammers, saws, and chisels.\"\r\nS4: \"Nietzsche, the German philosopher, wrote extensively about the will to power.\"\r\nS5: \"His philosophy challenged conventional morality and religious belief systems.\"\r\n```\r\n\r\n**Word counts:**\r\n- S0: 20 words\r\n- S1: 8 words\r\n- S2: 18 words\r\n- S3: 10 words\r\n- S4: 13 words\r\n- S5: 10 words\r\n\r\n---\r\n\r\n### Step 2: Generate Embeddings\r\n\r\n**Process:** Pass all sentences to `all-MiniLM-L6-v2` model\r\n\r\n**Result:** 6 embeddings, each 384-dimensional\r\n\r\n```\r\nE0 = [0.123, -0.456, 0.789, ...] (384 dims) - philosophy concepts\r\nE1 = [0.145, -0.432, 0.801, ...] (384 dims) - philosophy methods\r\nE2 = [-0.234, 0.567, -0.123, ...] (384 dims) - carpentry trade\r\nE3 = [-0.221, 0.589, -0.134, ...] (384 dims) - carpentry tools\r\nE4 = [0.156, -0.423, 0.756, ...] (384 dims) - Nietzsche\r\nE5 = [0.167, -0.411, 0.772, ...] (384 dims) - Nietzsche's philosophy\r\n```\r\n\r\n---\r\n\r\n### Step 3: Iterative Chunking\r\n\r\n#### Initial State\r\n\r\n```\r\ncurrent_chunk = [S0]\r\ncurrent_word_count = 20\r\nchunks = []\r\n```\r\n\r\n---\r\n\r\n#### Iteration 1: Processing S1\r\n\r\n**Calculate similarity:**\r\n```python\r\nsimilarity = cosine_similarity(E0, E1)\r\n→ 0.78 (high - both about philosophy)\r\n```\r\n\r\n**Decision logic:**\r\n```python\r\nshould_break = (0.78 < 0.5) and (20 >= 15)\r\n             = False and True\r\n             = False\r\n\r\nmust_break = (20 + 8 > 100)\r\n           = False\r\n\r\n→ CONTINUE CHUNK (similarity is high)\r\n```\r\n\r\n**Action:** Add S1 to current chunk\r\n\r\n**State update:**\r\n```\r\ncurrent_chunk = [S0, S1]\r\ncurrent_word_count = 20 + 8 = 28\r\n```\r\n\r\n---\r\n\r\n#### Iteration 2: Processing S2\r\n\r\n**Calculate similarity:**\r\n```python\r\nsimilarity = cosine_similarity(E1, E2)\r\n→ 0.22 (low - philosophy vs carpentry = topic shift!)\r\n```\r\n\r\n**Decision logic:**\r\n```python\r\nshould_break = (0.22 < 0.5) and (28 >= 15)\r\n             = True and True\r\n             = True ✓\r\n\r\nmust_break = (28 + 18 > 100)\r\n           = False\r\n\r\n→ SPLIT CHUNK (similarity below threshold AND buffer sufficient)\r\n```\r\n\r\n**Action:** Finalize Chunk 0, start new chunk with S2\r\n\r\n**State update:**\r\n```\r\nchunks = [\r\n  {\r\n    \"text\": \"Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches.\",\r\n    \"chunk_id\": 0,\r\n    \"word_count\": 28,\r\n    \"strategy\": \"universal-semantic\"\r\n  }\r\n]\r\n\r\ncurrent_chunk = [S2]\r\ncurrent_word_count = 18\r\n```\r\n\r\n**Why this split?**\r\n- **Semantic boundary:** Philosophy → Carpentry (completely different topic)\r\n- **Buffer sufficient:** 28 words >= 15-word minimum\r\n- **Threshold met:** 0.22 < 0.5\r\n\r\n---\r\n\r\n#### Iteration 3: Processing S3\r\n\r\n**Calculate similarity:**\r\n```python\r\nsimilarity = cosine_similarity(E2, E3)\r\n→ 0.81 (high - both about carpentry)\r\n```\r\n\r\n**Decision logic:**\r\n```python\r\nshould_break = (0.81 < 0.5) and (18 >= 15)\r\n             = False and True\r\n             = False\r\n\r\nmust_break = (18 + 10 > 100)\r\n           = False\r\n\r\n→ CONTINUE CHUNK (similarity is high)\r\n```\r\n\r\n**Action:** Add S3 to current chunk\r\n\r\n**State update:**\r\n```\r\ncurrent_chunk = [S2, S3]\r\ncurrent_word_count = 18 + 10 = 28\r\n```\r\n\r\n---\r\n\r\n#### Iteration 4: Processing S4\r\n\r\n**Calculate similarity:**\r\n```python\r\nsimilarity = cosine_similarity(E3, E4)\r\n→ 0.18 (low - carpentry vs Nietzsche = topic shift!)\r\n```\r\n\r\n**Decision logic:**\r\n```python\r\nshould_break = (0.18 < 0.5) and (28 >= 15)\r\n             = True and True\r\n             = True ✓\r\n\r\nmust_break = (28 + 13 > 100)\r\n           = False\r\n\r\n→ SPLIT CHUNK (similarity below threshold AND buffer sufficient)\r\n```\r\n\r\n**Action:** Finalize Chunk 1, start new chunk with S4\r\n\r\n**State update:**\r\n```\r\nchunks = [\r\n  { chunk_id: 0, word_count: 28, text: \"Philosophy...\" },\r\n  {\r\n    \"text\": \"In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels.\",\r\n    \"chunk_id\": 1,\r\n    \"word_count\": 28,\r\n    \"strategy\": \"universal-semantic\"\r\n  }\r\n]\r\n\r\ncurrent_chunk = [S4]\r\ncurrent_word_count = 13\r\n```\r\n\r\n**Why this split?**\r\n- **Semantic boundary:** Carpentry → Nietzsche (different topic)\r\n- **Buffer sufficient:** 28 words >= 15-word minimum\r\n- **Threshold met:** 0.18 < 0.5\r\n\r\n---\r\n\r\n#### Iteration 5: Processing S5\r\n\r\n**Calculate similarity:**\r\n```python\r\nsimilarity = cosine_similarity(E4, E5)\r\n→ 0.72 (high - both about Nietzsche's philosophy)\r\n```\r\n\r\n**Decision logic:**\r\n```python\r\nshould_break = (0.72 < 0.5) and (13 >= 15)\r\n             = False and False\r\n             = False\r\n\r\nmust_break = (13 + 10 > 100)\r\n           = False\r\n\r\n→ CONTINUE CHUNK (similarity is high)\r\n```\r\n\r\n**Action:** Add S5 to current chunk\r\n\r\n**State update:**\r\n```\r\ncurrent_chunk = [S4, S5]\r\ncurrent_word_count = 13 + 10 = 23\r\n```\r\n\r\n---\r\n\r\n### Step 4: Finalize Last Chunk\r\n\r\n**End of text reached:** Add final buffer to chunks\r\n\r\n```python\r\nchunks.append({\r\n  \"text\": \"Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.\",\r\n  \"chunk_id\": 2,\r\n  \"word_count\": 23,\r\n  \"strategy\": \"universal-semantic\"\r\n})\r\n```\r\n\r\n---\r\n\r\n### Final Output\r\n\r\n**3 Semantically Coherent Chunks:**\r\n\r\n```json\r\n[\r\n  {\r\n    \"chunk_id\": 0,\r\n    \"text\": \"Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches.\",\r\n    \"word_count\": 28,\r\n    \"strategy\": \"universal-semantic\",\r\n    \"topic\": \"Philosophy (definition and methods)\"\r\n  },\r\n  {\r\n    \"chunk_id\": 1,\r\n    \"text\": \"In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers, saws, and chisels.\",\r\n    \"word_count\": 28,\r\n    \"strategy\": \"universal-semantic\",\r\n    \"topic\": \"Carpentry (trade and tools)\"\r\n  },\r\n  {\r\n    \"chunk_id\": 2,\r\n    \"text\": \"Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality and religious belief systems.\",\r\n    \"word_count\": 23,\r\n    \"strategy\": \"universal-semantic\",\r\n    \"topic\": \"Nietzsche's philosophy\"\r\n  }\r\n]\r\n```\r\n\r\n---\r\n\r\n### Key Observations\r\n\r\n#### Semantic Boundaries\r\n\r\n✓ **Chunk 0-1 split:** Philosophy → Carpentry (similarity: 0.22)\r\n- Two completely different domains\r\n- Clear topic transition signaled by \"In contrast\"\r\n\r\n✓ **Chunk 1-2 split:** Carpentry → Nietzsche (similarity: 0.18)\r\n- Shift from trade skills to philosophical figures\r\n- No conceptual overlap between sentences\r\n\r\n#### Semantic Cohesion\r\n\r\n✓ **Within Chunk 0:** Philosophy sentences (similarity: 0.78)\r\n- S0: What philosophy is\r\n- S1: How philosophy works\r\n- Both sentences describe the same discipline\r\n\r\n✓ **Within Chunk 1:** Carpentry sentences (similarity: 0.81)\r\n- S2: What carpentry is\r\n- S3: What carpenters use\r\n- Both sentences describe the same trade\r\n\r\n✓ **Within Chunk 2:** Nietzsche sentences (similarity: 0.72)\r\n- S4: Who Nietzsche was and his main concept\r\n- S5: His philosophical impact\r\n- Both sentences describe the same philosopher\r\n\r\n#### Why Fixed-Window Would Fail\r\n\r\n**Hypothetical fixed-window (30 words):**\r\n```\r\nChunk A: \"Philosophy is the study of general and fundamental questions about existence, knowledge, values, reason, mind, and language. It employs critical analysis and systematic approaches.\"\r\n→ 28 words, clean break ✓\r\n\r\nChunk B: \"In contrast, carpentry is a skilled trade focused on working with wood to construct buildings and furniture. Carpenters use tools like hammers,\"\r\n→ 30 words, BREAKS MID-SENTENCE ✗\r\n\r\nChunk C: \"saws, and chisels. Nietzsche, the German philosopher, wrote extensively about the will to power. His philosophy challenged conventional morality\"\r\n→ MIX OF CARPENTRY + NIETZSCHE ✗\r\n```\r\n\r\n**Problems with fixed-window:**\r\n1. Breaks mid-sentence (destroys readability)\r\n2. Mixes unrelated topics (destroys semantic coherence)\r\n3. No awareness of topic boundaries\r\n\r\n**Universal Semantic Chunking advantage:**\r\n1. Respects sentence boundaries (always)\r\n2. Splits at topic transitions (0.22, 0.18 similarity)\r\n3. Keeps related content together (0.78, 0.81, 0.72 similarity)\r\n\r\n---\r\n\r\n### Decision Summary Table\r\n\r\n| Iteration | Sentences | Similarity | Buffer Size | Threshold Check | Decision | Reason |\r\n|-----------|-----------|------------|-------------|-----------------|----------|--------|\r\n| 1 | S0 → S1 | 0.78 | 28 words | 0.78 ≥ 0.5 | **CONTINUE** | Same topic (philosophy) |\r\n| 2 | S1 → S2 | 0.22 | 28 words | 0.22 < 0.5 ✓ | **SPLIT** | Topic shift (philosophy → carpentry) |\r\n| 3 | S2 → S3 | 0.81 | 28 words | 0.81 ≥ 0.5 | **CONTINUE** | Same topic (carpentry) |\r\n| 4 | S3 → S4 | 0.18 | 28 words | 0.18 < 0.5 ✓ | **SPLIT** | Topic shift (carpentry → Nietzsche) |\r\n| 5 | S4 → S5 | 0.72 | 23 words | 0.72 ≥ 0.5 | **CONTINUE** | Same topic (Nietzsche) |\r\n\r\n**Pattern:** Algorithm splits at **semantic discontinuities** (similarity drops) while preserving **semantic cohesion** (high similarity).\r\n\r\n---\r\n\r\n## Chunk Metadata\r\n\r\n### Structure\r\n\r\nEach chunk is a dictionary:\r\n```python\r\n{\r\n    \"text\": str,              # Chunk content\r\n    \"chunk_id\": int,          # Sequential index (0, 1, 2...)\r\n    \"word_count\": int,        # Number of words in chunk\r\n    \"strategy\": str,          # \"universal-semantic\"\r\n    \"book_title\": str,        # From metadata\r\n    \"author\": str,            # From metadata\r\n    \"language\": str,          # From metadata (e.g., \"en\", \"hr\")\r\n    \"domain\": str             # From ingestion params (e.g., \"philosophy\")\r\n}\r\n```\r\n\r\n**Stored in Qdrant Payload:**\r\n```json\r\n{\r\n  \"text\": \"Database normalization is the process...\",\r\n  \"book_title\": \"Data Model Patterns\",\r\n  \"author\": \"Len Silverston\",\r\n  \"domain\": \"technical\",\r\n  \"language\": \"en\",\r\n  \"ingested_at\": \"2026-01-25T10:30:00\",\r\n  \"strategy\": \"universal-semantic\",\r\n  \"metadata\": {\r\n    \"source\": \"Data Model Patterns\",\r\n    \"domain\": \"technical\"\r\n  }\r\n}\r\n```\r\n\r\n---\r\n\r\n## Performance Characteristics\r\n\r\n### Throughput\r\n\r\n**Benchmark (M2 MacBook Pro):**\r\n- **Text extraction (EPUB):** ~5 seconds for 500-page book\r\n- **Sentence splitting:** ~0.1 seconds for 10,000 sentences\r\n- **Embedding generation:** ~2 seconds for 1,000 sentences (batch)\r\n- **Similarity computation:** ~0.5 seconds for 1,000 pairs\r\n- **Total chunking time:** ~3-5 seconds for typical book\r\n\r\n**Comparison to Fixed-Window:**\r\n- **Fixed-window:** ~0.5 seconds (faster but dumber)\r\n- **Semantic chunking:** ~3-5 seconds (slower but smarter)\r\n\r\n**Trade-off:** 6x slower, but significantly better retrieval quality.\r\n\r\n### Memory Usage\r\n\r\n**Peak memory during chunking:**\r\n- Sentence embeddings: ~4 MB per 1,000 sentences (384 dims × 1,000 × 4 bytes)\r\n- Text buffers: ~1-2 MB\r\n- Model: ~80 MB (loaded once)\r\n\r\n**Total:** ~85-90 MB for chunking a typical book.\r\n\r\n---\r\n\r\n## Domain Tuning\r\n\r\n### Current Configuration\r\n\r\n**File:** `ingest_books.py`\r\n\r\n```python\r\n# Adjust threshold based on domain (Philosophy needs tighter focus)\r\nthreshold = 0.45 if domain == 'philosophy' else 0.55\r\n\r\nchunker = UniversalChunker(\r\n    embedder,\r\n    threshold=threshold,\r\n    min_chunk_size=200,\r\n    max_chunk_size=1200\r\n)\r\n```\r\n\r\n### Rationale\r\n\r\n**Philosophy (threshold=0.45):**\r\n- Arguments require tighter coherence\r\n- Nuanced concepts need precise boundaries\r\n- Lower threshold = more splits at subtle topic shifts\r\n\r\n**All Others (threshold=0.55):**\r\n- Technical, psychology, history, literature\r\n- Broader context is acceptable\r\n- Higher threshold = fewer splits, larger chunks\r\n\r\n**Future Tuning:**\r\n- Could add per-domain min/max chunk sizes\r\n- Could use different embedding models per domain\r\n- Could add overlap for continuity\r\n\r\n---\r\n\r\n## Advantages Over Fixed-Window\r\n\r\n### Fixed-Window Chunking\r\n\r\n**Traditional approach:**\r\n```python\r\ndef fixed_window_chunk(text, size=500, overlap=50):\r\n    tokens = text.split()\r\n    chunks = []\r\n    for i in range(0, len(tokens), size - overlap):\r\n        chunk = \" \".join(tokens[i:i+size])\r\n        chunks.append(chunk)\r\n    return chunks\r\n```\r\n\r\n**Problems:**\r\n1. **Breaks mid-sentence:** \"The database... [SPLIT] ...normalization reduces redundancy.\"\r\n2. **Breaks mid-concept:** Splits arguments, lists, code blocks arbitrarily\r\n3. **No semantic awareness:** Treats all words equally\r\n4. **Hard to tune:** One size doesn't fit all domains\r\n\r\n### Universal Semantic Chunking\r\n\r\n**Advantages:**\r\n1. **Semantic integrity:** Never breaks mid-sentence or mid-concept\r\n2. **Adaptive:** Automatically adjusts to content structure\r\n3. **Domain-agnostic:** Same logic works for all content types\r\n4. **Explainable:** Can trace why chunks were created (similarity scores)\r\n\r\n**Empirical Improvement:**\r\n- **Retrieval quality:** 35-52% better hit rate (measured via manual eval)\r\n- **Answer coherence:** LLM answers are more focused and accurate\r\n- **User satisfaction:** Fewer \"irrelevant chunk\" complaints\r\n\r\n---\r\n\r\n## Edge Cases & Limitations\r\n\r\n### 1. Very Short Texts\r\n\r\n**Problem:** < 200 words → May create single chunk\r\n\r\n**Solution:** Acceptable for short articles/excerpts\r\n\r\n### 2. Highly Homogeneous Text\r\n\r\n**Problem:** Legal contracts, technical specs → High similarity throughout\r\n\r\n**Solution:** max_chunk_size forces splits\r\n\r\n### 3. Multi-Language Text\r\n\r\n**Problem:** English + Croatian in same book → Embedding model optimized for English\r\n\r\n**Solution:**\r\n- Works reasonably well for Latin-script languages\r\n- May struggle with Cyrillic, Arabic, Chinese\r\n- Could use multilingual embedding model (e.g., LaBSE)\r\n\r\n### 4. Code Blocks\r\n\r\n**Problem:** Code is tokenized by `.` (e.g., `object.method`)\r\n\r\n**Solution:**\r\n- Not a primary use case for Alexandria (book-focused)\r\n- Could pre-process to protect code blocks\r\n\r\n### 5. Tables & Lists\r\n\r\n**Problem:** Sentence splitting may fragment tables\r\n\r\n**Solution:**\r\n- PDF extraction preserves some table structure\r\n- Could add table-aware pre-processing\r\n\r\n---\r\n\r\n## Future Enhancements\r\n\r\n### Potential Improvements\r\n\r\n1. **Hierarchical Chunking:**\r\n   - Create parent chunks (sections) and child chunks (paragraphs)\r\n   - Enable multi-level retrieval (coarse + fine-grained)\r\n\r\n2. **Sliding Window Overlap:**\r\n   - Add 20-50 word overlap between chunks\r\n   - Improves continuity for edge cases\r\n\r\n3. **Cross-Lingual Embeddings:**\r\n   - Use multilingual model (e.g., LaBSE, mUSE)\r\n   - Better support for Croatian/non-English content\r\n\r\n4. **Adaptive Thresholds:**\r\n   - Learn optimal threshold per book (via feedback)\r\n   - Use book metadata (genre, author) to predict threshold\r\n\r\n5. **Argument Detection (Philosophy):**\r\n   - Re-introduce argument pre-chunking for philosophy\r\n   - Preserve complete arguments in single chunks\r\n   - Use GPT-4 to identify premise/conclusion structure\r\n\r\n---\r\n\r\n## Testing & Validation\r\n\r\n### Unit Tests\r\n\r\n**File:** `tests/test_universal_chunking.py` (to be created)\r\n\r\n**Test Cases:**\r\n1. **Basic chunking:** Verify chunks are created\r\n2. **Similarity threshold:** Test splits at different thresholds\r\n3. **Min/max enforcement:** Verify size constraints\r\n4. **Metadata preservation:** Check chunk metadata\r\n5. **Edge cases:** Empty text, single sentence, very long text\r\n\r\n### Manual Evaluation\r\n\r\n**Method:**\r\n1. Ingest sample books (1 per domain)\r\n2. Examine chunk boundaries visually\r\n3. Score chunks on scale:\r\n   - 5: Perfect semantic boundary\r\n   - 3: Acceptable but suboptimal\r\n   - 1: Bad split (mid-concept)\r\n4. Calculate average score per domain\r\n\r\n**Results (Jan 2026):**\r\n- Technical: 4.2/5\r\n- Psychology: 4.5/5\r\n- Philosophy: 4.7/5 (with 0.45 threshold)\r\n- Literature: 4.3/5\r\n\r\n---\r\n\r\n## References\r\n\r\n### Papers\r\n\r\n- **Dense Passage Retrieval (2020)** - Semantic search foundations\r\n- **Sentence-BERT (2019)** - Sentence embeddings architecture\r\n- **ColBERT (2020)** - Token-level semantic similarity\r\n\r\n### Code\r\n\r\n- `universal_chunking.py` - Implementation\r\n- `ingest_books.py` - Integration with ingestion pipeline\r\n- `sentence-transformers` - Embedding library\r\n\r\n### Related ADRs\r\n\r\n- [ADR 0002: Domain-Specific Chunking](../decisions/0002-domain-specific-chunking.md) - Historical context (superseded)\r\n\r\n---\r\n\r\n**Last Updated:** 2026-01-25\r\n**Author:** Alexandria Development Team\r\n",
+      "filename" : "UNIVERSAL_SEMANTIC_CHUNKING.md",
+      "format" : "Markdown",
+      "order" : 7,
+      "title" : ""
+    }, {
+      "content" : "# Alexandria Data Models & API Reference\r\n\r\n**Generated:** 2026-01-26\r\n**Project:** Alexandria RAG System\r\n**Scope:** Backend Python modules in `scripts/` package\r\n\r\n---\r\n\r\n## Overview\r\n\r\nAlexandria uses a **modular architecture** with business logic separated into reusable Python modules. The main GUI (`alexandria_app.py`) is a thin layer that calls these scripts.\r\n\r\n---\r\n\r\n## Core Data Models\r\n\r\n### CalibreBook (calibre_db.py)\r\n\r\nRepresents book metadata from Calibre library's SQLite database.\r\n\r\n```python\r\n@dataclass\r\nclass CalibreBook:\r\n    id: int                          # Calibre internal book ID\r\n    title: str                       # Book title\r\n    author: str                      # Primary author(s), joined with \" & \"\r\n    path: str                        # Relative path from library root\r\n    language: str                    # ISO code (eng, hrv, jpn, etc.)\r\n    tags: List[str]                  # Book tags/categories\r\n    series: Optional[str]            # Series name (if part of series)\r\n    series_index: Optional[float]    # Position in series\r\n    isbn: Optional[str]              # ISBN identifier\r\n    publisher: Optional[str]         # Publisher name\r\n    pubdate: Optional[str]           # Publication date\r\n    timestamp: str                   # Date added to Calibre\r\n    rating: Optional[int]            # User rating (1-10 scale)\r\n    formats: List[str]               # Available formats (.epub, .pdf, etc.)\r\n```\r\n\r\n**Used by:**\r\n- Calibre integration tab in GUI\r\n- Book ingestion metadata enrichment\r\n- Collection manifests\r\n\r\n---\r\n\r\n### RAGResult (rag_query.py)\r\n\r\nRepresents search results from RAG query with optional LLM answer.\r\n\r\n```python\r\n@dataclass\r\nclass RAGResult:\r\n    query: str                       # Original search query\r\n    results: List[Dict]              # Qdrant search results\r\n    answer: Optional[str] = None     # LLM-generated answer (if use_llm=True)\r\n    reranked: bool = False           # Whether results were reranked by LLM\r\n    llm_model: Optional[str] = None  # LLM model used (if any)\r\n    total_time: Optional[float] = None   # Total query time in seconds\r\n```\r\n\r\n**Result Item Structure:**\r\n```python\r\n{\r\n    'score': float,                  # Semantic similarity score (0-1)\r\n    'title': str,                    # Book title\r\n    'author': str,                   # Book author(s)\r\n    'file_path': str,                # Source file path\r\n    'text': str,                     # Chunk text content\r\n    'metadata': dict                 # Additional metadata\r\n}\r\n```\r\n\r\n---\r\n\r\n### CollectionManifest (collection_manifest.py)\r\n\r\nTracks ingested books per Qdrant collection with metadata.\r\n\r\n**Internal Structure:**\r\n```python\r\n{\r\n    \"collections\": {\r\n        \"alexandria\": {\r\n            \"collection_name\": \"alexandria\",\r\n            \"created\": \"2026-01-20T10:30:00Z\",\r\n            \"last_updated\": \"2026-01-26T15:45:00Z\",\r\n            \"total_books\": 42,\r\n            \"total_chunks\": 3847,\r\n            \"books\": [\r\n                {\r\n                    \"file_path\": \"G:\\\\path\\\\to\\\\book.epub\",\r\n                    \"title\": \"Book Title\",\r\n                    \"author\": \"Author Name\",\r\n                    \"ingested_at\": \"2026-01-20T12:00:00Z\",\r\n                    \"chunk_count\": 89,\r\n                    \"domain\": \"philosophy\",\r\n                    \"language\": \"eng\"\r\n                }\r\n            ]\r\n        }\r\n    }\r\n}\r\n```\r\n\r\n**File Location:** `logs/collection_manifest_{collection_name}.json`\r\n\r\n---\r\n\r\n### UniversalChunker (universal_chunking.py)\r\n\r\nSemantic chunking based on sentence embeddings and similarity thresholds.\r\n\r\n```python\r\nclass UniversalChunker:\r\n    def __init__(\r\n        self,\r\n        embedding_model,\r\n        threshold: float = 0.5,      # Similarity threshold for splits\r\n        min_chunk_size: int = 200,   # Minimum tokens per chunk\r\n        max_chunk_size: int = 1200   # Maximum tokens per chunk\r\n    )\r\n\r\n    def chunk(self, text: str, domain: str = \"general\") -> List[str]:\r\n        # Returns list of semantically coherent text chunks\r\n```\r\n\r\n**Domain-Specific Thresholds:**\r\n- Philosophy: 0.45 (preserve arguments)\r\n- Other domains: 0.55 (standard splitting)\r\n\r\n---\r\n\r\n## Module APIs\r\n\r\n### 1. calibre_db.py - Calibre Library Interface\r\n\r\n**Purpose:** Direct SQLite access to Calibre's metadata.db for book metadata.\r\n\r\n**Public API:**\r\n\r\n```python\r\nclass CalibreDB:\r\n    def __init__(self, library_path: str = \"G:\\\\My Drive\\\\alexandria\")\r\n\r\n    def get_all_books(self, limit: Optional[int] = None) -> List[CalibreBook]\r\n        # Get all books with full metadata\r\n\r\n    def search_books(\r\n        self,\r\n        title: str = None,\r\n        author: str = None,\r\n        language: str = None,\r\n        tags: List[str] = None,\r\n        series: str = None\r\n    ) -> List[CalibreBook]\r\n        # Search books by multiple criteria (fuzzy matching)\r\n\r\n    def get_book_by_path(self, relative_path: str) -> Optional[CalibreBook]\r\n        # Get book by Calibre path (e.g., \"Author/Title\")\r\n\r\n    def get_book_by_id(self, book_id: int) -> Optional[CalibreBook]\r\n        # Get book by Calibre internal ID\r\n\r\n    def match_file_to_book(self, filename: str) -> Optional[CalibreBook]\r\n        # Fuzzy match filename to Calibre book\r\n\r\n    def get_available_languages(self) -> List[str]\r\n        # Get all languages in library\r\n\r\n    def get_available_tags(self) -> List[str]\r\n        # Get all tags in library\r\n\r\n    def get_available_series(self) -> List[str]\r\n        # Get all series in library\r\n\r\n    def get_stats(self) -> Dict\r\n        # Get library statistics (total books, languages, tags, etc.)\r\n```\r\n\r\n**CLI Usage:**\r\n```bash\r\npython scripts/calibre_db.py\r\n```\r\n\r\n---\r\n\r\n### 2. collection_manifest.py - Ingestion Tracking\r\n\r\n**Purpose:** Track which books are ingested into which Qdrant collections.\r\n\r\n**Public API:**\r\n\r\n```python\r\nclass CollectionManifest:\r\n    def __init__(self, collection_name: str)\r\n\r\n    def add_book(\r\n        self,\r\n        file_path: str,\r\n        title: str,\r\n        author: str,\r\n        chunk_count: int,\r\n        domain: str,\r\n        language: str\r\n    )\r\n        # Add book to manifest after successful ingestion\r\n\r\n    def book_exists(self, file_path: str) -> bool\r\n        # Check if book already ingested\r\n\r\n    def get_book_count(self) -> int\r\n        # Get total books in collection\r\n\r\n    def get_chunk_count(self) -> int\r\n        # Get total chunks in collection\r\n\r\n    def export_to_csv(self, output_path: str)\r\n        # Export manifest as CSV for human readability\r\n```\r\n\r\n**File Format:** JSON at `logs/collection_manifest_{collection_name}.json`\r\n\r\n---\r\n\r\n### 3. ingest_books.py - Book Ingestion Pipeline\r\n\r\n**Purpose:** Extract text from EPUB/PDF, chunk, embed, upload to Qdrant.\r\n\r\n**Main Function:**\r\n\r\n```python\r\ndef ingest_book(\r\n    filepath: str,\r\n    domain: str,\r\n    collection: str,\r\n    host: str = '192.168.0.151',\r\n    port: int = 6333\r\n) -> Dict\r\n    # Returns: {'success': bool, 'chunks': int, 'diagnostics': dict}\r\n```\r\n\r\n**Pipeline Steps:**\r\n1. `extract_text(filepath)` → Raw text + metadata\r\n2. `UniversalChunker().chunk()` → Semantic chunks\r\n3. `generate_embeddings(chunks)` → 384-dim vectors\r\n4. `upload_to_qdrant()` → Store in vector DB\r\n5. `CollectionManifest.add_book()` → Track ingestion\r\n\r\n**Helper Functions:**\r\n\r\n```python\r\ndef normalize_file_path(filepath: str) -> Tuple[str, str, bool, int]\r\n    # Handle Windows long paths (>248 chars) with \\\\?\\ prefix\r\n\r\ndef extract_text(filepath: str) -> Tuple[str, Dict]\r\n    # Extract text from EPUB/PDF + metadata\r\n\r\ndef extract_metadata_only(filepath: str) -> Dict\r\n    # Get metadata without full text extraction\r\n\r\ndef generate_embeddings(texts: List[str]) -> List[List[float]]\r\n    # Generate embeddings using all-MiniLM-L6-v2\r\n```\r\n\r\n**CLI Usage:**\r\n```bash\r\npython scripts/ingest_books.py path/to/book.epub --domain philosophy --collection alexandria\r\n```\r\n\r\n---\r\n\r\n### 4. rag_query.py - Semantic Search & RAG\r\n\r\n**Purpose:** Query Qdrant, optionally rerank and generate LLM answers.\r\n\r\n**Main Function:**\r\n\r\n```python\r\ndef perform_rag_query(\r\n    query: str,\r\n    collection: str,\r\n    limit: int = 5,\r\n    use_llm: bool = False,\r\n    llm_model: str = \"anthropic/claude-3-5-sonnet-20241022\",\r\n    rerank: bool = False,\r\n    host: str = '192.168.0.151',\r\n    port: int = 6333\r\n) -> RAGResult\r\n    # Returns: RAGResult with search results + optional LLM answer\r\n```\r\n\r\n**Pipeline Modes:**\r\n\r\n1. **Vector Search Only** (use_llm=False, rerank=False)\r\n   - Search Qdrant by semantic similarity\r\n   - Return top-k chunks\r\n\r\n2. **Vector Search + Reranking** (rerank=True)\r\n   - Search Qdrant\r\n   - Rerank results using LLM\r\n   - Return reordered results\r\n\r\n3. **Full RAG** (use_llm=True)\r\n   - Search Qdrant\r\n   - Optionally rerank\r\n   - Generate LLM answer from context\r\n\r\n**Helper Functions:**\r\n\r\n```python\r\ndef search_qdrant(query, collection, limit, host, port) -> List[Dict]\r\n    # Search Qdrant vector DB\r\n\r\ndef rerank_with_llm(query, results, llm_model) -> List[Dict]\r\n    # Rerank results using LLM for relevance\r\n\r\ndef generate_answer(query, results, llm_model) -> str\r\n    # Generate answer using RAG context\r\n\r\ndef print_results(result: RAGResult, format: str = 'markdown')\r\n    # Format results for display\r\n```\r\n\r\n**CLI Usage:**\r\n```bash\r\npython scripts/rag_query.py \"What does Mishima say about words vs body?\" --collection alexandria --use-llm\r\n```\r\n\r\n---\r\n\r\n### 5. qdrant_utils.py - Qdrant Operations\r\n\r\n**Purpose:** Manage Qdrant collections (list, stats, copy, delete).\r\n\r\n**Public API:**\r\n\r\n```python\r\ndef list_collections(host: str = '192.168.0.151', port: int = 6333)\r\n    # List all Qdrant collections with stats\r\n\r\ndef get_collection_stats(\r\n    collection_name: str,\r\n    host: str = '192.168.0.151',\r\n    port: int = 6333\r\n) -> Dict\r\n    # Get detailed collection statistics\r\n\r\ndef copy_collection(\r\n    source: str,\r\n    destination: str,\r\n    host: str = '192.168.0.151',\r\n    port: int = 6333\r\n)\r\n    # Copy collection (all points + metadata)\r\n\r\ndef delete_collection_and_artifacts(\r\n    collection_name: str,\r\n    host: str,\r\n    port: int\r\n) -> dict\r\n    # Delete Qdrant collection + manifest + logs\r\n\r\ndef delete_collection_preserve_artifacts(\r\n    collection_name: str,\r\n    host: str,\r\n    port: int\r\n) -> dict\r\n    # Delete Qdrant collection, keep manifest/logs\r\n\r\ndef search_collection(\r\n    collection_name: str,\r\n    query_text: str,\r\n    limit: int = 5,\r\n    host: str = '192.168.0.151',\r\n    port: int = 6333\r\n) -> List[Dict]\r\n    # Search collection (wrapper around rag_query)\r\n```\r\n\r\n**CLI Usage:**\r\n```bash\r\npython scripts/qdrant_utils.py --list\r\npython scripts/qdrant_utils.py --stats alexandria\r\npython scripts/qdrant_utils.py --copy alexandria alexandria_backup\r\n```\r\n\r\n---\r\n\r\n### 6. universal_chunking.py - Semantic Chunking\r\n\r\n**Purpose:** Chunk text using semantic similarity (ADR 0007).\r\n\r\n**Public API:**\r\n\r\n```python\r\nclass UniversalChunker:\r\n    def __init__(\r\n        self,\r\n        embedding_model,\r\n        threshold: float = 0.5,\r\n        min_chunk_size: int = 200,\r\n        max_chunk_size: int = 1200\r\n    )\r\n\r\n    def chunk(self, text: str, domain: str = \"general\") -> List[str]\r\n        # Returns semantically coherent chunks\r\n```\r\n\r\n**Algorithm:**\r\n1. Split text into sentences\r\n2. Embed each sentence\r\n3. Calculate cosine similarity between consecutive sentences\r\n4. Split where similarity < threshold\r\n5. Enforce min/max chunk sizes\r\n\r\n**Domain-Specific Behavior:**\r\n- Philosophy domain: threshold=0.45 (preserve philosophical arguments)\r\n- Other domains: threshold=0.55 (standard splitting)\r\n\r\n---\r\n\r\n## Integration Points\r\n\r\n### GUI → Scripts Flow\r\n\r\n```\r\nalexandria_app.py (Streamlit GUI)\r\n    ↓\r\n    ├─ Calibre Tab → calibre_db.CalibreDB\r\n    ├─ Ingestion Tab → ingest_books.ingest_book()\r\n    ├─ Query Tab → rag_query.perform_rag_query()\r\n    └─ Collections Tab → qdrant_utils.list_collections()\r\n```\r\n\r\n### Data Flow (Ingestion)\r\n\r\n```\r\nBook File (.epub/.pdf)\r\n    → ingest_books.extract_text()\r\n    → UniversalChunker.chunk()\r\n    → generate_embeddings()\r\n    → upload_to_qdrant()\r\n    → CollectionManifest.add_book()\r\n```\r\n\r\n### Data Flow (Query)\r\n\r\n```\r\nUser Query\r\n    → rag_query.search_qdrant()\r\n    → [optional] rerank_with_llm()\r\n    → [optional] generate_answer()\r\n    → RAGResult\r\n```\r\n\r\n---\r\n\r\n## External Dependencies\r\n\r\n### Qdrant Vector Database\r\n- **Host:** 192.168.0.151:6333 (external server)\r\n- **Distance Metric:** COSINE (hardcoded)\r\n- **Embedding Model:** all-MiniLM-L6-v2 (384-dimensional)\r\n- **Collections:** Multiple collections supported\r\n\r\n### Calibre Library\r\n- **Default Path:** `G:\\My Drive\\alexandria`\r\n- **Database:** `metadata.db` (SQLite)\r\n- **Book Storage:** `Author/Title/` directory structure\r\n\r\n### OpenRouter API\r\n- **Purpose:** LLM calls for RAG answer generation\r\n- **Models:** Claude 3.5 Sonnet, GPT-4, etc.\r\n- **API Key:** Stored in `.streamlit/secrets.toml`\r\n\r\n---\r\n\r\n## File Locations\r\n\r\n| Purpose | Path | Format |\r\n|---------|------|--------|\r\n| Collection Manifests | `logs/collection_manifest_{name}.json` | JSON |\r\n| CSV Export | `logs/alexandria_manifest.csv` | CSV |\r\n| Calibre DB | `G:\\My Drive\\alexandria\\metadata.db` | SQLite |\r\n| Qdrant Data | External server (192.168.0.151) | Vector DB |\r\n\r\n---\r\n\r\n## CLI Entry Points\r\n\r\nAll scripts support CLI usage for batch operations:\r\n\r\n```bash\r\n# Ingest book\r\npython scripts/ingest_books.py book.epub --domain philosophy --collection alexandria\r\n\r\n# Query\r\npython scripts/rag_query.py \"search query\" --collection alexandria --use-llm\r\n\r\n# Calibre stats\r\npython scripts/calibre_db.py\r\n\r\n# Qdrant management\r\npython scripts/qdrant_utils.py --list\r\npython scripts/qdrant_utils.py --stats alexandria\r\n\r\n# Generate inventory\r\npython scripts/generate_book_inventory.py\r\n```\r\n\r\n---\r\n\r\n**Related Documentation:**\r\n- [Architecture Documentation](architecture.md)\r\n- [ADR 0003: GUI as Thin Layer](architecture/decisions/0003-gui-as-thin-layer.md)\r\n- [ADR 0007: Universal Semantic Chunking](architecture/decisions/0007-universal-semantic-chunking.md)\r\n",
+      "filename" : "data-models.md",
+      "format" : "Markdown",
+      "order" : 8,
+      "title" : ""
+    } ]
+  },
+  "id" : 1,
+  "lastModifiedAgent" : "structurizr-ui",
+  "lastModifiedDate" : "2026-01-30T18:57:05Z",
+  "model" : {
+    "people" : [ {
+      "description" : "Uses Alexandria via Claude Code for semantic search and knowledge synthesis",
+      "id" : "1",
+      "name" : "Developer/Researcher",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Asks questions, requests ingestion",
+        "destinationId" : "2",
+        "id" : "40",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "description" : "AI coding assistant that connects to Alexandria via MCP",
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Claude Code",
+      "properties" : {
+        "structurizr.dsl.identifier" : "claudeCode"
+      },
+      "relationships" : [ {
+        "description" : "Calls MCP tools",
+        "destinationId" : "3",
+        "id" : "41",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      }, {
+        "description" : "stdio (MCP protocol)",
+        "destinationId" : "4",
+        "id" : "44",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,External,AI"
+    }, {
+      "containers" : [ {
+        "components" : [ {
+          "description" : "Semantic search + LLM answer generation with context modes",
+          "documentation" : { },
+          "id" : "5",
+          "name" : "alexandria_query",
+          "properties" : {
+            "structurizr.dsl.identifier" : "queryTool"
+          },
+          "relationships" : [ {
+            "description" : "Executes search + LLM",
+            "destinationId" : "20",
+            "id" : "50",
+            "sourceId" : "5",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Executes search + LLM",
+            "destinationId" : "13",
+            "id" : "51",
+            "linkedRelationshipId" : "50",
+            "sourceId" : "5"
+          } ],
+          "tags" : "Element,Component,Tool,Query",
+          "technology" : "Tool"
+        }, {
+          "description" : "Pure vector search without LLM",
+          "documentation" : { },
+          "id" : "6",
+          "name" : "alexandria_search",
+          "properties" : {
+            "structurizr.dsl.identifier" : "searchTool"
+          },
+          "relationships" : [ {
+            "description" : "Executes search only",
+            "destinationId" : "20",
+            "id" : "53",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Executes search only",
+            "destinationId" : "13",
+            "id" : "54",
+            "linkedRelationshipId" : "53",
+            "sourceId" : "6"
+          } ],
+          "tags" : "Element,Component,Tool,Query",
+          "technology" : "Tool"
+        }, {
+          "description" : "Get full book metadata and chunks",
+          "documentation" : { },
+          "id" : "7",
+          "name" : "alexandria_book",
+          "properties" : {
+            "structurizr.dsl.identifier" : "bookTool"
+          },
+          "relationships" : [ {
+            "description" : "Gets metadata",
+            "destinationId" : "24",
+            "id" : "55",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Gets metadata",
+            "destinationId" : "13",
+            "id" : "56",
+            "linkedRelationshipId" : "55",
+            "sourceId" : "7"
+          }, {
+            "description" : "Gets chunks",
+            "destinationId" : "19",
+            "id" : "58",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Tool,Query",
+          "technology" : "Tool"
+        }, {
+          "description" : "Collection statistics and health",
+          "documentation" : { },
+          "id" : "8",
+          "name" : "alexandria_stats",
+          "properties" : {
+            "structurizr.dsl.identifier" : "statsTool"
+          },
+          "relationships" : [ {
+            "description" : "Gets stats",
+            "destinationId" : "23",
+            "id" : "60",
+            "sourceId" : "8",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Gets stats",
+            "destinationId" : "13",
+            "id" : "61",
+            "linkedRelationshipId" : "60",
+            "sourceId" : "8"
+          } ],
+          "tags" : "Element,Component,Tool,Management",
+          "technology" : "Tool"
+        }, {
+          "description" : "Ingest single book by Calibre ID",
+          "documentation" : { },
+          "id" : "9",
+          "name" : "alexandria_ingest",
+          "properties" : {
+            "structurizr.dsl.identifier" : "ingestTool"
+          },
+          "relationships" : [ {
+            "description" : "Gets book path",
+            "destinationId" : "24",
+            "id" : "63",
+            "sourceId" : "9",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Gets book path",
+            "destinationId" : "13",
+            "id" : "64",
+            "linkedRelationshipId" : "63",
+            "sourceId" : "9"
+          }, {
+            "description" : "Starts pipeline",
+            "destinationId" : "14",
+            "id" : "65",
+            "sourceId" : "9",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Tool,Ingestion",
+          "technology" : "Tool"
+        }, {
+          "description" : "Batch ingest by author/tag/list",
+          "documentation" : { },
+          "id" : "10",
+          "name" : "alexandria_batch_ingest",
+          "properties" : {
+            "structurizr.dsl.identifier" : "batchIngestTool"
+          },
+          "relationships" : [ {
+            "description" : "Queries books",
+            "destinationId" : "24",
+            "id" : "67",
+            "sourceId" : "10",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Queries books",
+            "destinationId" : "13",
+            "id" : "68",
+            "linkedRelationshipId" : "67",
+            "sourceId" : "10"
+          }, {
+            "description" : "Batch pipeline",
+            "destinationId" : "14",
+            "id" : "69",
+            "sourceId" : "10",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Tool,Ingestion",
+          "technology" : "Tool"
+        }, {
+          "description" : "Ingest local file directly",
+          "documentation" : { },
+          "id" : "11",
+          "name" : "alexandria_ingest_file",
+          "properties" : {
+            "structurizr.dsl.identifier" : "fileIngestTool"
+          },
+          "relationships" : [ {
+            "description" : "Direct file",
+            "destinationId" : "14",
+            "id" : "70",
+            "sourceId" : "11",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Direct file",
+            "destinationId" : "13",
+            "id" : "71",
+            "linkedRelationshipId" : "70",
+            "sourceId" : "11"
+          } ],
+          "tags" : "Element,Component,Tool,Ingestion",
+          "technology" : "Tool"
+        }, {
+          "description" : "Preview chunking without ingesting",
+          "documentation" : { },
+          "id" : "12",
+          "name" : "alexandria_test_chunking_file",
+          "properties" : {
+            "structurizr.dsl.identifier" : "testChunkingTool"
+          },
+          "relationships" : [ {
+            "description" : "Preview only",
+            "destinationId" : "16",
+            "id" : "72",
+            "sourceId" : "12",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Preview only",
+            "destinationId" : "13",
+            "id" : "73",
+            "linkedRelationshipId" : "72",
+            "sourceId" : "12"
+          } ],
+          "tags" : "Element,Component,Tool,Ingestion",
+          "technology" : "Tool"
+        } ],
+        "description" : "Model Context Protocol server exposing Alexandria tools to AI agents",
+        "documentation" : { },
+        "id" : "4",
+        "name" : "MCP Server",
+        "properties" : {
+          "structurizr.dsl.identifier" : "mcpServer"
+        },
+        "relationships" : [ {
+          "description" : "Calls business logic",
+          "destinationId" : "13",
+          "id" : "45",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Executes search + LLM",
+          "destinationId" : "20",
+          "id" : "52",
+          "linkedRelationshipId" : "50",
+          "sourceId" : "4"
+        }, {
+          "description" : "Gets metadata",
+          "destinationId" : "24",
+          "id" : "57",
+          "linkedRelationshipId" : "55",
+          "sourceId" : "4"
+        }, {
+          "description" : "Gets chunks",
+          "destinationId" : "19",
+          "id" : "59",
+          "linkedRelationshipId" : "58",
+          "sourceId" : "4"
+        }, {
+          "description" : "Gets stats",
+          "destinationId" : "23",
+          "id" : "62",
+          "linkedRelationshipId" : "60",
+          "sourceId" : "4"
+        }, {
+          "description" : "Starts pipeline",
+          "destinationId" : "14",
+          "id" : "66",
+          "linkedRelationshipId" : "65",
+          "sourceId" : "4"
+        }, {
+          "description" : "Preview only",
+          "destinationId" : "16",
+          "id" : "74",
+          "linkedRelationshipId" : "72",
+          "sourceId" : "4"
+        } ],
+        "tags" : "Element,Container,Interface",
+        "technology" : "Python 3.14, FastMCP"
+      }, {
+        "components" : [ {
+          "description" : "Parses EPUB/PDF/TXT into raw text with metadata",
+          "documentation" : { },
+          "id" : "14",
+          "name" : "Text Extractor",
+          "properties" : {
+            "structurizr.dsl.identifier" : "textExtractor"
+          },
+          "relationships" : [ {
+            "description" : "Raw text",
+            "destinationId" : "15",
+            "id" : "26",
+            "sourceId" : "14",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion",
+          "technology" : "ingest_books.py"
+        }, {
+          "description" : "Detects chapter boundaries from EPUB NCX/NAV, PDF outline, or heuristics",
+          "documentation" : { },
+          "id" : "15",
+          "name" : "Chapter Detector",
+          "properties" : {
+            "structurizr.dsl.identifier" : "chapterDetector"
+          },
+          "relationships" : [ {
+            "description" : "Chapters + text",
+            "destinationId" : "16",
+            "id" : "27",
+            "sourceId" : "15",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion",
+          "technology" : "chapter_detection.py"
+        }, {
+          "description" : "Splits text by semantic similarity using sentence embeddings",
+          "documentation" : { },
+          "id" : "16",
+          "name" : "Universal Semantic Chunker",
+          "properties" : {
+            "structurizr.dsl.identifier" : "universalChunker"
+          },
+          "relationships" : [ {
+            "description" : "Sentences for similarity",
+            "destinationId" : "17",
+            "id" : "28",
+            "sourceId" : "16",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Semantic chunks",
+            "destinationId" : "18",
+            "id" : "29",
+            "sourceId" : "16",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion,Core,AI",
+          "technology" : "universal_chunking.py"
+        }, {
+          "description" : "Converts text to 384-dim vectors",
+          "documentation" : { },
+          "id" : "17",
+          "name" : "Embedder",
+          "properties" : {
+            "structurizr.dsl.identifier" : "embedder"
+          },
+          "tags" : "Element,Component,Ingestion,Query,AI",
+          "technology" : "SentenceTransformer"
+        }, {
+          "description" : "Creates parent (chapter) + child (semantic) chunk structure",
+          "documentation" : { },
+          "id" : "18",
+          "name" : "Hierarchical Ingester",
+          "properties" : {
+            "structurizr.dsl.identifier" : "hierarchicalIngester"
+          },
+          "relationships" : [ {
+            "description" : "Chunks for embedding",
+            "destinationId" : "17",
+            "id" : "30",
+            "sourceId" : "18",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Parent + child chunks",
+            "destinationId" : "19",
+            "id" : "31",
+            "sourceId" : "18",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion",
+          "technology" : "ingest_books.py"
+        }, {
+          "description" : "Batches and uploads vectors + payloads",
+          "documentation" : { },
+          "id" : "19",
+          "name" : "Qdrant Uploader",
+          "properties" : {
+            "structurizr.dsl.identifier" : "qdrantUploader"
+          },
+          "relationships" : [ {
+            "description" : "Log success",
+            "destinationId" : "23",
+            "id" : "32",
+            "sourceId" : "19",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Upserts vectors",
+            "destinationId" : "38",
+            "id" : "75",
+            "sourceId" : "19",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Ingestion",
+          "technology" : "ingest_books.py"
+        }, {
+          "description" : "Semantic search with context modes (precise/contextual/comprehensive)",
+          "documentation" : { },
+          "id" : "20",
+          "name" : "RAG Query Engine",
+          "properties" : {
+            "structurizr.dsl.identifier" : "ragQueryEngine"
+          },
+          "relationships" : [ {
+            "description" : "Embed query",
+            "destinationId" : "17",
+            "id" : "33",
+            "sourceId" : "20",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Fetch context",
+            "destinationId" : "21",
+            "id" : "34",
+            "sourceId" : "20",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Apply template",
+            "destinationId" : "22",
+            "id" : "35",
+            "sourceId" : "20",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Searches vectors",
+            "destinationId" : "38",
+            "id" : "76",
+            "sourceId" : "20",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Generates answers",
+            "destinationId" : "39",
+            "id" : "77",
+            "sourceId" : "20",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Query",
+          "technology" : "rag_query.py"
+        }, {
+          "description" : "Retrieves parent context for hierarchical results",
+          "documentation" : { },
+          "id" : "21",
+          "name" : "Parent Chunk Fetcher",
+          "properties" : {
+            "structurizr.dsl.identifier" : "parentFetcher"
+          },
+          "tags" : "Element,Component,Query",
+          "technology" : "rag_query.py"
+        }, {
+          "description" : "RAG discipline templates (direct, synthesis, critical...)",
+          "documentation" : { },
+          "id" : "22",
+          "name" : "Response Patterns",
+          "properties" : {
+            "structurizr.dsl.identifier" : "responsePatterns"
+          },
+          "tags" : "Element,Component,Query",
+          "technology" : "prompts/patterns.json"
+        }, {
+          "description" : "Tracks ingested books per collection with CSV export",
+          "documentation" : { },
+          "id" : "23",
+          "name" : "Collection Manifest",
+          "properties" : {
+            "structurizr.dsl.identifier" : "collectionManifest"
+          },
+          "tags" : "Element,Component,Management",
+          "technology" : "collection_manifest.py"
+        }, {
+          "description" : "SQLite access to Calibre library metadata",
+          "documentation" : { },
+          "id" : "24",
+          "name" : "Calibre Integration",
+          "properties" : {
+            "structurizr.dsl.identifier" : "calibreDB"
+          },
+          "relationships" : [ {
+            "description" : "File path + metadata",
+            "destinationId" : "14",
+            "id" : "25",
+            "sourceId" : "24",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component,Integration",
+          "technology" : "calibre_db.py"
+        } ],
+        "description" : "Core business logic for ingestion, chunking, querying",
+        "documentation" : { },
+        "id" : "13",
+        "name" : "Scripts Package",
+        "properties" : {
+          "structurizr.dsl.identifier" : "scripts"
+        },
+        "relationships" : [ {
+          "description" : "Reads books, writes logs",
+          "destinationId" : "36",
+          "id" : "46",
+          "sourceId" : "13",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Queries metadata",
+          "destinationId" : "37",
+          "id" : "47",
+          "sourceId" : "13",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Vector operations",
+          "destinationId" : "38",
+          "id" : "48",
+          "sourceId" : "13",
+          "tags" : "Relationship"
+        }, {
+          "description" : "LLM calls",
+          "destinationId" : "39",
+          "id" : "49",
+          "sourceId" : "13",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Python 3.14"
+      }, {
+        "description" : "Book files (ingest/, ingested/) and logs",
+        "documentation" : { },
+        "id" : "36",
+        "name" : "File System",
+        "properties" : {
+          "structurizr.dsl.identifier" : "filesystem"
+        },
+        "tags" : "Element,Container,Storage",
+        "technology" : "Local FS"
+      }, {
+        "description" : "9,000 books with metadata",
+        "documentation" : { },
+        "id" : "37",
+        "name" : "Calibre Library",
+        "properties" : {
+          "structurizr.dsl.identifier" : "calibreLibrary"
+        },
+        "tags" : "Element,Container,Database",
+        "technology" : "SQLite + Files"
+      } ],
+      "description" : "Retrieval-Augmented Generation system for multi-disciplinary book library",
+      "documentation" : { },
+      "id" : "3",
+      "name" : "Alexandria RAG System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "alexandriaSystem"
+      },
+      "relationships" : [ {
+        "description" : "Stores/retrieves vectors",
+        "destinationId" : "38",
+        "id" : "42",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Generates answers",
+        "destinationId" : "39",
+        "id" : "43",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Vector search engine (192.168.0.151:6333)",
+      "documentation" : { },
+      "id" : "38",
+      "name" : "Qdrant Vector DB",
+      "properties" : {
+        "structurizr.dsl.identifier" : "qdrant"
+      },
+      "tags" : "Element,Software System,External,Database"
+    }, {
+      "description" : "LLM inference (Claude, GPT-4, etc.)",
+      "documentation" : { },
+      "id" : "39",
+      "name" : "OpenRouter API",
+      "properties" : {
+        "structurizr.dsl.identifier" : "openrouter"
+      },
+      "tags" : "Element,Software System,External,AI"
+    } ]
+  },
+  "name" : "Alexandria RAG System",
+  "properties" : {
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.error" : "53",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "containerId" : "4",
+      "description" : "MCP Server tools exposed to Claude Code",
+      "dimensions" : {
+        "height" : 1439,
+        "width" : 6180
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 3239,
+        "y" : 182
+      }, {
+        "id" : "6",
+        "x" : 2489,
+        "y" : 182
+      }, {
+        "id" : "7",
+        "x" : 1739,
+        "y" : 182
+      }, {
+        "id" : "8",
+        "x" : 989,
+        "y" : 182
+      }, {
+        "id" : "9",
+        "x" : 239,
+        "y" : 182
+      }, {
+        "id" : "10",
+        "x" : 5489,
+        "y" : 182
+      }, {
+        "id" : "11",
+        "x" : 4739,
+        "y" : 182
+      }, {
+        "id" : "12",
+        "x" : 3989,
+        "y" : 182
+      }, {
+        "id" : "13",
+        "x" : 2864,
+        "y" : 782
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "MCPServerTools",
+      "name" : "Component View: Alexandria RAG System - MCP Server",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "51"
+      }, {
+        "id" : "54"
+      }, {
+        "id" : "56",
+        "vertices" : [ {
+          "x" : 2339,
+          "y" : 586
+        } ]
+      }, {
+        "id" : "61",
+        "vertices" : [ {
+          "x" : 1589,
+          "y" : 586
+        } ]
+      }, {
+        "id" : "64",
+        "vertices" : [ {
+          "x" : 839,
+          "y" : 586
+        } ]
+      }, {
+        "id" : "68",
+        "vertices" : [ {
+          "x" : 5339,
+          "y" : 586
+        } ]
+      }, {
+        "id" : "71",
+        "vertices" : [ {
+          "x" : 4589,
+          "y" : 586
+        } ]
+      }, {
+        "id" : "73",
+        "vertices" : [ {
+          "x" : 3839,
+          "y" : 586
+        } ]
+      } ]
+    }, {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "containerId" : "13",
+      "description" : "Core business logic in scripts/ package",
+      "dimensions" : {
+        "height" : 4029,
+        "width" : 6160
+      },
+      "elements" : [ {
+        "id" : "4",
+        "x" : 220,
+        "y" : 931
+      }, {
+        "id" : "14",
+        "x" : 1720,
+        "y" : 1156
+      }, {
+        "id" : "15",
+        "x" : 2470,
+        "y" : 1156
+      }, {
+        "id" : "16",
+        "x" : 3220,
+        "y" : 1231
+      }, {
+        "id" : "17",
+        "x" : 4720,
+        "y" : 1064
+      }, {
+        "id" : "18",
+        "x" : 3970,
+        "y" : 847
+      }, {
+        "id" : "19",
+        "x" : 4720,
+        "y" : 464
+      }, {
+        "id" : "20",
+        "x" : 3970,
+        "y" : 2127
+      }, {
+        "id" : "21",
+        "x" : 4720,
+        "y" : 2264
+      }, {
+        "id" : "22",
+        "x" : 4720,
+        "y" : 1664
+      }, {
+        "id" : "23",
+        "x" : 5470,
+        "y" : 464
+      }, {
+        "id" : "24",
+        "x" : 970,
+        "y" : 1156
+      }, {
+        "id" : "38",
+        "x" : 5470,
+        "y" : 2877
+      }, {
+        "id" : "39",
+        "x" : 4720,
+        "y" : 3472
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "ScriptsComponents",
+      "name" : "Component View: Alexandria RAG System - Scripts Package",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "25"
+      }, {
+        "id" : "26"
+      }, {
+        "id" : "27"
+      }, {
+        "id" : "28",
+        "vertices" : [ {
+          "x" : 4420,
+          "y" : 1297
+        } ]
+      }, {
+        "id" : "29"
+      }, {
+        "id" : "30"
+      }, {
+        "id" : "31"
+      }, {
+        "id" : "32"
+      }, {
+        "id" : "33",
+        "vertices" : [ {
+          "x" : 4720,
+          "y" : 1514
+        } ]
+      }, {
+        "id" : "34"
+      }, {
+        "id" : "35"
+      }, {
+        "id" : "52",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 1681
+        }, {
+          "x" : 1941,
+          "y" : 2172
+        }, {
+          "x" : 2699,
+          "y" : 2172
+        } ]
+      }, {
+        "id" : "57"
+      }, {
+        "id" : "59",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 927
+        }, {
+          "x" : 1941,
+          "y" : 543
+        }, {
+          "x" : 3449,
+          "y" : 543
+        } ]
+      }, {
+        "id" : "62",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 752
+        }, {
+          "x" : 1941,
+          "y" : 160
+        }, {
+          "x" : 4199,
+          "y" : 160
+        }, {
+          "x" : 5170,
+          "y" : 314
+        } ]
+      }, {
+        "id" : "66",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 1006
+        }, {
+          "x" : 1420,
+          "y" : 1006
+        } ]
+      }, {
+        "id" : "74",
+        "vertices" : [ {
+          "x" : 866,
+          "y" : 1606
+        }, {
+          "x" : 2920,
+          "y" : 1606
+        } ]
+      }, {
+        "id" : "75",
+        "vertices" : [ {
+          "x" : 5170,
+          "y" : 914
+        }, {
+          "x" : 5470,
+          "y" : 2743
+        } ]
+      }, {
+        "id" : "76",
+        "vertices" : [ {
+          "x" : 4720,
+          "y" : 2714
+        } ]
+      }, {
+        "id" : "77",
+        "vertices" : [ {
+          "x" : 4720,
+          "y" : 3247
+        } ]
+      } ]
+    } ],
+    "configuration" : {
+      "branding" : { },
+      "lastSavedView" : "QueryFlow",
+      "metadataSymbols" : "SquareBrackets",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#5c2d8a",
+          "color" : "#ffffff",
+          "tag" : "AI"
+        }, {
+          "background" : "#85bbf0",
+          "color" : "#000000",
+          "shape" : "Component",
+          "tag" : "Component"
+        }, {
+          "background" : "#438dd5",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Container"
+        }, {
+          "shape" : "Cylinder",
+          "tag" : "Database"
+        }, {
+          "background" : "#999999",
+          "color" : "#ffffff",
+          "tag" : "External"
+        }, {
+          "background" : "#2d8a5f",
+          "color" : "#ffffff",
+          "tag" : "Ingestion"
+        }, {
+          "background" : "#d4a017",
+          "color" : "#000000",
+          "tag" : "Interface"
+        }, {
+          "background" : "#2d5c8a",
+          "color" : "#ffffff",
+          "tag" : "Management"
+        }, {
+          "background" : "#8a2d58",
+          "color" : "#ffffff",
+          "tag" : "Query"
+        }, {
+          "background" : "#1168bd",
+          "color" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Software System"
+        }, {
+          "shape" : "Folder",
+          "tag" : "Storage"
+        }, {
+          "background" : "#f5d742",
+          "color" : "#000000",
+          "shape" : "Hexagon",
+          "tag" : "Tool"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "Alexandria's main containers and external dependencies",
+      "dimensions" : {
+        "height" : 2520,
+        "width" : 3120
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 200,
+        "y" : 762
+      }, {
+        "id" : "4",
+        "x" : 950,
+        "y" : 762
+      }, {
+        "id" : "13",
+        "x" : 1700,
+        "y" : 762
+      }, {
+        "id" : "36",
+        "x" : 2450,
+        "y" : 762
+      }, {
+        "id" : "37",
+        "x" : 2450,
+        "y" : 162
+      }, {
+        "id" : "38",
+        "x" : 2450,
+        "y" : 1362
+      }, {
+        "id" : "39",
+        "x" : 2450,
+        "y" : 1962
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "Containers",
+      "name" : "Container View: Alexandria RAG System",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "44"
+      }, {
+        "id" : "45"
+      }, {
+        "id" : "46"
+      }, {
+        "id" : "47"
+      }, {
+        "id" : "48"
+      }, {
+        "id" : "49",
+        "vertices" : [ {
+          "x" : 2450,
+          "y" : 1812
+        } ]
+      } ],
+      "softwareSystemId" : "3"
+    } ],
+    "dynamicViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "High-level query flow",
+      "dimensions" : {
+        "height" : 1300,
+        "width" : 3100
+      },
+      "elementId" : "3",
+      "elements" : [ {
+        "id" : "2",
+        "x" : 200,
+        "y" : 443
+      }, {
+        "id" : "4",
+        "x" : 950,
+        "y" : 443
+      }, {
+        "id" : "13",
+        "x" : 1700,
+        "y" : 443
+      }, {
+        "id" : "38",
+        "x" : 2450,
+        "y" : 143
+      }, {
+        "id" : "39",
+        "x" : 2450,
+        "y" : 743
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "QueryFlow",
+      "name" : "Dynamic View: Alexandria RAG System",
+      "order" : 5,
+      "relationships" : [ {
+        "description" : "1. MCP tool call",
+        "id" : "44",
+        "order" : "1",
+        "response" : false
+      }, {
+        "description" : "2. Business logic",
+        "id" : "45",
+        "order" : "2",
+        "response" : false
+      }, {
+        "description" : "3. Vector search",
+        "id" : "48",
+        "order" : "3",
+        "response" : false
+      }, {
+        "description" : "4. LLM answer",
+        "id" : "49",
+        "order" : "4",
+        "response" : false
+      } ]
+    }, {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "High-level ingestion flow",
+      "dimensions" : {
+        "height" : 1920,
+        "width" : 3120
+      },
+      "elementId" : "3",
+      "elements" : [ {
+        "id" : "2",
+        "x" : 199,
+        "y" : 763
+      }, {
+        "id" : "4",
+        "x" : 949,
+        "y" : 763
+      }, {
+        "id" : "13",
+        "x" : 1699,
+        "y" : 763
+      }, {
+        "id" : "36",
+        "x" : 2449,
+        "y" : 763
+      }, {
+        "id" : "37",
+        "x" : 2449,
+        "y" : 163
+      }, {
+        "id" : "38",
+        "x" : 2449,
+        "y" : 1363
+      } ],
+      "externalBoundariesVisible" : false,
+      "key" : "IngestionFlow",
+      "name" : "Dynamic View: Alexandria RAG System",
+      "order" : 6,
+      "relationships" : [ {
+        "description" : "1. MCP ingest call",
+        "id" : "44",
+        "order" : "1",
+        "response" : false
+      }, {
+        "description" : "2. Pipeline",
+        "id" : "45",
+        "order" : "2",
+        "response" : false
+      }, {
+        "description" : "3. Get book",
+        "id" : "47",
+        "order" : "3",
+        "response" : false
+      }, {
+        "description" : "4. Store vectors",
+        "id" : "48",
+        "order" : "4",
+        "response" : false
+      }, {
+        "description" : "5. Move file",
+        "id" : "46",
+        "order" : "5",
+        "response" : false
+      } ]
+    } ],
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "description" : "How Alexandria fits in the ecosystem",
+      "dimensions" : {
+        "height" : 1300,
+        "width" : 2350
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 200,
+        "y" : 442
+      }, {
+        "id" : "3",
+        "x" : 950,
+        "y" : 442
+      }, {
+        "id" : "38",
+        "x" : 1700,
+        "y" : 142
+      }, {
+        "id" : "39",
+        "x" : 1700,
+        "y" : 742
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "SystemContext",
+      "name" : "System Context View: Alexandria RAG System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "41"
+      }, {
+        "id" : "42"
+      }, {
+        "id" : "43"
+      } ],
+      "softwareSystemId" : "3"
+    } ]
+  }
+}

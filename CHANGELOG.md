@@ -6,6 +6,50 @@ For active work items, see [TODO.md](TODO.md).
 
 ---
 
+## 2026-01-30
+
+### Hierarchical Chunking Preparation
+**Duration:** ~2 hours
+**Lines of Code:** ~450 LOC created
+**Goal:** Prepare implementation artifacts for hierarchical chunking feature
+
+**Deliverables:**
+
+**1. Implementation Plan**
+- Created [docs/backlog/hierarchical-chunking-implementation-plan.md](docs/backlog/hierarchical-chunking-implementation-plan.md)
+- Detailed Phase 0 tasks with code examples
+- Test plan with 5 validation books
+- Questions for user approval before implementation
+
+**2. Chapter Detection Module (`scripts/chapter_detection.py`)**
+- Created ~350 LOC module for detecting chapter boundaries
+- EPUB strategies: NCX (2.0), NAV (3.0), item-based fallback
+- PDF strategies: outline/bookmarks, heading pattern detection
+- Token-based fallback for unstructured documents
+- CLI interface for testing: `python chapter_detection.py book.epub`
+
+**3. TODO.md Update**
+- Added "Hierarchical Chunking (P0)" section as HIGH PRIORITY
+- Tracked Phase 0 and Phase 1 tasks
+- Linked to full backlog specification
+
+**Files Created:**
+- `docs/backlog/hierarchical-chunking-implementation-plan.md` (new)
+- `scripts/chapter_detection.py` (new, ~350 LOC)
+
+**Files Modified:**
+- `TODO.md` (added Hierarchical Chunking section)
+- `CHANGELOG.md` (this entry)
+
+**Status:** DRAFT - Awaiting user review and approval before implementing code changes.
+
+**Next Steps:**
+1. User reviews implementation plan
+2. Confirm clean slate approach (delete existing collection)
+3. Begin Phase 0 implementation
+
+---
+
 ## 2026-01-29
 
 ### Security Hardening: XSRF Protection + CORS Configuration

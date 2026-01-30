@@ -8,7 +8,7 @@ Provides book information: title, author, language, tags, series, ISBN, etc.
 Usage:
     from calibre_db import CalibreDB
 
-    db = CalibreDB("G:\\My Drive\\alexandria")
+    db = CalibreDB()  # Uses CALIBRE_LIBRARY_PATH from config
     books = db.get_all_books()
 
     # Search
@@ -23,6 +23,8 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+
+from config import CALIBRE_LIBRARY_PATH
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +58,7 @@ class CalibreBook:
 class CalibreDB:
     """Interface to Calibre metadata.db"""
 
-    def __init__(self, library_path: str = "G:\\My Drive\\alexandria"):
+    def __init__(self, library_path: str = CALIBRE_LIBRARY_PATH):
         """
         Initialize connection to Calibre library database.
 
@@ -336,6 +338,50 @@ class CalibreDB:
         logger.warning(f"Could not match '{filename}' to any Calibre book")
         return None
 
+    def get_book_file_path(self, book_id: int, format: str) -> Optional[str]:
+        """
+        Get full file path for a book in a specific format.
+
+        Args:
+            book_id: Calibre book ID
+            format: File format (e.g., 'epub', 'pdf')
+
+        Returns:
+            Absolute file path or None if not found
+
+        Calibre structure: library_path / book.path / filename.format
+        """
+        conn = self._connect()
+        cursor = conn.cursor()
+
+        # Get book path and filename from data table
+        cursor.execute("""
+            SELECT b.path, d.name, d.format
+            FROM books b
+            JOIN data d ON b.id = d.book
+            WHERE b.id = ? AND LOWER(d.format) = LOWER(?)
+        """, (book_id, format))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            logger.warning(f"No {format} file found for book ID {book_id}")
+            return None
+
+        # Build full path: library / author_title / filename.format
+        book_path = row['path']
+        filename = row['name']
+        file_format = row['format'].lower()
+
+        full_path = self.library_path / book_path / f"{filename}.{file_format}"
+
+        if not full_path.exists():
+            logger.warning(f"File not found: {full_path}")
+            return None
+
+        return str(full_path)
+
     def get_available_languages(self) -> List[str]:
         """Get list of all language codes in library"""
         conn = self._connect()
@@ -441,7 +487,7 @@ def main():
     parser.add_argument(
         '--library',
         type=str,
-        default='G:\\My Drive\\alexandria',
+        default=CALIBRE_LIBRARY_PATH,
         help='Path to Calibre library'
     )
     parser.add_argument(

@@ -13,7 +13,7 @@ All AI agents working on Alexandria should read:
 
 **Project Documentation:**
 - **[README.md](README.md)** - Project overview, features, quick start
-- **[docs/architecture/README.md](docs/architecture/README.md)** - C4 diagrams, ADRs, technical specs
+- **[docs/index.md](docs/index.md)** - Documentation hub
 - **[TODO.md](TODO.md)** - Current sprint tasks and completed work
 
 ---
@@ -31,7 +31,7 @@ Scripts: c:\Users\goran\source\repos\Temenos\Akademija\Alexandria\scripts
 **External Services:**
 ```
 Qdrant Server:    192.168.0.151:6333
-Streamlit GUI:    http://localhost:8501
+MCP Server:       scripts/mcp_server.py (configured in .mcp.json)
 Structurizr:      http://localhost:8081 (run scripts/start-structurizr.bat)
 ```
 
@@ -49,15 +49,18 @@ cd scripts
 python collection_manifest.py show alexandria
 ```
 
-**Launch GUI:**
-```bash
-streamlit run alexandria_app.py
-```
-
-**Query books:**
+**Query books (CLI):**
 ```bash
 cd scripts
-python rag_query.py "your question here" --limit 5
+python rag_query.py "your question here" --limit 5 --context-mode contextual
+```
+
+**MCP Server (Primary Interface):**
+```bash
+# Configured in .mcp.json - restart Claude Code to activate
+# Query tools: alexandria_query, alexandria_search, alexandria_book, alexandria_stats
+# Ingest tools: alexandria_ingest, alexandria_batch_ingest, alexandria_ingest_file
+# Docs: docs/architecture/mcp-server.md
 ```
 
 **Run tests:**
@@ -81,24 +84,25 @@ datasette "G:/My Drive/alexandria/metadata.db" --port 8002
 | **Implementation rules** | [_bmad-output/project-context.md](_bmad-output/project-context.md) |
 | **Technology stack** | [_bmad-output/project-context.md](_bmad-output/project-context.md) |
 | **Architecture decisions (ADRs)** | [docs/architecture/decisions/](docs/architecture/decisions/) |
-| **C4 diagrams** | [docs/architecture/c4/](docs/architecture/c4/) |
+| **Architecture overview** | [docs/architecture/README.md](docs/architecture/README.md) |
 | **Script documentation** | [scripts/README.md](scripts/README.md) |
 | **Logging system** | [logs/README.md](logs/README.md) |
-| **Quick command reference** | [docs/guides/QUICK_REFERENCE.md](docs/guides/QUICK_REFERENCE.md) |
+| **Quick command reference** | [docs/guides/common-workflows.md](docs/guides/common-workflows.md) |
 | **Current tasks** | [TODO.md](TODO.md) |
 | **Project overview** | [README.md](README.md) |
+| **MCP Server docs** | [docs/architecture/mcp-server.md](docs/architecture/mcp-server.md) |
 
 ---
 
 ## Critical Architecture Principle
 
-**ADR 0003:** All business logic lives in `scripts/` - GUI is a thin presentation layer.
+**MCP-First Design:** All business logic lives in `scripts/` - MCP server is the primary interface.
 
-- ✅ **GUI** (`alexandria_app.py`) - Calls functions from `scripts/`, displays results
-- ✅ **Scripts** (`scripts/*.py`) - All logic, usable by GUI/CLI/agents
-- ❌ **NEVER** - Implement logic directly in GUI
+- ✅ **MCP Server** (`scripts/mcp_server.py`) - Exposes scripts as MCP tools
+- ✅ **Scripts** (`scripts/*.py`) - All logic, usable by MCP/CLI
+- ❌ **GUI Development** - Abandoned in favor of MCP-first approach
 
-See [docs/architecture/decisions/0003-gui-as-thin-layer.md](docs/architecture/decisions/0003-gui-as-thin-layer.md)
+See [docs/architecture/mcp-server.md](docs/architecture/mcp-server.md)
 
 ---
 
@@ -122,5 +126,5 @@ See [docs/architecture/decisions/0003-gui-as-thin-layer.md](docs/architecture/de
 
 ---
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-01-30
 **Migration:** Migrated to project-context.md (BMad standard)

@@ -62,7 +62,7 @@ if scripts_dir not in sys.path:
 from rag_query import perform_rag_query, RAGResult
 from calibre_db import CalibreDB, CalibreBook
 from qdrant_utils import check_qdrant_connection
-from ingest_books import ingest_book, test_chunking, extract_text
+from ingest_books import ingest_book, test_chunking, compare_chunking, extract_text
 from collection_manifest import CollectionManifest
 
 # Configure logging - reduce verbosity for MCP server
@@ -1534,6 +1534,108 @@ def alexandria_test_chunking_file(
 
 
 # ============================================================================
+# TOOL: alexandria_compare_chunking
+# ============================================================================
+
+@mcp.tool()
+def alexandria_compare_chunking(
+    book_id: int,
+    format_preference: str = "epub"
+) -> dict:
+    """
+    Compare multiple threshold values to find optimal semantic chunking.
+
+    Tests thresholds [0.40, 0.45, 0.50, 0.55, 0.60] and shows semantic metrics
+    to help choose the best threshold for a book. Extracts text and generates
+    embeddings once, then efficiently tests all thresholds.
+
+    Args:
+        book_id: Calibre book ID
+        format_preference: Preferred format - 'epub' or 'pdf' (default: epub)
+
+    Returns:
+        dict with:
+            - success: Whether comparison completed
+            - title, author: Book metadata
+            - total_sentences, total_words: Text statistics
+            - similarity_distribution: Min/max/mean/median of adjacent sentence similarity
+            - comparisons: List of results per threshold with:
+                - threshold, chunks, avg_words, coherence
+                - semantic_breaks, forced_breaks
+                - sample_breaks: First 3 break points with context
+            - recommendation: Suggested threshold
+            - recommendation_reason: Why this threshold was chosen
+
+    Example:
+        alexandria_compare_chunking(book_id=123)
+    """
+    try:
+        db = CalibreDB()
+        book = db.get_book_by_id(book_id)
+
+        if not book:
+            return {"success": False, "error": f"Book not found: {book_id}"}
+
+        # Find file path
+        formats = book.get('formats', [])
+        if not formats:
+            return {"success": False, "error": f"No formats available for book {book_id}"}
+
+        # Select format
+        selected_format = None
+        if format_preference.upper() in formats:
+            selected_format = format_preference.upper()
+        elif 'EPUB' in formats:
+            selected_format = 'EPUB'
+        elif 'PDF' in formats:
+            selected_format = 'PDF'
+        else:
+            selected_format = formats[0]
+
+        # Build file path
+        author = book.get('author', 'Unknown')
+        title = book.get('title', 'Unknown')
+        book_folder = f"{title} ({book_id})"
+        filename = f"{title[:50]} - {author[:30]}.{selected_format.lower()}"
+
+        file_path = os.path.join(
+            CALIBRE_LIBRARY_PATH,
+            author,
+            book_folder,
+            filename
+        )
+
+        # Try alternative path patterns if not found
+        if not os.path.exists(file_path):
+            # Search in author folder
+            author_path = os.path.join(CALIBRE_LIBRARY_PATH, author)
+            if os.path.exists(author_path):
+                for folder in os.listdir(author_path):
+                    if f"({book_id})" in folder:
+                        folder_path = os.path.join(author_path, folder)
+                        for f in os.listdir(folder_path):
+                            if f.lower().endswith(f".{selected_format.lower()}"):
+                                file_path = os.path.join(folder_path, f)
+                                break
+
+        if not os.path.exists(file_path):
+            return {"success": False, "error": f"File not found for book {book_id}"}
+
+        # Run comparison
+        result = compare_chunking(filepath=file_path)
+
+        if result.get('success'):
+            result['book_id'] = book_id
+            result['format'] = selected_format
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Chunking comparison failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -1555,10 +1657,11 @@ QUERY TOOLS
 
 INGEST TOOLS (Calibre)
 ----------------------
-  alexandria_ingest_preview  Preview books available for ingestion
-  alexandria_ingest          Ingest a book from Calibre into Qdrant
-  alexandria_batch_ingest    Ingest multiple books by criteria
-  alexandria_test_chunking   Test chunking parameters without uploading
+  alexandria_ingest_preview   Preview books available for ingestion
+  alexandria_ingest           Ingest a book from Calibre into Qdrant
+  alexandria_batch_ingest     Ingest multiple books by criteria
+  alexandria_test_chunking    Test chunking parameters without uploading
+  alexandria_compare_chunking Compare thresholds to find optimal chunking
 
 INGEST TOOLS (Local Files)
 --------------------------

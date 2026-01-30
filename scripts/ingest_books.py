@@ -2,10 +2,12 @@
 Alexandria Book Ingestion Script
 
 Unified ingestion pipeline for EPUB, PDF, and TXT files.
-Utilizes Universal Semantic Chunking for all domains to ensure high-quality retrieval.
+Utilizes Universal Semantic Chunking for high-quality retrieval.
 
 Usage:
-    python ingest_books.py --file "path/to/book.epub" --domain technical
+    python ingest_books.py --file "path/to/book.epub" --collection alexandria
+    python ingest_books.py --file "path/to/book.epub" --dry-run --threshold 0.55
+    python ingest_books.py --file "path/to/book.epub" --compare
 """
 
 import os
@@ -884,6 +886,179 @@ def test_chunking(
     return result
 
 
+# ============================================================================
+# CHUNKING COMPARISON MODE
+# ============================================================================
+
+def compare_chunking(
+    filepath: str,
+    thresholds: List[float] = None,
+    min_chunk_size: int = 200,
+    max_chunk_size: int = 1200
+) -> Dict:
+    """
+    Compare multiple threshold values to find optimal semantic chunking parameters.
+
+    Extracts text and generates embeddings ONCE, then tests multiple thresholds
+    efficiently. Shows semantic coherence metrics to help choose the best threshold.
+
+    Args:
+        filepath: Path to the book file
+        thresholds: List of thresholds to test (default: [0.40, 0.45, 0.50, 0.55, 0.60])
+        min_chunk_size: Minimum words per chunk
+        max_chunk_size: Maximum words per chunk
+
+    Returns:
+        Dict with comparison results and recommendation
+    """
+    import numpy as np
+    from sklearn.metrics.pairwise import cosine_similarity
+    import re
+
+    if thresholds is None:
+        thresholds = [0.40, 0.45, 0.50, 0.55, 0.60]
+
+    normalized_path, display_path, _, _ = normalize_file_path(filepath)
+
+    ok, err = validate_file_access(normalized_path, display_path)
+    if not ok:
+        return {'success': False, 'error': err}
+
+    # Extract text and metadata ONCE
+    text, metadata = extract_text(normalized_path)
+    metadata = _enrich_metadata_from_calibre(filepath, metadata)
+
+    # Split into sentences ONCE
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 2]
+
+    if len(sentences) < 10:
+        return {'success': False, 'error': f'Not enough sentences ({len(sentences)}) for comparison'}
+
+    # Generate embeddings ONCE (expensive operation)
+    embedder = EmbeddingGenerator()
+    if hasattr(embedder, 'generate_embeddings'):
+        embeddings = np.array(embedder.generate_embeddings(sentences))
+    else:
+        embeddings = embedder.model.encode(sentences, show_progress_bar=False)
+
+    # Calculate pairwise similarities between adjacent sentences
+    adjacent_similarities = []
+    for i in range(1, len(sentences)):
+        sim = cosine_similarity(
+            embeddings[i-1].reshape(1, -1),
+            embeddings[i].reshape(1, -1)
+        )[0][0]
+        adjacent_similarities.append(sim)
+
+    # Test each threshold
+    results = []
+    for threshold in sorted(thresholds):
+        chunks = []
+        current_sentences = [sentences[0]]
+        current_word_count = len(sentences[0].split())
+        break_points = []  # (index, similarity, before_text, after_text)
+
+        for i in range(1, len(sentences)):
+            sentence = sentences[i]
+            word_count = len(sentence.split())
+            similarity = adjacent_similarities[i-1]
+
+            should_break = (similarity < threshold and current_word_count >= min_chunk_size)
+            must_break = (current_word_count + word_count > max_chunk_size)
+
+            if should_break or must_break:
+                # Record break point
+                before_text = sentences[i-1][-80:] if len(sentences[i-1]) > 80 else sentences[i-1]
+                after_text = sentence[:80] if len(sentence) > 80 else sentence
+                break_points.append({
+                    'index': i,
+                    'similarity': round(similarity, 3),
+                    'reason': 'semantic' if should_break else 'max_size',
+                    'before': '...' + before_text if len(sentences[i-1]) > 80 else before_text,
+                    'after': after_text + '...' if len(sentence) > 80 else after_text
+                })
+
+                chunks.append(" ".join(current_sentences))
+                current_sentences = [sentence]
+                current_word_count = word_count
+            else:
+                current_sentences.append(sentence)
+                current_word_count += word_count
+
+        # Final chunk
+        if current_sentences:
+            chunks.append(" ".join(current_sentences))
+
+        # Calculate chunk statistics
+        word_counts = [len(c.split()) for c in chunks]
+
+        # Calculate intra-chunk coherence (avg similarity within chunks)
+        chunk_coherences = []
+        sent_idx = 0
+        for chunk in chunks:
+            chunk_sents = re.split(r'(?<=[.!?])\s+', chunk)
+            chunk_sents = [s.strip() for s in chunk_sents if len(s.strip()) > 2]
+            n_sents = len(chunk_sents)
+
+            if n_sents > 1:
+                # Average similarity of adjacent sentences within this chunk
+                chunk_sims = adjacent_similarities[sent_idx:sent_idx + n_sents - 1]
+                if chunk_sims:
+                    chunk_coherences.append(np.mean(chunk_sims))
+            sent_idx += n_sents
+
+        avg_coherence = round(np.mean(chunk_coherences), 3) if chunk_coherences else 0
+
+        # Count semantic vs forced breaks
+        semantic_breaks = sum(1 for bp in break_points if bp['reason'] == 'semantic')
+        forced_breaks = sum(1 for bp in break_points if bp['reason'] == 'max_size')
+
+        results.append({
+            'threshold': threshold,
+            'chunks': len(chunks),
+            'avg_words': round(np.mean(word_counts), 1),
+            'min_words': min(word_counts),
+            'max_words': max(word_counts),
+            'coherence': avg_coherence,
+            'semantic_breaks': semantic_breaks,
+            'forced_breaks': forced_breaks,
+            'sample_breaks': break_points[:3]  # First 3 break points as samples
+        })
+
+    # Recommendation logic based on semantic quality
+    # Prefer: high coherence, few forced breaks, reasonable chunk count
+    best = None
+    best_score = -1
+    for r in results:
+        # Score: coherence matters most, penalize forced breaks
+        score = r['coherence'] * 100 - (r['forced_breaks'] * 5)
+        # Slight preference for middle chunk counts (not too few, not too many)
+        if 30 <= r['chunks'] <= 150:
+            score += 5
+        if score > best_score:
+            best_score = score
+            best = r['threshold']
+
+    return {
+        'success': True,
+        'file': display_path,
+        'title': metadata.get('title', 'Unknown'),
+        'author': metadata.get('author', 'Unknown'),
+        'total_sentences': len(sentences),
+        'total_words': sum(len(s.split()) for s in sentences),
+        'similarity_distribution': {
+            'min': round(min(adjacent_similarities), 3),
+            'max': round(max(adjacent_similarities), 3),
+            'mean': round(np.mean(adjacent_similarities), 3),
+            'median': round(np.median(adjacent_similarities), 3)
+        },
+        'comparisons': results,
+        'recommendation': best,
+        'recommendation_reason': f'Best semantic coherence ({next(r["coherence"] for r in results if r["threshold"] == best)}) with minimal forced breaks'
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description='Alexandria Book Ingestion')
     parser.add_argument('--file', required=True, help='Path to book file')
@@ -894,6 +1069,8 @@ def main():
     # Chunking test mode
     parser.add_argument('--dry-run', action='store_true',
                         help='Test chunking without uploading to Qdrant')
+    parser.add_argument('--compare', action='store_true',
+                        help='Compare multiple thresholds to find optimal semantic chunking')
     parser.add_argument('--threshold', type=float, default=0.55,
                         help='Similarity threshold (0.0-1.0). Lower=fewer breaks')
     parser.add_argument('--min-chunk', type=int, default=200,
@@ -905,7 +1082,54 @@ def main():
 
     args = parser.parse_args()
 
-    if args.dry_run:
+    if args.compare:
+        # Compare mode - test multiple thresholds
+        result = compare_chunking(
+            args.file,
+            min_chunk_size=args.min_chunk,
+            max_chunk_size=args.max_chunk
+        )
+
+        if not result['success']:
+            print(f"[ERROR] {result['error']}")
+            return
+
+        print("\n" + "=" * 78)
+        print(f"SEMANTIC CHUNKING COMPARISON: {result['title']}")
+        print(f"Author: {result['author']}")
+        print("=" * 78)
+
+        print(f"\nText Statistics:")
+        print(f"  Sentences: {result['total_sentences']:,}")
+        print(f"  Words:     {result['total_words']:,}")
+
+        sim = result['similarity_distribution']
+        print(f"\nAdjacent Sentence Similarity Distribution:")
+        print(f"  Min: {sim['min']:.3f}  Max: {sim['max']:.3f}  Mean: {sim['mean']:.3f}  Median: {sim['median']:.3f}")
+
+        print(f"\n{'Threshold':>10} {'Chunks':>8} {'Avg Words':>10} {'Coherence':>10} {'Semantic':>10} {'Forced':>8}")
+        print("-" * 68)
+        for r in result['comparisons']:
+            marker = " <--" if r['threshold'] == result['recommendation'] else ""
+            print(f"{r['threshold']:>10.2f} {r['chunks']:>8} {r['avg_words']:>10.1f} {r['coherence']:>10.3f} {r['semantic_breaks']:>10} {r['forced_breaks']:>8}{marker}")
+
+        print(f"\nRECOMMENDATION: threshold={result['recommendation']}")
+        print(f"  {result['recommendation_reason']}")
+
+        # Show sample break points from recommended threshold
+        rec_data = next(r for r in result['comparisons'] if r['threshold'] == result['recommendation'])
+        if rec_data['sample_breaks']:
+            print(f"\nSample Break Points (threshold={result['recommendation']}):")
+            for i, bp in enumerate(rec_data['sample_breaks'][:2], 1):
+                print(f"\n  Break #{i} (similarity={bp['similarity']}, reason={bp['reason']}):")
+                print(f"    BEFORE: \"{bp['before']}\"")
+                print(f"    AFTER:  \"{bp['after']}\"")
+
+        print("\n" + "=" * 78)
+        print("[OK] Comparison complete. Use --threshold X for ingestion.")
+        print("=" * 78 + "\n")
+
+    elif args.dry_run:
         # Test mode - no upload
         result = test_chunking(
             args.file,

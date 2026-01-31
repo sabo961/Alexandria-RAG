@@ -1,27 +1,67 @@
-# Alexandria Documentation
+# Alexandria Documentation Index
 
-**Welcome to Alexandria** - a Python-based RAG (Retrieval-Augmented Generation) system providing semantic search across 9,000+ books in the Temenos Academy Library.
-
-**Quick Facts:**
-- **Tech Stack:** Python 3.14, MCP Server, Qdrant vector database, sentence-transformers
-- **Vector DB:** Qdrant (external: 192.168.0.151:6333)
-- **Embedding Model:** all-MiniLM-L6-v2 (384-dimensional)
-- **Architecture:** MCP-first design, scripts package for business logic
-- **Chunking:** Hierarchical (parent chapters + child semantic chunks)
+**Type:** Monolith (Python Backend)
+**Primary Language:** Python 3.14
+**Architecture:** MCP-first design
+**Last Updated:** 2026-01-31
 
 ---
 
-## Quick Start
+## Project Overview
 
-**New to Alexandria?**
+Alexandria is a RAG (Retrieval-Augmented Generation) system providing semantic search across 9,000+ books in the Temenos Academy Library. It uses hierarchical semantic chunking and exposes all functionality via MCP Server for direct Claude Code integration.
 
-1. **[Getting Started](./user-docs/tutorials/getting-started.md)** - Set up Alexandria in 15 minutes
-2. **[Project Context](./project-context.md)** - What is Alexandria, rules, and patterns
-3. **[Common Workflows](./user-docs/how-to/common-workflows.md)** - Command cheat sheet for daily use
+---
 
-**For AI Agents:**
-- **[Project Context](./project-context.md)** - **MANDATORY READ** - 45 implementation rules
-- **[AGENTS.md](../AGENTS.md)** - Navigation hub for AI assistants
+## Quick Reference
+
+| Property | Value |
+|----------|-------|
+| **Tech Stack** | Python 3.14, Qdrant, sentence-transformers |
+| **Entry Point** | `scripts/mcp_server.py` |
+| **Architecture Pattern** | MCP-first, scripts package for business logic |
+| **Vector DB** | Qdrant (192.168.0.151:6333) |
+| **Embedding Model** | all-MiniLM-L6-v2 (384-dim) |
+
+---
+
+## For AI Agents
+
+| Priority | Document | Purpose |
+|----------|----------|---------|
+| **1. MANDATORY** | [project-context.md](./project-context.md) | 45 implementation rules |
+| **2. Tasks** | [TODO.md](../TODO.md) | Current priorities |
+| **3. Structure** | [source-tree.md](./source-tree.md) | Codebase organization |
+
+---
+
+## Generated Documentation
+
+### Core Documentation
+
+- [Project Context](./project-context.md) - AI agent implementation rules (MANDATORY)
+- [Source Tree Analysis](./source-tree.md) - Annotated directory structure
+
+### Architecture (Reference)
+
+- [Architecture Overview](./architecture/README.md) - Comprehensive system architecture
+- [MCP Server Reference](./architecture/mcp-server.md) - Complete tool documentation
+- [C4 Context Diagram](./architecture/c4/01-context.md) - System context
+- [C4 Container Diagram](./architecture/c4/02-container.md) - Container view
+- [C4 Component Diagram](./architecture/c4/03-component.md) - Component details
+
+### Architecture Decisions
+
+- [ADR Index](./architecture/decisions/README.md) - All architecture decisions
+  - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
+  - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) _(Superseded)_
+  - [ADR-0007: Universal Semantic Chunking](./architecture/decisions/0007-universal-semantic-chunking.md) _(Current)_
+
+### Technical Specifications
+
+- [Data Models](./architecture/technical/data-models.md) - Complete schema
+- [Qdrant Payload Structure](./architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md) - Vector DB format
+- [Universal Semantic Chunking](./architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md) - Algorithm details
 
 ---
 
@@ -31,88 +71,83 @@ Organized following the [Diataxis](https://diataxis.fr) framework.
 
 ### Tutorials (Learning-oriented)
 
-Step-by-step lessons to learn Alexandria from scratch.
-
-- **[Getting Started](./user-docs/tutorials/getting-started.md)** - Complete setup and first ingestion
-- **[Professional Setup](./user-docs/tutorials/professional-setup.md)** - Production deployment with Docker
-- **[PowerShell Setup](./user-docs/tutorials/powershell-setup.md)** - Windows environment configuration
+- [Getting Started](./user-docs/tutorials/getting-started.md) - Setup in 15 minutes
+- [Professional Setup](./user-docs/tutorials/professional-setup.md) - Production deployment
+- [PowerShell Setup](./user-docs/tutorials/powershell-setup.md) - Windows configuration
 
 ### How-To Guides (Task-oriented)
 
-Practical recipes for accomplishing specific tasks.
-
-- **[Common Workflows](./user-docs/how-to/common-workflows.md)** - Frequent operations and commands
-- **[Track Ingestion](./user-docs/how-to/track-ingestion.md)** - Monitor and debug ingestion with logging
-- **[Troubleshoot Ingestion](./user-docs/how-to/troubleshoot-ingestion.md)** - Solve common problems
-- **[Configure Open WebUI](./user-docs/how-to/configure-open-webui.md)** - Connect Alexandria to Open WebUI
-- **[Git Workflow](./user-docs/how-to/git-workflow.md)** - Branching strategy & Auto-Claude integration
-- **[Structurizr Guide](./user-docs/how-to/structurizr-guide.md)** - Visualize C4 diagrams
+- [Common Workflows](./user-docs/how-to/common-workflows.md) - Command cheat sheet
+- [Track Ingestion](./user-docs/how-to/track-ingestion.md) - Monitor with logging
+- [Troubleshoot Ingestion](./user-docs/how-to/troubleshoot-ingestion.md) - Solve problems
+- [Configure Open WebUI](./user-docs/how-to/configure-open-webui.md) - Integration guide
+- [Git Workflow](./user-docs/how-to/git-workflow.md) - Branching strategy
+- [Structurizr Guide](./user-docs/how-to/structurizr-guide.md) - C4 diagram tooling
 
 ### Explanation (Understanding-oriented)
 
-Conceptual discussions and design rationale - the "why" behind decisions.
-
-- **[Architecture Principles](./user-docs/explanation/architecture-principles.md)** - Core design philosophy and trade-offs
-- **[Project Context](./project-context.md)** - Implementation rules and patterns (MANDATORY for AI agents)
-
----
-
-## Architecture
-
-System architecture documentation - C4 diagrams, ADRs, and technical specifications.
-
-### C4 Diagrams
-- **[Architecture Overview](./architecture/README.md)** - Comprehensive system architecture
-- **[C4 Context Diagram](./architecture/c4/01-context.md)** - System context
-- **[C4 Container Diagram](./architecture/c4/02-container.md)** - Container view
-- **[C4 Component Diagram](./architecture/c4/03-component.md)** - Component details
-
-### Architecture Decisions
-- **[ADR Index](./architecture/decisions/README.md)** - Architecture Decision Records
-  - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
-  - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) (Superseded)
-  - [ADR-0007: Universal Semantic Chunking](./architecture/decisions/0007-universal-semantic-chunking.md) (current)
-
-### Technical Specs
-- **[MCP Server Reference](./architecture/mcp-server.md)** - Complete tool documentation
-- **[Data Models](./architecture/technical/data-models.md)** - Complete schema for Alexandria's data structures
-- **[Qdrant Payload Structure](./architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md)** - Vector DB payload format
-- **[Universal Semantic Chunking](./architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)** - Chunking algorithm details
-- **[PDF vs EPUB Comparison](./architecture/technical/PDF_vs_EPUB_COMPARISON.md)** - Format analysis
-
-### Code Structure
-- **[Source Tree](./source-tree.md)** - Codebase structure and module organization
+- [Architecture Principles](./user-docs/explanation/architecture-principles.md) - Design philosophy
 
 ---
 
 ## Development
 
-Internal development workflow managed via BMAD methodology.
+Internal workflow managed via BMAD methodology.
 
 ### Task Lifecycle
 
 ```
 ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
-(consider)       (accepted)  (in progress) (done)
+(consider)       (accept)    (detail)     (done)
 ```
 
-### Folders
+### Development Folders
 
 | Folder | Purpose |
 |--------|---------|
-| **[ideas/](./development/ideas/)** | Future visions (not yet in TODO) |
-| **[backlog/](./development/backlog/)** | Detailed docs for active TODO items |
-| **[research/](./development/research/)** | Background analysis and research |
-| **[analysis/](./development/analysis/)** | Session outputs (brainstorming, etc.) |
-| **[security/](./development/security/)** | Security audits and guidelines |
+| [ideas/](./development/ideas/) | Future visions (not yet TODO) |
+| [backlog/](./development/backlog/) | Detailed docs for accepted TODOs |
+| [research/](./development/research/) | Background analysis |
+| [analysis/](./development/analysis/) | Session outputs (brainstorming) |
+| [security/](./development/security/) | Audits and guidelines |
 
 ---
 
 ## Project Management
 
-- **[TODO.md](../TODO.md)** - Prioritized backlog (HIGH/MEDIUM/LOW)
-- **[CHANGELOG.md](../CHANGELOG.md)** - Completed work archive
-- **[AGENTS.md](../AGENTS.md)** - AI agent navigation hub
+- [TODO.md](../TODO.md) - Prioritized backlog (HIGH/MEDIUM/LOW)
+- [CHANGELOG.md](../CHANGELOG.md) - Completed work archive
+- [AGENTS.md](../AGENTS.md) - AI agent entry point
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.14+
+- Access to Qdrant server (192.168.0.151:6333)
+- Calibre library path configured
+
+### Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure MCP in Claude Code
+# (see .mcp.json)
+
+# Query the library
+# Use Claude Code with alexandria_query()
+```
+
+### For AI-Assisted Development
+
+**When planning features:**
+- UI/UX → Reference: [architecture-principles.md](./user-docs/explanation/architecture-principles.md)
+- Backend → Reference: [architecture/README.md](./architecture/README.md), [mcp-server.md](./architecture/mcp-server.md)
+- Full-stack → Reference: All architecture docs
 
 ---
 
@@ -125,5 +160,4 @@ ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
 
 ---
 
-**Last Updated:** 2026-01-31
-**Version:** 2.4 (Nested structure: user-docs + architecture + development)
+_Generated using BMAD Method `document-project` workflow_

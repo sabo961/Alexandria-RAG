@@ -45,7 +45,6 @@ alexandria/
 │   ├── user-docs/                 # Diataxis user documentation
 │   │   ├── tutorials/             # Learning-oriented
 │   │   │   ├── getting-started.md
-│   │   │   ├── professional-setup.md
 │   │   │   └── powershell-setup.md
 │   │   ├── how-to/                # Task-oriented
 │   │   │   ├── common-workflows.md

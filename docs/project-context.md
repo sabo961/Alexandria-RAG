@@ -419,68 +419,65 @@ Examples:
 
 ---
 
-## Backlog & Task Management
+## Epic & Story Management
 
-**Purpose:** Clarify relationship between human-maintained TODO.md, BMad agent stories, and docs/backlog/ research.
+**Purpose:** Clarify Alexandria's implementation roadmap structure and workflow.
 
-### How Task Management Works
+### How Implementation Planning Works
 
-**TODO.md (Human Input - Ideas):**
-- Lightweight prioritized backlog (HIGH/MEDIUM/LOW/BACKLOG)
-- Ideas come from user, AI agents, research
-- Checkbox-based list, minimal detail
-- **NOT** the single source of truth for execution
-- Think: "What should we work on next?"
+**docs/development/epics.md (Strategic Planning):**
+- Epic definitions with user outcomes and requirements mapping
+- 8 epics covering entire system vision (Phase 1-4)
+- Maps functional/non-functional requirements to epics
+- Think: "WHAT are we building and WHY?"
 
-**BMad Stories (Execution Truth):**
-- Created in `docs/development/backlog/` by BMad workflow agents
-- Single source of truth for WHAT gets built and HOW
-- Detailed specs with acceptance criteria, test plans, files affected
-- Agents create stories from TODO.md ideas after analysis
-- Think: "What are we building RIGHT NOW?"
+**docs/development/epic-*.md (Tactical Execution):**
+- One file per epic with detailed implementation stories
+- Each story: User story + Acceptance criteria + Technical tasks
+- Tasks marked ✅ DONE or ⏳ PENDING (living documentation)
+- Think: "HOW do we build this specific epic?"
+
+**docs/development/ideas/ (Brainstorming):**
+- Unfiltered future visions and concepts
+- Briefs for features not yet in epics (Phase 3-4+)
+- Examples: Librarians, Makers, Temporal Knowledge Layer
+- Think: "What MIGHT we build someday?"
 
 **CHANGELOG.md (Completed Work Archive):**
 - Historical record of completed sprints/features
-- Extracted from TODO.md when work is done
+- Extracted from epic stories when work is done
 - Format: Date, Story name, Deliverables, Files modified
-- Reference for project history
-- Think: "What have we already built?"
+- Think: "What have we ALREADY built?"
 
-**docs/backlog/ (Research & Proposals):**
-- Deep-dive research documents
-- Architectural proposals (e.g., Hierarchical Chunking)
-- Long-form analysis that doesn't fit TODO.md format
-- Informational, not executable
-- Think: "What are we researching?"
-
-### Syncing Workflow (BMad Agent Behavior)
+### BMad Agent Workflow
 
 When a BMad agent starts work:
 
-1. **Check TODO.md** for user-prioritized ideas
-2. **Compare with existing stories** in `docs/development/backlog/`
-3. **If idea exists as story:** Continue execution
-4. **If idea is new:** Propose story creation to user
-5. **If story is completed:** Move TODO item → CHANGELOG.md
-6. **Consult docs/backlog/** for research context if needed
+1. **Read epics.md** to understand overall vision and requirements
+2. **Open relevant epic-*.md** for current work (e.g., epic-0-model-migration.md)
+3. **Find next ⏳ PENDING story** in sequence
+4. **Implement story** following acceptance criteria and technical tasks
+5. **Mark tasks ✅ DONE** as they complete
+6. **Update story status** when complete
+7. **Move to CHANGELOG.md** when epic or major story completes
 
 ### Guidelines for Humans
 
-**When adding to TODO.md:**
-- Keep it short (1-2 sentences max)
-- Prioritize by impact (HIGH/MEDIUM/LOW/BACKLOG)
-- Don't write full specs (agents will do that)
+**When adding new ideas:**
+- Create brief in `docs/development/ideas/` for exploration
+- If accepted, integrate into existing epic or create new epic
+- Don't bypass epic structure - always plan before execution
 
-**When to create docs/backlog/ file:**
-- Requires >500 words of explanation
-- Architectural decision with trade-offs
-- Research with citations/references
-- Multi-week exploration
+**When working on existing epics:**
+- Update story status (⏳ PENDING → 🔄 IN PROGRESS → ✅ DONE)
+- Mark technical tasks as complete with checkboxes
+- Stories are living documentation - keep them current
 
-**What NOT to put in TODO.md:**
-- Completed work (goes to CHANGELOG.md)
-- Implementation details (goes to BMad stories)
-- Research findings (goes to docs/backlog/)
+**Structure principles:**
+- epics.md = Strategic (WHAT and WHY)
+- epic-*.md = Tactical (HOW - detailed stories)
+- ideas/ = Exploration (MAYBE - future concepts)
+- CHANGELOG.md = Historical (DONE - completed work)
 
 ---
 

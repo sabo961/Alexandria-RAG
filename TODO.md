@@ -1,11 +1,12 @@
 # Alexandria TODO List
 
-**Purpose:** Lightweight backlog of ideas for active development.
+> **⚠️ DEPRECATED:** This file is kept for historical reference only.
+>
+> **Current roadmap:** [docs/development/epics.md](docs/development/epics.md) (8 epics, 23 stories)
+>
+> All active items have been migrated to epic stories in `docs/development/epic-*.md`
 
-For completed work, see [CHANGELOG.md](CHANGELOG.md).
-For stable reference documentation, see [AGENTS.md](AGENTS.md) and [docs/project-context.md](docs/project-context.md).
-
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-01-31 (ARCHIVED)
 
 ---
 

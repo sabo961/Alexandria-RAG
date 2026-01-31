@@ -527,9 +527,8 @@ path_for_open, display_path, _, _ = normalize_file_path(filepath)
 
 ### Guides
 
-- **[Quick Reference](../how-to-guides/common-workflows.md)** - Command cheat sheet
-- **[Logging Guide](../how-to-guides/track-ingestion.md)** - Logging patterns
-- **[Professional Setup](./professional-setup.md)** - Advanced setup
+- **[Quick Reference](../how-to/common-workflows.md)** - Command cheat sheet
+- **[Logging Guide](../how-to/track-ingestion.md)** - Logging patterns
 
 ### Research
 

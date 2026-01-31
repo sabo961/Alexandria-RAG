@@ -30,7 +30,7 @@ Alexandria is a RAG (Retrieval-Augmented Generation) system providing semantic s
 | Priority | Document | Purpose |
 |----------|----------|---------|
 | **1. MANDATORY** | [project-context.md](./project-context.md) | 45 implementation rules |
-| **2. Tasks** | [TODO.md](../TODO.md) | Current priorities |
+| **2. Epics & Stories** | [development/epics.md](./development/epics.md) | Implementation roadmap |
 | **3. Structure** | [source-tree.md](./source-tree.md) | Codebase organization |
 
 ---
@@ -72,7 +72,6 @@ Organized following the [Diataxis](https://diataxis.fr) framework.
 ### Tutorials (Learning-oriented)
 
 - [Getting Started](./user-docs/tutorials/getting-started.md) - Setup in 15 minutes
-- [Professional Setup](./user-docs/tutorials/professional-setup.md) - Production deployment
 - [PowerShell Setup](./user-docs/tutorials/powershell-setup.md) - Windows configuration
 
 ### How-To Guides (Task-oriented)
@@ -97,25 +96,24 @@ Internal workflow managed via BMAD methodology.
 ### Task Lifecycle
 
 ```
-ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
-(consider)       (accept)    (detail)     (done)
+ideas/        →  epics.md  →  epic-*.md  →  CHANGELOG.md
+(brainstorm)     (planning)   (stories)     (done)
 ```
 
 ### Development Folders
 
 | Folder | Purpose |
 |--------|---------|
-| [ideas/](./development/ideas/) | Future visions (not yet TODO) |
-| [backlog/](./development/backlog/) | Detailed docs for accepted TODOs |
-| [research/](./development/research/) | Background analysis |
-| [analysis/](./development/analysis/) | Session outputs (brainstorming) |
-| [security/](./development/security/) | Audits and guidelines |
+| [ideas/](./development/ideas/) | Brainstorming briefs (future concepts) |
+| [research/](./development/research/) | Background analysis and competitive research |
+| [security/](./development/security/) | Security audits and guidelines |
 
 ---
 
 ## Project Management
 
-- [TODO.md](../TODO.md) - Prioritized backlog (HIGH/MEDIUM/LOW)
+- [epics.md](./development/epics.md) - Implementation roadmap (8 epics, 23 stories)
+- [epic-*.md](./development/) - Detailed stories per epic
 - [CHANGELOG.md](../CHANGELOG.md) - Completed work archive
 - [AGENTS.md](../AGENTS.md) - AI agent entry point
 

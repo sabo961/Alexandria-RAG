@@ -27,6 +27,10 @@ An **Architecture Decision Record (ADR)** captures a significant architectural d
 | [0005](0005-philosophical-argument-chunking.md) | Philosophical Argument Chunking | 🔄 Superseded | 2026-01-22 | Chunking Strategies |
 | [0006](0006-separate-systems-architecture.md) | Local Qdrant with Separate Collections | ✅ Accepted | 2026-01-23 | External System |
 | [0007](0007-universal-semantic-chunking.md) | Universal Semantic Chunking | ✅ Accepted | 2026-01-25 | Chunking Strategies |
+| [0008](0008-multi-consumer-service-model.md) | Alexandria as Multi-Consumer Knowledge Service | ✅ Accepted | 2026-01-31 | Service Architecture |
+| [0009](0009-http-api-wrapper.md) | HTTP API Wrapper for Non-MCP Consumers | 🚧 Proposed | 2026-01-31 | HTTP API |
+| [0010](0010-gpu-accelerated-embeddings.md) | GPU-Accelerated Embedding Model Selection | ✅ Accepted | 2026-01-31 | ML/Embeddings |
+| [0011](0011-phased-growth-architecture.md) | Phased Growth Architecture (Personal → SaaS) | ✅ Accepted | 2026-01-31 | Strategic Planning |
 
 **Legend:**
 - ✅ Accepted - Implemented and in use
@@ -113,4 +117,4 @@ Decision is no longer relevant but kept for historical context.
 
 ---
 
-**Last Updated:** 2026-01-26
+**Last Updated:** 2026-01-31

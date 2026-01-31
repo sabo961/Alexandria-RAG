@@ -421,42 +421,7 @@ Alexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic sea
 
 ## Source Tree Structure
 
-```
-alexandria/
-├── 📄 requirements.txt                # Python dependencies
-├── 📋 README.md                       # Project landing page
-├── 📄 .mcp.json                       # 🔹 MCP Server configuration
-│
-├── 📦 scripts/                        # 🔹 BUSINESS LOGIC + MCP SERVER
-│   ├── mcp_server.py                  # 🔹 ENTRY POINT - MCP Server
-│   ├── calibre_db.py                  # Calibre interface
-│   ├── collection_manifest.py         # Manifest tracking
-│   ├── ingest_books.py                # 🔹 Ingestion pipeline
-│   ├── rag_query.py                   # 🔹 Query engine
-│   ├── chapter_detection.py           # Chapter boundary detection
-│   ├── qdrant_utils.py                # Qdrant operations
-│   ├── universal_chunking.py          # Semantic chunking
-│   └── [other modules]
-│
-├── 📂 docs/                           # Documentation
-│   ├── index.md                       # Documentation hub
-│   ├── project-context.md             # 🔹 AI agent rules (MANDATORY)
-│   ├── user-docs/                     # Diataxis user documentation
-│   │   ├── tutorials/                 # Getting started guides
-│   │   ├── how-to/                    # Task-oriented guides
-│   │   └── explanation/               # Conceptual docs
-│   ├── architecture/                  # C4, ADRs, technical specs
-│   └── development/                   # BMAD internal workflow
-│       ├── ideas/, backlog/, research/, analysis/, security/
-│
-├── 📂 logs/                           # Runtime artifacts
-│   ├── collection_manifest_*.json     # Ingestion tracking
-│   └── alexandria_manifest.csv        # CSV export
-│
-└── 📂 tests/                          # Test suite
-    ├── unit/                          # Unit tests
-    └── integration/                   # Integration tests
-```
+See **[source-tree.md](../source-tree.md)** for the complete, authoritative directory structure with annotations.
 
 ---
 

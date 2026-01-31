@@ -162,7 +162,6 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 - **[Quick Start](#quick-start)** - Get running in 5 minutes (above)
 - **[Common Workflows](docs/user-docs/how-to/common-workflows.md)** - Command cheat sheet
 - **[Track Ingestion Guide](docs/user-docs/how-to/track-ingestion.md)** - Track ingested books
-- **[Professional Setup Guide](docs/user-docs/tutorials/professional-setup.md)** - Complete production guide
 
 ### 🤖 For AI Agents
 - **[AGENTS.md](AGENTS.md)** - Navigation hub (start here)

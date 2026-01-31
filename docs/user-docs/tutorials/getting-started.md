@@ -523,7 +523,7 @@ path_for_open, display_path, _, _ = normalize_file_path(filepath)
 - **[Data Models](../reference/api/data-models.md)** - API reference
 - **[Source Tree](../reference/api/source-tree.md)** - Codebase structure
 - **[ADRs](../reference/architecture/decisions/README.md)** - Architecture decisions
-- **[Project Context](../../_bmad-output/project-context.md)** - AI agent rules
+- **[Project Context](../../project-context.md)** - AI agent rules
 
 ### Guides
 

@@ -439,18 +439,19 @@ alexandria/
 │   └── [other modules]
 │
 ├── 📂 docs/                           # Documentation
-│   ├── reference/architecture/        # Architecture docs (ADRs, C4)
-│   ├── how-to-guides/                 # User guides
-│   ├── tutorials/                     # Getting started
-│   ├── explanation/                   # Conceptual docs
-│   └── backlog/                       # Feature proposals
+│   ├── index.md                       # Documentation hub
+│   ├── project-context.md             # 🔹 AI agent rules (MANDATORY)
+│   ├── user-docs/                     # Diataxis user documentation
+│   │   ├── tutorials/                 # Getting started guides
+│   │   ├── how-to/                    # Task-oriented guides
+│   │   └── explanation/               # Conceptual docs
+│   ├── architecture/                  # C4, ADRs, technical specs
+│   └── development/                   # BMAD internal workflow
+│       ├── ideas/, backlog/, research/, analysis/, security/
 │
 ├── 📂 logs/                           # Runtime artifacts
 │   ├── collection_manifest_*.json     # Ingestion tracking
 │   └── alexandria_manifest.csv        # CSV export
-│
-├── 📂 _bmad-output/                   # BMad outputs
-│   └── project-context.md             # 🔹 AI agent rules
 │
 └── 📂 tests/                          # Test suite
     ├── unit/                          # Unit tests

@@ -3,7 +3,7 @@
 **Purpose:** Lightweight backlog of ideas for active development.
 
 For completed work, see [CHANGELOG.md](CHANGELOG.md).
-For stable reference documentation, see [AGENTS.md](AGENTS.md) and [_bmad-output/project-context.md](_bmad-output/project-context.md).
+For stable reference documentation, see [AGENTS.md](AGENTS.md) and [docs/project-context.md](docs/project-context.md).
 
 **Last Updated:** 2026-01-30
 

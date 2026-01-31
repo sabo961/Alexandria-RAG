@@ -49,7 +49,7 @@ python collection_manifest.py show alexandria
 python rag_query.py "your question here" --limit 5 --context-mode contextual
 ```
 
-**📖 For detailed guides:** See [docs/how-to/common-workflows.md](docs/how-to/common-workflows.md)
+**📖 For detailed guides:** See [docs/user-docs/how-to/common-workflows.md](docs/user-docs/how-to/common-workflows.md)
 
 ---
 
@@ -101,7 +101,7 @@ python rag_query.py "your question here" --limit 5 --context-mode contextual
 - **DB Explorer:** Datasette (web UI for Calibre SQLite exploration)
 - **Python:** 3.14+
 
-**For complete technology details:** See [_bmad-output/project-context.md](_bmad-output/project-context.md)
+**For complete technology details:** See [docs/project-context.md](docs/project-context.md)
 
 ---
 
@@ -127,7 +127,7 @@ pytest tests/ui/ -v --headed --slowmo=500
 playwright install
 ```
 
-**For complete testing documentation:** See [_bmad-output/project-context.md](_bmad-output/project-context.md#testing-rules)
+**For complete testing documentation:** See [docs/project-context.md](docs/project-context.md#testing-rules)
 
 ---
 
@@ -160,25 +160,25 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 
 ### 🚀 For New Users
 - **[Quick Start](#quick-start)** - Get running in 5 minutes (above)
-- **[Common Workflows](docs/how-to/common-workflows.md)** - Command cheat sheet
-- **[Track Ingestion Guide](docs/how-to/track-ingestion.md)** - Track ingested books
-- **[Professional Setup Guide](docs/tutorials/professional-setup.md)** - Complete production guide
+- **[Common Workflows](docs/user-docs/how-to/common-workflows.md)** - Command cheat sheet
+- **[Track Ingestion Guide](docs/user-docs/how-to/track-ingestion.md)** - Track ingested books
+- **[Professional Setup Guide](docs/user-docs/tutorials/professional-setup.md)** - Complete production guide
 
 ### 🤖 For AI Agents
 - **[AGENTS.md](AGENTS.md)** - Navigation hub (start here)
-- **[_bmad-output/project-context.md](_bmad-output/project-context.md)** - Critical rules & patterns (implementation bible)
+- **[docs/project-context.md](docs/project-context.md)** - Critical rules & patterns (implementation bible)
 
 ### 🔒 Security
-- **[SECURITY.md](docs/security/SECURITY.md)** - XSS prevention, HTML sanitization, safe coding guidelines
-- **[Unsafe HTML Audit](docs/security/unsafe_html_audit.md)** - Complete audit of unsafe_allow_html usage
+- **[SECURITY.md](docs/development/security/SECURITY.md)** - XSS prevention, HTML sanitization, safe coding guidelines
+- **[Unsafe HTML Audit](docs/development/security/unsafe_html_audit.md)** - Complete audit of unsafe_allow_html usage
 
 ### 👨‍💻 For Contributors
 - **[TODO.md](TODO.md)** - Prioritized backlog (P0-P3)
 - **[CHANGELOG.md](CHANGELOG.md)** - Completed work archive
 
 ### 🛠️ Developer Tools
-- **[PowerShell Setup](docs/tutorials/powershell-setup.md)** - Git/dotnet/npm/docker aliases + enhanced prompt
-- **[Git Workflow](docs/how-to/git-workflow.md)** - Branching strategy & Auto-Claude integration
+- **[PowerShell Setup](docs/user-docs/tutorials/powershell-setup.md)** - Git/dotnet/npm/docker aliases + enhanced prompt
+- **[Git Workflow](docs/user-docs/how-to/git-workflow.md)** - Branching strategy & Auto-Claude integration
 
 ### 🏗️ For Architecture
 - **[Architecture Overview](docs/architecture/README.md)** - Complete system architecture
@@ -189,8 +189,8 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 - **[MCP Server Reference](docs/architecture/mcp-server.md)** - Complete MCP tool documentation
 
 ### 🔬 Research
-- **[Project Proposal](docs/research/alexandria-qdrant-project-proposal.md)** - Original vision
-- **[Philosophical Chunking](docs/research/argument_based_chunking_for_philosophical_texts_alexandria_rag.md)** - Argument-based approach
+- **[Project Proposal](docs/development/research/alexandria-qdrant-project-proposal.md)** - Original vision
+- **[Philosophical Chunking](docs/development/research/argument_based_chunking_for_philosophical_texts_alexandria_rag.md)** - Argument-based approach
 
 ---
 
@@ -200,18 +200,18 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 |---------|---------|
 | **[docs/index.md](docs/index.md)** | Documentation hub - Start here |
 | **[docs/architecture/](docs/architecture/)** | C4 diagrams, ADRs, technical specs |
-| **[docs/tutorials/ + docs/how-to/](docs/tutorials/ + docs/how-to/)** | Setup & workflow guides |
-| **[docs/ideas/](docs/ideas/)** | Future visions (not yet in TODO) |
-| **[docs/backlog/](docs/backlog/)** | Detailed docs for active TODO items |
-| **[docs/research/](docs/research/)** | Research papers and analysis |
+| **[docs/user-docs/](docs/user-docs/)** | Tutorials, how-to guides, explanations |
+| **[docs/development/ideas/](docs/development/ideas/)** | Future visions (not yet in TODO) |
+| **[docs/development/backlog/](docs/development/backlog/)** | Detailed docs for active TODO items |
+| **[docs/development/research/](docs/development/research/)** | Research papers and analysis |
 
 **Key documents:**
 - **[MCP Server Reference](docs/architecture/mcp-server.md)** - Complete tool documentation
 - **[Architecture Overview](docs/architecture/README.md)** - System design
-- **[Common Workflows](docs/how-to/common-workflows.md)** - Quick reference
+- **[Common Workflows](docs/user-docs/how-to/common-workflows.md)** - Quick reference
 
 **For AI agents:**
-- **[Project Context](_bmad-output/project-context.md)** - Implementation rules
+- **[Project Context](docs/project-context.md)** - Implementation rules
 - **[AGENTS.md](AGENTS.md)** - Navigation hub
 
 ---
@@ -235,7 +235,7 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 **OpenRouter API (optional):**
 - Set `OPENROUTER_API_KEY` environment variable
 
-**For complete configuration details:** See [_bmad-output/project-context.md](_bmad-output/project-context.md)
+**For complete configuration details:** See [docs/project-context.md](docs/project-context.md)
 
 ---
 
@@ -261,7 +261,7 @@ curl "http://localhost:8002/metadata/books.json?_limit=10"
 **Location:** `c:\Users\goran\source\repos\Temenos\Akademija\Alexandria`
 **Qdrant Server:** 192.168.0.151:6333
 
-**For AI Agents:** Start with [AGENTS.md](AGENTS.md), then read [_bmad-output/project-context.md](_bmad-output/project-context.md)
+**For AI Agents:** Start with [AGENTS.md](AGENTS.md), then read [docs/project-context.md](docs/project-context.md)
 
 ---
 

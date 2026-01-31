@@ -433,7 +433,7 @@ Examples:
 - Think: "What should we work on next?"
 
 **BMad Stories (Execution Truth):**
-- Created in `_bmad-output/implementation-artifacts/` by BMad workflow agents
+- Created in `docs/development/backlog/` by BMad workflow agents
 - Single source of truth for WHAT gets built and HOW
 - Detailed specs with acceptance criteria, test plans, files affected
 - Agents create stories from TODO.md ideas after analysis
@@ -458,7 +458,7 @@ Examples:
 When a BMad agent starts work:
 
 1. **Check TODO.md** for user-prioritized ideas
-2. **Compare with existing stories** in `_bmad-output/implementation-artifacts/`
+2. **Compare with existing stories** in `docs/development/backlog/`
 3. **If idea exists as story:** Continue execution
 4. **If idea is new:** Propose story creation to user
 5. **If story is completed:** Move TODO item → CHANGELOG.md

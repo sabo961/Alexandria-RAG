@@ -211,22 +211,32 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         }
 
         # ============================================
-        # DYNAMIC - Container Level Flow
+        # DYNAMIC - Query Flow
         # ============================================
-        dynamic alexandriaSystem "QueryFlow" "High-level query flow" {
-            claudeCode -> mcpServer "1. MCP tool call"
-            mcpServer -> scripts "2. Business logic"
-            scripts -> qdrant "3. Vector search"
-            scripts -> openrouter "4. LLM answer"
+        dynamic alexandriaSystem "RAGQueryFlow" "How a query flows through the system" {
+            queryTool -> ragQueryEngine "1. Execute search"
+            ragQueryEngine -> embedder "2. Embed query"
+            ragQueryEngine -> qdrant "3. Vector search"
+            ragQueryEngine -> parentFetcher "4. Fetch parent context"
+            ragQueryEngine -> responsePatterns "5. Apply RAG template"
+            ragQueryEngine -> openrouter "6. Generate answer"
             autolayout lr
         }
 
-        dynamic alexandriaSystem "IngestionFlow" "High-level ingestion flow" {
-            claudeCode -> mcpServer "1. MCP ingest call"
-            mcpServer -> scripts "2. Pipeline"
-            scripts -> calibreLibrary "3. Get book"
-            scripts -> qdrant "4. Store vectors"
-            scripts -> filesystem "5. Move file"
+        # ============================================
+        # DYNAMIC - Ingestion Flow
+        # ============================================
+        dynamic alexandriaSystem "BookIngestionFlow" "How a book gets ingested" {
+            ingestTool -> calibreDB "1. Get book info"
+            ingestTool -> textExtractor "2. Start extraction"
+            calibreDB -> textExtractor "3. File path + metadata"
+            textExtractor -> chapterDetector "4. Raw text"
+            chapterDetector -> universalChunker "5. Chapters"
+            universalChunker -> embedder "6. Similarities"
+            universalChunker -> hierarchicalIngester "7. Chunks"
+            hierarchicalIngester -> qdrantUploader "8. Batch"
+            qdrantUploader -> qdrant "9. Upsert"
+            qdrantUploader -> collectionManifest "10. Log"
             autolayout lr
         }
 

@@ -72,9 +72,10 @@ Technical descriptions and specifications.
 
 ## Explanation (Understanding-oriented)
 
-Conceptual discussions and design rationale.
+Conceptual discussions and design rationale - the "why" behind decisions.
 
-- **[Project Context](./project-context.md)** - What is Alexandria, rules, and patterns (MANDATORY for AI agents)
+- **[Architecture Principles](./explanation/architecture-principles.md)** - Core design philosophy and trade-offs
+- **[Project Context](./project-context.md)** - Implementation rules and patterns (MANDATORY for AI agents)
 - **[ADR Index](./architecture/decisions/README.md)** - Architecture Decision Records
   - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
   - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) (Superseded)

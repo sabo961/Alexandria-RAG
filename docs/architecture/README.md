@@ -5,6 +5,9 @@
 **Type:** Retrieval-Augmented Generation (RAG) System
 **Status:** Production
 
+> **Navigation:** This is **Reference** documentation (technical specs, diagrams).
+> For the "why" behind decisions, see [Architecture Principles](../explanation/architecture-principles.md).
+
 ---
 
 ## Executive Summary

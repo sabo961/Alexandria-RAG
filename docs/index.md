@@ -16,7 +16,7 @@
 **New to Alexandria?**
 
 1. **[Getting Started](./tutorials/getting-started.md)** - Set up Alexandria in 15 minutes
-2. **[Project Overview](./project-overview.md)** - What is Alexandria and what problems does it solve?
+2. **[Project Context](./project-context.md)** - What is Alexandria, rules, and patterns
 3. **[Common Workflows](./how-to/common-workflows.md)** - Command cheat sheet for daily use
 
 **For AI Agents:**
@@ -68,6 +68,10 @@ Technical descriptions and specifications.
 ### Code Structure
 - **[Source Tree](./source-tree.md)** - Codebase structure and module organization
 
+### Security
+- **[Security Overview](./security/SECURITY.md)** - Security guidelines and policies
+- **[Unsafe HTML Audit](./security/unsafe_html_audit.md)** - HTML sanitization audit
+
 ---
 
 ## Explanation (Understanding-oriented)
@@ -90,19 +94,22 @@ Not Diataxis - internal development workflow managed via BMAD methodology.
 ### Task Lifecycle
 
 ```
-ideas/          "Consider"     Visions, briefs (not committed)
+ideas/                      "Consider"    Visions, briefs (not committed)
     │
     ▼
-TODO.md         "Accepted"     Prioritized backlog (HIGH/MED/LOW)
+TODO.md                     "Accepted"    Prioritized backlog (HIGH/MED/LOW)
     │
     ▼
-backlog/        "In Progress"  Detailed specs for active items
+backlog/                    "Specifying"  Detailed specs for active items
     │
     ▼
-_bmad-output/   "Executing"    BMAD stories, acceptance criteria
+planning-artifacts/         "Planning"    Sprint planning, workflow status
     │
     ▼
-CHANGELOG.md    "Done"         Historical archive
+implementation-artifacts/   "Executing"   BMAD stories, acceptance criteria
+    │
+    ▼
+CHANGELOG.md                "Done"        Historical archive
 ```
 
 ### Folders
@@ -111,8 +118,9 @@ CHANGELOG.md    "Done"         Historical archive
 |--------|-------|---------|
 | **[ideas/](./ideas/)** | Consider | Future visions (not yet in TODO) |
 | **[backlog/](./backlog/)** | In Progress | Detailed docs for active TODO items |
+| **[planning-artifacts/](./planning-artifacts/)** | BMAD | Sprint planning, workflow status |
+| **[implementation-artifacts/](./implementation-artifacts/)** | BMAD | Stories, acceptance criteria |
 | **[research/](./research/)** | Reference | Background analysis and research |
-| **[security/](./security/)** | Reference | Security audits and guidelines |
 | **[analysis/](./analysis/)** | Archive | Session outputs (brainstorming, etc.) |
 
 ---

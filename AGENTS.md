@@ -9,7 +9,7 @@
 | Priority | Document | Purpose |
 |----------|----------|---------|
 | **1. MANDATORY** | [docs/project-context.md](docs/project-context.md) | 45 implementation rules, patterns, conventions |
-| **2. Tasks** | [TODO.md](TODO.md) | Current priorities and backlog |
+| **2. Epics & Stories** | [docs/development/epics.md](docs/development/epics.md) | Implementation roadmap (8 epics, 24 stories) |
 | **3. Documentation** | [docs/index.md](docs/index.md) | Full documentation hub (Diataxis structure) |
 
 ---

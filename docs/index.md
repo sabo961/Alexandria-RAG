@@ -15,9 +15,9 @@
 
 **New to Alexandria?**
 
-1. **[Getting Started](./tutorials/getting-started.md)** - Set up Alexandria in 15 minutes
+1. **[Getting Started](./user-docs/tutorials/getting-started.md)** - Set up Alexandria in 15 minutes
 2. **[Project Context](./project-context.md)** - What is Alexandria, rules, and patterns
-3. **[Common Workflows](./how-to/common-workflows.md)** - Command cheat sheet for daily use
+3. **[Common Workflows](./user-docs/how-to/common-workflows.md)** - Command cheat sheet for daily use
 
 **For AI Agents:**
 - **[Project Context](./project-context.md)** - **MANDATORY READ** - 45 implementation rules
@@ -25,41 +25,56 @@
 
 ---
 
-## Tutorials (Learning-oriented)
+## User Documentation
+
+Organized following the [Diataxis](https://diataxis.fr) framework.
+
+### Tutorials (Learning-oriented)
 
 Step-by-step lessons to learn Alexandria from scratch.
 
-- **[Getting Started](./tutorials/getting-started.md)** - Complete setup and first ingestion
-- **[Professional Setup](./tutorials/professional-setup.md)** - Production deployment with Docker
-- **[PowerShell Setup](./tutorials/powershell-setup.md)** - Windows environment configuration
+- **[Getting Started](./user-docs/tutorials/getting-started.md)** - Complete setup and first ingestion
+- **[Professional Setup](./user-docs/tutorials/professional-setup.md)** - Production deployment with Docker
+- **[PowerShell Setup](./user-docs/tutorials/powershell-setup.md)** - Windows environment configuration
 
----
-
-## How-To Guides (Task-oriented)
+### How-To Guides (Task-oriented)
 
 Practical recipes for accomplishing specific tasks.
 
-- **[Common Workflows](./how-to/common-workflows.md)** - Frequent operations and commands
-- **[Track Ingestion](./how-to/track-ingestion.md)** - Monitor and debug ingestion with logging
-- **[Troubleshoot Ingestion](./how-to/troubleshoot-ingestion.md)** - Solve common problems
-- **[Configure Open WebUI](./how-to/configure-open-webui.md)** - Connect Alexandria to Open WebUI
-- **[Git Workflow](./how-to/git-workflow.md)** - Branching strategy & Auto-Claude integration
-- **[Structurizr Guide](./how-to/structurizr-guide.md)** - Visualize C4 diagrams
+- **[Common Workflows](./user-docs/how-to/common-workflows.md)** - Frequent operations and commands
+- **[Track Ingestion](./user-docs/how-to/track-ingestion.md)** - Monitor and debug ingestion with logging
+- **[Troubleshoot Ingestion](./user-docs/how-to/troubleshoot-ingestion.md)** - Solve common problems
+- **[Configure Open WebUI](./user-docs/how-to/configure-open-webui.md)** - Connect Alexandria to Open WebUI
+- **[Git Workflow](./user-docs/how-to/git-workflow.md)** - Branching strategy & Auto-Claude integration
+- **[Structurizr Guide](./user-docs/how-to/structurizr-guide.md)** - Visualize C4 diagrams
+
+### Explanation (Understanding-oriented)
+
+Conceptual discussions and design rationale - the "why" behind decisions.
+
+- **[Architecture Principles](./user-docs/explanation/architecture-principles.md)** - Core design philosophy and trade-offs
+- **[Project Context](./project-context.md)** - Implementation rules and patterns (MANDATORY for AI agents)
 
 ---
 
-## Reference (Information-oriented)
+## Architecture
 
-Technical descriptions and specifications.
+System architecture documentation - C4 diagrams, ADRs, and technical specifications.
 
-### Architecture
+### C4 Diagrams
 - **[Architecture Overview](./architecture/README.md)** - Comprehensive system architecture
 - **[C4 Context Diagram](./architecture/c4/01-context.md)** - System context
 - **[C4 Container Diagram](./architecture/c4/02-container.md)** - Container view
 - **[C4 Component Diagram](./architecture/c4/03-component.md)** - Component details
-- **[MCP Server Reference](./architecture/mcp-server.md)** - Complete tool documentation
+
+### Architecture Decisions
+- **[ADR Index](./architecture/decisions/README.md)** - Architecture Decision Records
+  - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
+  - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) (Superseded)
+  - [ADR-0007: Universal Semantic Chunking](./architecture/decisions/0007-universal-semantic-chunking.md) (current)
 
 ### Technical Specs
+- **[MCP Server Reference](./architecture/mcp-server.md)** - Complete tool documentation
 - **[Data Models](./architecture/technical/data-models.md)** - Complete schema for Alexandria's data structures
 - **[Qdrant Payload Structure](./architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md)** - Vector DB payload format
 - **[Universal Semantic Chunking](./architecture/technical/UNIVERSAL_SEMANTIC_CHUNKING.md)** - Chunking algorithm details
@@ -70,22 +85,9 @@ Technical descriptions and specifications.
 
 ---
 
-## Explanation (Understanding-oriented)
+## Development
 
-Conceptual discussions and design rationale - the "why" behind decisions.
-
-- **[Architecture Principles](./explanation/architecture-principles.md)** - Core design philosophy and trade-offs
-- **[Project Context](./project-context.md)** - Implementation rules and patterns (MANDATORY for AI agents)
-- **[ADR Index](./architecture/decisions/README.md)** - Architecture Decision Records
-  - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
-  - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) (Superseded)
-  - [ADR-0007: Universal Semantic Chunking](./architecture/decisions/0007-universal-semantic-chunking.md) (current)
-
----
-
-## Development (Internal)
-
-Not Diataxis - internal development workflow managed via BMAD methodology.
+Internal development workflow managed via BMAD methodology.
 
 ### Task Lifecycle
 
@@ -98,11 +100,11 @@ ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
 
 | Folder | Purpose |
 |--------|---------|
-| **[ideas/](./ideas/)** | Future visions (not yet in TODO) |
-| **[backlog/](./backlog/)** | Detailed docs for active TODO items |
-| **[research/](./research/)** | Background analysis and research |
-| **[analysis/](./analysis/)** | Session outputs (brainstorming, etc.) |
-| **[security/](./security/)** | Security audits and guidelines |
+| **[ideas/](./development/ideas/)** | Future visions (not yet in TODO) |
+| **[backlog/](./development/backlog/)** | Detailed docs for active TODO items |
+| **[research/](./development/research/)** | Background analysis and research |
+| **[analysis/](./development/analysis/)** | Session outputs (brainstorming, etc.) |
+| **[security/](./development/security/)** | Security audits and guidelines |
 
 ---
 
@@ -124,4 +126,4 @@ ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
 ---
 
 **Last Updated:** 2026-01-31
-**Version:** 2.3 (Diataxis + BMAD workflow integration)
+**Version:** 2.4 (Nested structure: user-docs + architecture + development)

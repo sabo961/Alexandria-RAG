@@ -133,7 +133,7 @@ Alexandria is a **RAG (Retrieval-Augmented Generation) system** for semantic sea
 - ✅ Maintainability (single source of truth for logic)
 - ✅ AI Integration (direct Claude Code access)
 
-**See:** [ADR 0003: GUI as Thin Layer](../reference/architecture/decisions/0003-gui-as-thin-layer.md) (Superseded - MCP-first)
+**See:** [ADR 0003: GUI as Thin Layer](./decisions/0003-gui-as-thin-layer.md) (Superseded - MCP-first)
 
 ---
 
@@ -726,24 +726,23 @@ tests/
 ## Related Documentation
 
 ### Architecture
-- **[C4 Diagrams](../reference/architecture/c4/)** - Visual architecture (Context, Container, Component)
-- **[ADRs](../reference/architecture/decisions/README.md)** - Architecture Decision Records
-- **[Technical Specs](../reference/architecture/technical/)** - Detailed technical documentation
-- **[Structurizr Workspace](../reference/architecture/.structurizr/)** - Interactive diagrams
+- **[C4 Diagrams](./c4/)** - Visual architecture (Context, Container, Component)
+- **[ADRs](./decisions/README.md)** - Architecture Decision Records
+- **[Technical Specs](./technical/)** - Detailed technical documentation
 
 ### MCP Server
-- **[MCP Server Reference](../reference/mcp-server.md)** - Complete tool documentation
-- **[Common Workflows](../how-to-guides/common-workflows.md)** - Usage examples
+- **[MCP Server Reference](./mcp-server.md)** - Complete tool documentation
+- **[Common Workflows](../how-to/common-workflows.md)** - Usage examples
 
 ### Development
 - **[Development Guide](../tutorials/getting-started.md)** - Setup and workflow
-- **[Source Tree](../reference/api/source-tree.md)** - Codebase structure
-- **[Data Models & API](../reference/api/data-models.md)** - Module APIs
-- **[Project Context](../../_bmad-output/project-context.md)** - AI agent rules
+- **[Source Tree](../source-tree.md)** - Codebase structure
+- **[Data Models](./technical/data-models.md)** - Data structure specifications
+- **[Project Context](../project-context.md)** - AI agent rules (MANDATORY)
 
 ### Guides
-- **[Common Workflows](../how-to-guides/common-workflows.md)** - MCP tool reference
-- **[Logging Guide](../how-to-guides/track-ingestion.md)** - Logging patterns
+- **[Common Workflows](../how-to/common-workflows.md)** - MCP tool reference
+- **[Logging Guide](../how-to/track-ingestion.md)** - Logging patterns
 
 ---
 

@@ -74,7 +74,7 @@ Technical descriptions and specifications.
 
 Conceptual discussions and design rationale.
 
-- **[Project Overview](./project-overview.md)** - What is Alexandria and why it exists
+- **[Project Context](./project-context.md)** - What is Alexandria, rules, and patterns (MANDATORY for AI agents)
 - **[ADR Index](./architecture/decisions/README.md)** - Architecture Decision Records
   - [ADR-0001: Qdrant Vector DB](./architecture/decisions/0001-use-qdrant-vector-db.md)
   - [ADR-0003: GUI as Thin Layer](./architecture/decisions/0003-gui-as-thin-layer.md) (Superseded)
@@ -84,14 +84,35 @@ Conceptual discussions and design rationale.
 
 ## Development (Internal)
 
-Not Diataxis - internal development workflow.
+Not Diataxis - internal development workflow managed via BMAD methodology.
 
-| Folder | Purpose |
-|--------|---------|
-| **[ideas/](./ideas/)** | Future visions (not yet in TODO) |
-| **[backlog/](./backlog/)** | Detailed docs for active TODO items |
-| **[research/](./research/)** | Research papers and analysis |
-| **[security/](./security/)** | Security audits and guidelines |
+### Task Lifecycle
+
+```
+ideas/          "Consider"     Visions, briefs (not committed)
+    │
+    ▼
+TODO.md         "Accepted"     Prioritized backlog (HIGH/MED/LOW)
+    │
+    ▼
+backlog/        "In Progress"  Detailed specs for active items
+    │
+    ▼
+_bmad-output/   "Executing"    BMAD stories, acceptance criteria
+    │
+    ▼
+CHANGELOG.md    "Done"         Historical archive
+```
+
+### Folders
+
+| Folder | Stage | Purpose |
+|--------|-------|---------|
+| **[ideas/](./ideas/)** | Consider | Future visions (not yet in TODO) |
+| **[backlog/](./backlog/)** | In Progress | Detailed docs for active TODO items |
+| **[research/](./research/)** | Reference | Background analysis and research |
+| **[security/](./security/)** | Reference | Security audits and guidelines |
+| **[analysis/](./analysis/)** | Archive | Session outputs (brainstorming, etc.) |
 
 ---
 
@@ -112,5 +133,5 @@ Not Diataxis - internal development workflow.
 
 ---
 
-**Last Updated:** 2026-01-30
-**Version:** 2.2 (Diataxis-compliant structure)
+**Last Updated:** 2026-01-31
+**Version:** 2.3 (Diataxis + BMAD workflow integration)

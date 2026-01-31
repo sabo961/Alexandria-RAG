@@ -68,10 +68,6 @@ Technical descriptions and specifications.
 ### Code Structure
 - **[Source Tree](./source-tree.md)** - Codebase structure and module organization
 
-### Security
-- **[Security Overview](./security/SECURITY.md)** - Security guidelines and policies
-- **[Unsafe HTML Audit](./security/unsafe_html_audit.md)** - HTML sanitization audit
-
 ---
 
 ## Explanation (Understanding-oriented)
@@ -94,34 +90,19 @@ Not Diataxis - internal development workflow managed via BMAD methodology.
 ### Task Lifecycle
 
 ```
-ideas/                      "Consider"    Visions, briefs (not committed)
-    │
-    ▼
-TODO.md                     "Accepted"    Prioritized backlog (HIGH/MED/LOW)
-    │
-    ▼
-backlog/                    "Specifying"  Detailed specs for active items
-    │
-    ▼
-planning-artifacts/         "Planning"    Sprint planning, workflow status
-    │
-    ▼
-implementation-artifacts/   "Executing"   BMAD stories, acceptance criteria
-    │
-    ▼
-CHANGELOG.md                "Done"        Historical archive
+ideas/        →  TODO.md  →  backlog/  →  CHANGELOG.md
+(consider)       (accepted)  (in progress) (done)
 ```
 
 ### Folders
 
-| Folder | Stage | Purpose |
-|--------|-------|---------|
-| **[ideas/](./ideas/)** | Consider | Future visions (not yet in TODO) |
-| **[backlog/](./backlog/)** | In Progress | Detailed docs for active TODO items |
-| **[planning-artifacts/](./planning-artifacts/)** | BMAD | Sprint planning, workflow status |
-| **[implementation-artifacts/](./implementation-artifacts/)** | BMAD | Stories, acceptance criteria |
-| **[research/](./research/)** | Reference | Background analysis and research |
-| **[analysis/](./analysis/)** | Archive | Session outputs (brainstorming, etc.) |
+| Folder | Purpose |
+|--------|---------|
+| **[ideas/](./ideas/)** | Future visions (not yet in TODO) |
+| **[backlog/](./backlog/)** | Detailed docs for active TODO items |
+| **[research/](./research/)** | Background analysis and research |
+| **[analysis/](./analysis/)** | Session outputs (brainstorming, etc.) |
+| **[security/](./security/)** | Security audits and guidelines |
 
 ---
 

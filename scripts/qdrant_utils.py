@@ -21,7 +21,6 @@ from datetime import datetime
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue
-from sentence_transformers import SentenceTransformer
 import requests.exceptions
 
 from config import QDRANT_HOST, QDRANT_PORT
@@ -494,10 +493,21 @@ def search_collection(
     query: str,
     limit: int = 10,
     domain_filter: Optional[str] = None,
+    model_id: Optional[str] = None,
     host: str = QDRANT_HOST,
     port: int = QDRANT_PORT
 ):
-    """Search collection using semantic similarity"""
+    """Search collection using semantic similarity.
+
+    Args:
+        collection_name: Qdrant collection to search
+        query: Search query text
+        limit: Maximum results to return
+        domain_filter: Optional domain filter
+        model_id: Embedding model ID (default: uses DEFAULT_EMBEDDING_MODEL)
+        host: Qdrant host
+        port: Qdrant port
+    """
     # Check connection first
     is_connected, error_msg = check_qdrant_connection(host, port)
     if not is_connected:
@@ -506,9 +516,11 @@ def search_collection(
 
     client = QdrantClient(host=host, port=port)
 
-    # Generate query embedding
+    # Generate query embedding using EmbeddingGenerator (lazy import to avoid circular dependency)
+    from ingest_books import EmbeddingGenerator
     logger.info(f"Searching for: '{query}'")
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    embedder = EmbeddingGenerator()
+    model = embedder.get_model(model_id)
     query_vector = model.encode(query).tolist()
 
     # Build filter

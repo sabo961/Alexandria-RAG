@@ -281,6 +281,53 @@ class RAGResult:
         return self.results
 
 
+def get_collection_model_id(
+    collection_name: str,
+    host: str,
+    port: int
+) -> Optional[str]:
+    """
+    Get the embedding model ID used by a collection.
+
+    Samples one point from the collection to detect which embedding model
+    was used during ingestion. This enables automatic model selection for queries.
+
+    Args:
+        collection_name: Qdrant collection name
+        host: Qdrant server host
+        port: Qdrant server port
+
+    Returns:
+        Model ID string (e.g., "bge-large") if found in payload, None otherwise.
+        Returns None for legacy data without embedding_model_id metadata.
+    """
+    try:
+        client = QdrantClient(host=host, port=port)
+
+        # Scroll to get one point from the collection
+        results = client.scroll(
+            collection_name=collection_name,
+            limit=1,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        points = results[0]  # scroll returns (points, next_offset)
+        if points and len(points) > 0:
+            payload = points[0].payload
+            model_id = payload.get('embedding_model_id')
+            if model_id:
+                logger.debug(f"Detected collection model: {model_id}")
+                return model_id
+
+        logger.debug(f"No embedding_model_id found in collection '{collection_name}' (legacy data)")
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to detect collection model: {e}")
+        return None
+
+
 def search_qdrant(
     query: str,
     collection_name: str,
@@ -295,6 +342,10 @@ def search_qdrant(
     """
     Search Qdrant and apply similarity threshold filtering.
 
+    Automatically detects the embedding model used by the collection and uses
+    the same model for query embedding generation. Falls back to default model
+    for legacy collections without model metadata.
+
     Args:
         chunk_level_filter: If set, filter to only "child" or "parent" chunks.
                            For hierarchical retrieval, use "child" to search
@@ -305,9 +356,16 @@ def search_qdrant(
     """
     client = QdrantClient(host=host, port=port)
 
-    # Generate query embedding
+    # Auto-detect embedding model from collection metadata
+    collection_model_id = get_collection_model_id(collection_name, host, port)
+    if collection_model_id:
+        logger.info(f"[MODEL] Using collection model: {collection_model_id}")
+    else:
+        logger.info("[MODEL] Using default model (legacy collection or no metadata)")
+
+    # Generate query embedding using detected or default model
     logger.info(f"[SEARCH] Query: '{query}'")
-    query_vector = generate_embeddings([query])[0]
+    query_vector = generate_embeddings([query], model_id=collection_model_id)[0]
 
     # Build filter
     conditions = []

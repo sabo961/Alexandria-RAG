@@ -55,7 +55,10 @@ _This file contains critical rules and patterns that AI agents must follow when 
   ```
 
 ### Critical Version Constraints
-- **Embedding model**: `all-MiniLM-L6-v2` (384-dimensional vectors) - DO NOT change without re-ingesting all collections
+- **Embedding models**: Multi-model registry (see `config.py:EMBEDDING_MODELS`)
+  - `minilm`: all-MiniLM-L6-v2 (384-dim) - legacy, lightweight
+  - `bge-large`: BAAI/bge-large-en-v1.5 (1024-dim) - default, GPU-accelerated
+  - Model locked per collection - changing requires re-ingestion
 - **Qdrant distance metric**: COSINE - hardcoded across ingestion and query scripts
 - **tqdm**: Must be disabled globally (`os.environ['TQDM_DISABLE'] = '1'`) to prevent `[Errno 22]` stderr issues in Streamlit
 
@@ -322,10 +325,11 @@ Examples:
    - ✅ GOOD: Call `perform_rag_query()` from `scripts/rag_query.py`
    - **Why**: Creates divergence, maintenance burden, breaks CLI/API consistency
 
-2. **NEVER change embedding model without re-ingesting ALL collections**
-   - Current: `all-MiniLM-L6-v2` (384-dimensional vectors)
-   - Changing model = incompatible vectors = broken queries
-   - **Impact**: ~9,000 books would need re-ingestion
+2. **Embedding model is LOCKED per collection**
+   - Multi-model registry: `minilm` (384-dim), `bge-large` (1024-dim)
+   - Changing model for existing collection = full re-ingestion required
+   - Query MUST use same model as collection's ingestion model
+   - Different collections CAN use different models (A/B testing)
 
 3. **NEVER change Qdrant distance metric (hardcoded COSINE)**
    - Distance metric is COSINE across all ingestion and query scripts

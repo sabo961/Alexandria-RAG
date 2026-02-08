@@ -40,8 +40,10 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
    - Vector similarity search using embeddings
    - Context modes: precise/contextual/comprehensive
    - Optional LLM answer generation (OpenRouter API)
-   - **Current:** all-MiniLM-L6-v2 (384-dim)
-   - **Migrating to:** bge-large-en-v1.5 (1024-dim, GPU-accelerated) - ADR-0010
+   - **Multi-model support:** Runtime model selection per collection
+     - all-MiniLM-L6-v2 (384-dim) - lightweight, CPU-friendly
+     - BAAI/bge-large-en-v1.5 (1024-dim) - high quality, GPU-accelerated
+   - Collection metadata tracks which model was used for ingestion
 
 2. **Hierarchical Chunking (FR-002)**
    - Parent chunks: Full chapters (detected via EPUB/PDF structure)
@@ -74,7 +76,8 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
 **Immutability Constraints (NFR-002):** - CRITICAL
 - Embedding model locked per collection (changing = full re-ingestion)
 - Distance metric: COSINE (changing = collection recreation)
-- **Decision window:** Re-ingestion manageable NOW (150 books), prohibitive later (9,000 books)
+- **Multi-model coexistence:** Different collections can use different models
+- Query must use same model as collection's ingestion model
 
 **Reliability (NFR-003):**
 - Graceful degradation (works without LLM, without Calibre)
@@ -130,11 +133,12 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
 
 **Hard Constraints (Cannot Change Without Migration):**
 
-1. **Embedding Model (ADR-0010):**
-   - **Migrating from:** all-MiniLM-L6-v2 (384-dim)
-   - **Migrating to:** BAAI/bge-large-en-v1.5 (1024-dim)
-   - **Reason:** Decision window closing (150 books now vs 9,000 later)
-   - **Impact:** Full collection re-ingestion (8 min for 150 books, 3-4h for 9K on GPU)
+1. **Embedding Models (ADR-0010):**
+   - **Supported:** all-MiniLM-L6-v2 (384-dim), BAAI/bge-large-en-v1.5 (1024-dim)
+   - **Default:** bge-large-en-v1.5 (better quality, GPU-accelerated)
+   - **Constraint:** Model locked per collection at ingestion time
+   - **Runtime selection:** Query uses collection's model automatically
+   - **Model registry:** Configurable via EMBEDDING_MODELS in config.py
 
 2. **Distance Metric:** COSINE
    - Hardcoded across ingestion and query
@@ -270,8 +274,11 @@ From `docs/project-context.md` (45 rules):
 
 **ML/Embeddings:**
 - **sentence-transformers ≥2.3.1** + **PyTorch ≥2.0.0** (CUDA-enabled)
-- **Model:** BAAI/bge-large-en-v1.5 (1024-dim) - ADR-0010
-- **Rationale:** GPU acceleration (3-4h for 9K books vs 50-63h CPU), state-of-the-art RAG retrieval quality, local/free (no API costs), hardware-agnostic (GPU on Dell, CPU fallback on Asus)
+- **huggingface_hub[hf_xet]** (optional) - Xet protocol for faster model downloads
+- **Models (multi-model registry):**
+  - all-MiniLM-L6-v2 (384-dim) - lightweight, fast, CPU-friendly
+  - BAAI/bge-large-en-v1.5 (1024-dim) - high quality, GPU-accelerated (default)
+- **Rationale:** Runtime model selection enables A/B testing, gradual migration, and hardware-appropriate choices. GPU acceleration for bge-large (3-4h for 9K books vs 50-63h CPU), local/free (no API costs). Xet protocol enables chunked parallel downloads with resume capability for large models (1GB+).
 
 **Vector Database:**
 - **Qdrant ≥1.7.1** (self-hosted)
@@ -367,9 +374,11 @@ From `docs/project-context.md` (45 rules):
 - ❌ Rejected: Vendor lock-in, recurring costs, tier reductions (Pinecone 1M → 100K free tier)
 - ✅ Chosen: Self-hosted Qdrant (full control, zero cost, privacy)
 
-**Smaller Embedding Models (all-MiniLM-L6-v2, all-mpnet-base-v2):**
-- ❌ Rejected: Mediocre quality, doesn't utilize GPU, decision window closing
-- ✅ Chosen: bge-large-en-v1.5 (best-in-class, GPU makes it fast, future-proof)
+**Single Embedding Model (one-size-fits-all):**
+- ❌ Rejected: No flexibility for A/B testing, hardware constraints, gradual migration
+- ✅ Chosen: Multi-model registry with runtime selection
+  - Default: bge-large-en-v1.5 (best quality, GPU-accelerated)
+  - Fallback: all-MiniLM-L6-v2 (lightweight, CPU-friendly, comparison baseline)
 
 ---
 
@@ -403,7 +412,11 @@ def generate_embeddings(texts: List[str], batch_size: int = 32) -> np.ndarray:
 def perform_rag_query(query: str, collection_name: str, limit: int = 5) -> RAGResult:
 
 # Variables
-embedding_model = "BAAI/bge-large-en-v1.5"
+EMBEDDING_MODELS = {
+    "minilm": {"name": "all-MiniLM-L6-v2", "dim": 384},
+    "bge-large": {"name": "BAAI/bge-large-en-v1.5", "dim": 1024},
+}
+DEFAULT_EMBEDDING_MODEL = "bge-large"
 qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 calibre_db_instance = None
 chapter_list = []
@@ -1322,32 +1335,39 @@ with open(path, 'r', encoding='utf-8') as f:
 **Examples (Established):**
 ```python
 class EmbeddingGenerator:
-    """Singleton for embedding model to avoid reloading."""
+    """Singleton with multi-model cache."""
 
     _instance = None
-    _model = None
+    _models = {}  # Cache per model_id
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def get_model(self, model_name: str = 'all-MiniLM-L6-v2'):
-        """Lazy load model on first use."""
-        if self._model is None:
-            logger.info(f"🎯 Loading embedding model: {model_name}")
-            self._model = SentenceTransformer(model_name)
-        return self._model
+    def get_model(self, model_id: str = None):
+        """Lazy load model on first use, cache by model_id."""
+        from config import EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODEL
+        model_id = model_id or DEFAULT_EMBEDDING_MODEL
+
+        if model_id not in self._models:
+            model_config = EMBEDDING_MODELS[model_id]
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            logger.info(f"🎯 Loading embedding model: {model_config['name']} on {device}")
+            self._models[model_id] = SentenceTransformer(model_config['name'], device=device)
+        return self._models[model_id]
 
 # Usage
 generator = EmbeddingGenerator()
-model = generator.get_model()  # Loads only once
+model = generator.get_model("bge-large")  # Loads and caches
+model = generator.get_model("minilm")     # Loads different model, also cached
 ```
 
 **Benefits:**
-- Model loaded once across entire session
-- Multiple modules share same instance
+- Each model loaded once across entire session
+- Multiple models cached simultaneously
 - Lazy loading (only when needed)
+- Runtime model selection per collection
 
 ---
 

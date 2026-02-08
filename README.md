@@ -95,13 +95,79 @@ python rag_query.py "your question here" --limit 5 --context-mode contextual
 
 - **Interface:** MCP Server (Model Context Protocol via FastMCP)
 - **Vector DB:** Qdrant (192.168.0.151:6333)
-- **Embeddings:** sentence-transformers (all-MiniLM-L6-v2, 384-dim)
+- **Embeddings:** sentence-transformers (BAAI/bge-large-en-v1.5, 1024-dim)
 - **LLM:** OpenRouter API (optional, for RAG answers)
 - **Testing:** pytest (unit tests + integration tests)
 - **DB Explorer:** Datasette (web UI for Calibre SQLite exploration)
 - **Python:** 3.14+
 
 **For complete technology details:** See [docs/project-context.md](docs/project-context.md)
+
+---
+
+## Multi-Model Embedding Support
+
+Alexandria supports multiple embedding models with runtime selection and GPU acceleration.
+
+### Available Models
+
+| Model ID | Full Name | Dimensions | Use Case |
+|----------|-----------|------------|----------|
+| `minilm` | all-MiniLM-L6-v2 | 384 | Fast, lightweight |
+| `bge-large` | BAAI/bge-large-en-v1.5 | 1024 | Higher quality (default) |
+
+### Configuration
+
+Set in `.env` or environment:
+
+```bash
+# Default model (minilm or bge-large)
+DEFAULT_EMBEDDING_MODEL=bge-large
+
+# Device selection: auto, cuda, cpu (default: auto)
+EMBEDDING_DEVICE=auto
+```
+
+- `auto`: Uses CUDA if available, falls back to CPU
+- `cuda`: Force GPU (fails if unavailable)
+- `cpu`: Force CPU (slower, but works everywhere)
+
+### GPU Setup (Recommended)
+
+GPU acceleration significantly speeds up embedding generation (~10x faster).
+
+**Requirements:**
+- NVIDIA GPU with CUDA support
+- CUDA Toolkit 12.1+ (or compatible version)
+- ~2-3GB GPU memory for bge-large inference
+
+**Installation:**
+```bash
+# Install PyTorch with CUDA support (instead of CPU-only)
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
+
+### Verification
+
+```python
+# Test multi-model loading
+from scripts.ingest_books import EmbeddingGenerator
+
+gen = EmbeddingGenerator()
+
+# Load both models
+model1 = gen.get_model("minilm")
+print(f"MiniLM dim: {model1.get_sentence_embedding_dimension()}")  # 384
+
+model2 = gen.get_model("bge-large")
+print(f"BGE-Large dim: {model2.get_sentence_embedding_dimension()}")  # 1024
+
+# Test GPU
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+```
+
+**Note:** Models download on first use (bge-large ~1.3GB). CPU fallback works but is slower.
 
 ---
 

@@ -57,6 +57,24 @@ CALIBRE_LIBRARY_PATH = os.environ.get('CALIBRE_LIBRARY_PATH', r'G:\My Drive\alex
 LOCAL_INGEST_PATH = os.environ.get('LOCAL_INGEST_PATH', str(Path.home() / 'Downloads'))
 
 # =============================================================================
+# EMBEDDING MODEL CONFIGURATION
+# =============================================================================
+
+EMBEDDING_MODELS = {
+    "minilm": {"name": "all-MiniLM-L6-v2", "dim": 384},
+    "bge-large": {"name": "BAAI/bge-large-en-v1.5", "dim": 1024},
+    "bge-m3": {"name": "BAAI/bge-m3", "dim": 1024},  # Multilingual (100+ languages)
+}
+DEFAULT_EMBEDDING_MODEL = os.environ.get('DEFAULT_EMBEDDING_MODEL', 'bge-m3')
+EMBEDDING_DEVICE = os.environ.get('EMBEDDING_DEVICE', 'auto')  # auto, cuda, cpu
+
+# =============================================================================
+# INGESTION VERSIONING
+# =============================================================================
+
+INGEST_VERSION = "2.0"  # Semantic version for tracking ingestion schema changes
+
+# =============================================================================
 # OPENROUTER (OPTIONAL - for CLI testing)
 # =============================================================================
 
@@ -92,6 +110,10 @@ def print_config():
     print(f"QDRANT_COLLECTION:    {QDRANT_COLLECTION}")
     print(f"CALIBRE_LIBRARY_PATH: {CALIBRE_LIBRARY_PATH}")
     print(f"LOCAL_INGEST_PATH:    {LOCAL_INGEST_PATH}")
+    print(f"EMBEDDING_MODELS:     {list(EMBEDDING_MODELS.keys())}")
+    print(f"DEFAULT_MODEL:        {DEFAULT_EMBEDDING_MODEL}")
+    print(f"EMBEDDING_DEVICE:     {EMBEDDING_DEVICE}")
+    print(f"INGEST_VERSION:       {INGEST_VERSION}")
     print(f"OPENROUTER_API_KEY:   {'***' + OPENROUTER_API_KEY[-4:] if OPENROUTER_API_KEY else '(not set)'}")
     print(f"ENV_FILE:             {ENV_FILE} ({'exists' if ENV_FILE.exists() else 'not found'})")
     print("=" * 40)

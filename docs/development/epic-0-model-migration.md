@@ -1,20 +1,20 @@
 ---
 epic: 0
-title: "bge-large Model Migration"
-status: pending
+title: "Multi-Model Embedding Support"
+status: in-progress
 priority: P0
 estimated_stories: 3
 ---
 
-# Epic 0: bge-large Model Migration
+# Epic 0: Multi-Model Embedding Support
 
-**FIRST PRIORITY** - Migrate embedding model to bge-large-en-v1.5 for superior search quality. GPU acceleration is a bonus (10x speedup), but quality improvement is the primary goal.
+**FIRST PRIORITY** - Enable multiple embedding models with runtime selection. Supports A/B testing, gradual migration, and hardware-appropriate choices.
 
-**User Outcome:** Users experience dramatically improved search relevance and precision when querying the book collection.
+**User Outcome:** Users can choose embedding models per collection, compare quality, and leverage GPU acceleration when available.
 
-**FRs Covered:** FR-001 (partial - model upgrade), NFR-001 (performance), NFR-002 (immutability window)
+**FRs Covered:** FR-001 (multi-model search), NFR-001 (performance), NFR-002 (collection-level model lock)
 
-**ADR References:** ADR-0010 (GPU-Accelerated Embeddings)
+**ADR References:** ADR-0010 (GPU-Accelerated Embeddings), architecture-comprehensive.md (Multi-Model Registry)
 
 **Current State:**
 - Using `all-MiniLM-L6-v2` (384-dim, CPU-only)
@@ -24,65 +24,83 @@ estimated_stories: 3
 - 150 books currently ingested
 
 **Target State:**
-- Using `bge-large-en-v1.5` (1024-dim, best-in-class)
-- Configurable model selection
+- Multi-model registry: `all-MiniLM-L6-v2` (384-dim) + `bge-large-en-v1.5` (1024-dim)
+- Runtime model selection per collection
 - GPU/CUDA support with CPU fallback
 - Embedding model metadata tracked in Qdrant
-- All 150 books re-ingested with new model
+- Query automatically uses collection's ingestion model
 
 ---
 
 ## Stories
 
-### Story 0.1: Configure bge-large-en-v1.5 Model with GPU Support
+### Story 0.1: Configure Multi-Model Embedding Support with GPU Acceleration
 
-**Status:** ⏳ PENDING
+**Status:** 🔄 IN PROGRESS
 
 As a **system administrator**,
-I want **to configure Alexandria to use bge-large-en-v1.5 with GPU acceleration**,
-So that **embedding generation is both higher quality and 10x faster**.
+I want **Alexandria to support multiple embedding models with runtime selection**,
+So that **I can compare model quality, choose per collection, and leverage GPU when available**.
 
 **Acceptance Criteria:**
 
-**Given** Alexandria is running on a machine with CUDA-capable GPU
-**When** the embedding model is loaded
-**Then** bge-large-en-v1.5 is used instead of all-MiniLM-L6-v2
-**And** the model runs on GPU (CUDA) if available, falls back to CPU if not
-**And** embedding dimension is 1024 (not 384)
-**And** model selection is configurable via environment variable
+**AC1: Model Registry**
+**Given** Alexandria is configured
+**When** I check the embedding configuration
+**Then** a model registry exists with at least two models:
+  - `minilm`: all-MiniLM-L6-v2 (384-dim)
+  - `bge-large`: BAAI/bge-large-en-v1.5 (1024-dim)
+**And** a default model is configured (bge-large)
+**And** model selection is available at runtime via `model_id` parameter
 
-**Given** Alexandria is running on a machine without GPU
-**When** the embedding model is loaded
-**Then** bge-large-en-v1.5 runs on CPU with graceful degradation
-**And** a warning is logged about CPU-only mode
+**AC2: Multi-Model Caching**
+**Given** multiple models are requested during a session
+**When** I call `get_model("minilm")` then `get_model("bge-large")`
+**Then** both models are loaded and cached separately
+**And** subsequent calls return cached models (no reload)
+
+**AC3: GPU/CPU Device Selection**
+**Given** Alexandria is running on a machine with CUDA-capable GPU
+**When** a model is loaded
+**Then** it runs on GPU (CUDA) if available, falls back to CPU if not
+**And** device selection is logged
+
+**Given** Alexandria is running without GPU
+**When** a model is loaded
+**Then** a warning is logged about CPU-only mode
 **And** embeddings are still generated correctly (slower but functional)
 
 **Technical Tasks:**
 
-- [ ] Add `EMBEDDING_MODEL` config variable to `scripts/config.py` (default: `BAAI/bge-large-en-v1.5`)
-- [ ] Add `EMBEDDING_DEVICE` config variable (default: `auto` - detect GPU, fallback CPU)
-- [ ] Install PyTorch with CUDA support: `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118`
-- [ ] Update `EmbeddingGenerator.get_model()` in `scripts/ingest_books.py` to:
-  - Accept `model_name` parameter from config
-  - Detect CUDA availability: `torch.cuda.is_available()`
-  - Set device: `device = 'cuda' if torch.cuda.is_available() else 'cpu'`
-  - Load model with device: `SentenceTransformer(model_name, device=device)`
-  - Log model name, device, and embedding dimension
-- [ ] Update `EmbeddingGenerator.generate_embeddings()` to verify output dimension is 1024
-- [ ] Test embedding generation on sample text (verify CUDA usage via `nvidia-smi`)
-- [ ] Document GPU setup in README.md (CUDA toolkit version, driver requirements)
+- [ ] Add `EMBEDDING_MODELS` registry to `scripts/config.py`:
+  ```python
+  EMBEDDING_MODELS = {
+      "minilm": {"name": "all-MiniLM-L6-v2", "dim": 384},
+      "bge-large": {"name": "BAAI/bge-large-en-v1.5", "dim": 1024},
+  }
+  DEFAULT_EMBEDDING_MODEL = "bge-large"
+  EMBEDDING_DEVICE = os.environ.get('EMBEDDING_DEVICE', 'auto')
+  ```
+- [ ] Update `EmbeddingGenerator` in `scripts/ingest_books.py`:
+  - Change `_model = None` to `_models = {}` (dict cache)
+  - Update `get_model(model_id: str = None)` to use registry and cache per model_id
+  - Add GPU/CPU detection and logging
+- [ ] Install PyTorch with CUDA support
+- [ ] Test both models load and cache correctly
+- [ ] Test GPU acceleration with bge-large
+- [ ] Document multi-model setup in README.md
 
 **Files Modified:**
-- `scripts/config.py` (add EMBEDDING_MODEL, EMBEDDING_DEVICE)
-- `scripts/ingest_books.py` (update EmbeddingGenerator class)
+- `scripts/config.py` (add EMBEDDING_MODELS registry)
+- `scripts/ingest_books.py` (update EmbeddingGenerator for multi-model)
 - `requirements.txt` (add torch with CUDA)
-- `README.md` (GPU setup documentation)
+- `README.md` (multi-model documentation)
 
 **Definition of Done:**
-- Config variables added and documented
-- PyTorch CUDA installed
-- bge-large-en-v1.5 loads successfully on GPU
-- Embedding dimension verified as 1024
+- Model registry with 2+ models configured
+- EmbeddingGenerator caches multiple models
+- Runtime model selection works via model_id
+- GPU acceleration verified for bge-large
 - CPU fallback tested and working
 - All tests pass
 
@@ -94,75 +112,75 @@ So that **embedding generation is both higher quality and 10x faster**.
 
 As a **system maintainer**,
 I want **chunk metadata to include embedding model information**,
-So that **I can identify which chunks need re-ingestion when models change**.
+So that **queries automatically use the correct model and I can track collection health**.
 
 **Acceptance Criteria:**
 
-**Given** a book is being ingested
+**Given** a book is being ingested with a specific model
 **When** chunks are uploaded to Qdrant
 **Then** each chunk payload includes:
-  - `embedding_model`: "BAAI/bge-large-en-v1.5"
-  - `embedding_dimension`: 1024
+  - `embedding_model_id`: "bge-large" (registry key for query matching)
+  - `embedding_model_name`: "BAAI/bge-large-en-v1.5" (full name for reference)
+  - `embedding_dimension`: 1024 (for validation)
   - `ingest_version`: "2.0" (semantic version for tracking)
-  - `chunking_strategy`: "hierarchical" or "flat"
-  - `chunk_fingerprint`: SHA1 hash of (book_id + section + order + text)
 
-**Given** chunks from multiple embedding models exist in Qdrant
-**When** querying the collection
-**Then** I can filter by `embedding_model` to find all chunks needing migration
-**And** chunk fingerprints allow duplicate detection across re-ingestions
+**Given** I query a collection
+**When** the query executes
+**Then** the query reads `embedding_model_id` from existing chunks
+**And** uses the same model for query embedding generation
+**And** warns if mixed models are detected in collection
 
 **Technical Tasks:**
 
 - [ ] Define ingest version constant in `scripts/config.py`: `INGEST_VERSION = "2.0"`
-- [ ] Add metadata fields to chunk creation in `scripts/universal_chunking.py`:
-  - `embedding_model`: from config
-  - `embedding_dimension`: from model
-  - `ingest_version`: from config
-  - `chunking_strategy`: "hierarchical" if parent/child, else "flat"
-- [ ] Implement `calculate_chunk_fingerprint()` function:
+- [ ] Update `upload_to_qdrant()` in `scripts/ingest_books.py`:
+  - Accept `model_id` parameter
+  - Get model config via `EmbeddingGenerator().get_model_config(model_id)`
+  - Add `embedding_model_id`, `embedding_model_name`, `embedding_dimension` to payload
+  - Add `ingest_version` to payload
+- [ ] Update query logic in `scripts/rag_query.py`:
+  - Read `embedding_model_id` from first result chunk
+  - Pass `model_id` to `EmbeddingGenerator().get_model(model_id)`
+  - Warn if collection has mixed models
+- [ ] Add collection model detection helper:
   ```python
-  import hashlib
-  def calculate_chunk_fingerprint(book_id: str, section: str, order: int, text: str) -> str:
-      content = f"{book_id}|{section}|{order}|{text}"
-      return hashlib.sha1(content.encode('utf-8')).hexdigest()
+  def get_collection_model(collection_name: str) -> str:
+      """Get embedding model used by collection (from first chunk)."""
+      # Sample one chunk, return embedding_model_id
   ```
-- [ ] Update `upload_to_qdrant()` in `scripts/ingest_books.py` to include new metadata fields
-- [ ] Update existing Qdrant schema documentation to reflect new fields
-- [ ] Add migration detection query: Find all chunks with `embedding_model != "BAAI/bge-large-en-v1.5"`
+- [ ] ✅ Update QDRANT_PAYLOAD_STRUCTURE.md (already done)
 
 **Files Modified:**
 - `scripts/config.py` (add INGEST_VERSION constant)
-- `scripts/universal_chunking.py` (add metadata fields to chunk creation)
-- `scripts/ingest_books.py` (update upload_to_qdrant, add fingerprint calculation)
-- `docs/architecture/architecture-comprehensive.md` (update Qdrant schema docs)
+- `scripts/ingest_books.py` (update upload_to_qdrant with model metadata)
+- `scripts/rag_query.py` (auto-detect and use collection's model)
+- ✅ `docs/architecture/technical/QDRANT_PAYLOAD_STRUCTURE.md` (already updated)
 
 **Definition of Done:**
-- All new metadata fields present in uploaded chunks
-- Chunk fingerprints are unique and deterministic
-- Migration detection query returns correct results
-- Documentation updated
-- All tests pass
+- Ingested chunks contain `embedding_model_id`, `embedding_model_name`, `embedding_dimension`
+- Query auto-detects collection model and uses correct embedder
+- Mixed model warning works when collection has inconsistent models
+- Tests pass for both minilm and bge-large ingestion
 
 ---
 
-### Story 0.3: Re-ingest Book Collection with New Model
+### Story 0.3: Re-ingest Book Collection with Specified Model
 
 **Status:** ⏳ PENDING
 
 As a **library curator**,
-I want **to re-ingest all existing books with the new embedding model**,
-So that **search results benefit from superior bge-large-en-v1.5 embeddings**.
+I want **to re-ingest books with a specified embedding model**,
+So that **I can upgrade collections to better models or create A/B test collections**.
 
 **Acceptance Criteria:**
 
-**Given** 150 books are currently ingested with all-MiniLM-L6-v2
-**When** I run the migration script with `--force-reingest` flag
-**Then** all books are re-ingested with bge-large-en-v1.5
-**And** old chunks (all-MiniLM-L6-v2) are deleted from Qdrant
-**And** new chunks (bge-large-en-v1.5) are uploaded
-**And** progress is displayed for each book (X/150 completed)
-**And** manifest files are updated with new ingest metadata
+**Given** books are ingested in a collection
+**When** I run the migration script with `--model bge-large` flag
+**Then** all books are re-ingested with specified model
+**And** old chunks are deleted from Qdrant
+**And** new chunks with correct `embedding_model_id` are uploaded
+**And** progress callback reports X/N completed
+**And** manifest files are updated with new model metadata
 
 **Given** a book fails during re-ingestion
 **When** the error occurs
@@ -172,38 +190,36 @@ So that **search results benefit from superior bge-large-en-v1.5 embeddings**.
 
 **Technical Tasks:**
 
-- [ ] Add `force_reingest` parameter to `ingest_book()` function in `scripts/ingest_books.py`
+- [ ] Add `force_reingest` and `model_id` parameters to `ingest_book()` in `scripts/ingest_books.py`
   - Bypasses manifest check when `force_reingest=True`
   - Deletes existing chunks for book_id before re-ingesting
-- [ ] Create migration script: `scripts/migrate_to_bge_large.py`
+  - Uses specified `model_id` for embedding generation
+- [ ] Create CLI tool: `scripts/reingest_collection.py`
   ```python
-  # Pseudocode:
-  # 1. Load all book_ids from Calibre
+  # Usage: python reingest_collection.py --collection alexandria --model bge-large
+  # 1. Get all book_ids from collection (or from Calibre)
   # 2. For each book:
-  #    - Delete old chunks from Qdrant (filter by book_id + old embedding_model)
-  #    - Ingest with force_reingest=True
-  #    - Update manifest
-  #    - Log progress
-  # 3. Generate migration report (success/failure counts, timing)
+  #    - Delete old chunks from Qdrant
+  #    - Ingest with model_id and force_reingest=True
+  #    - Report progress via callback
+  # 3. Generate summary (success/failure counts, timing)
   ```
-- [ ] Add `--batch-size` parameter to control parallel processing (default: 1, max: 5)
-- [ ] Add `--dry-run` flag to preview migration without executing
-- [ ] Implement progress bar using callback pattern (not tqdm - Streamlit compatibility)
-- [ ] Test migration on 5 sample books first
-- [ ] Run full migration on all 150 books
-- [ ] Verify search quality improvement with test queries
+- [ ] Add `--dry-run` flag to preview without executing
+- [ ] Add progress callback (Streamlit compatible, no tqdm)
+- [ ] Test on 5 sample books first
+- [ ] Full re-ingestion of collection
 
 **Files Modified:**
-- `scripts/ingest_books.py` (add force_reingest parameter, delete logic)
-- `scripts/migrate_to_bge_large.py` (new migration script)
-- `scripts/collection_manifest.py` (update manifest with new metadata)
+- `scripts/ingest_books.py` (add force_reingest + model_id parameters)
+- `scripts/reingest_collection.py` (new CLI tool)
+- `scripts/collection_manifest.py` (update manifest with model metadata)
 
 **Definition of Done:**
-- Migration script successfully re-ingests all 150 books
-- Old chunks deleted, new chunks uploaded
-- Manifests updated with bge-large-en-v1.5 metadata
-- No data loss (all books re-ingested successfully)
-- Search quality visibly improved (test with sample queries)
+- Re-ingestion CLI works with `--model` flag
+- Dry-run mode previews without changes
+- Progress callback works (Streamlit compatible)
+- Manifest updated with correct `embedding_model_id`
+- Test collection re-ingested successfully
 - Migration report generated and reviewed
 
 ---

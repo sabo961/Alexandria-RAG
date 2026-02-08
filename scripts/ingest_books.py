@@ -33,7 +33,7 @@ from sentence_transformers import SentenceTransformer
 
 # Qdrant
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from qdrant_utils import check_qdrant_connection
 
 # Universal Semantic Chunking
@@ -43,7 +43,15 @@ from universal_chunking import UniversalChunker
 from chapter_detection import detect_chapters
 
 # Central configuration
-from config import QDRANT_HOST, QDRANT_PORT, CALIBRE_LIBRARY_PATH
+from config import (
+    QDRANT_HOST,
+    QDRANT_PORT,
+    CALIBRE_LIBRARY_PATH,
+    EMBEDDING_MODELS,
+    DEFAULT_EMBEDDING_MODEL,
+    EMBEDDING_DEVICE,
+    INGEST_VERSION,
+)
 
 # Setup logging - configurable via ALEXANDRIA_LOG_LEVEL environment variable
 # Usage: export ALEXANDRIA_LOG_LEVEL=DEBUG or ALEXANDRIA_LOG_LEVEL=INFO
@@ -197,27 +205,91 @@ def standardize_language_code(lang: str) -> str:
     return lang
 
 
-# ============================================================================ 
+# ============================================================================
 # EMBEDDINGS
-# ============================================================================ 
+# ============================================================================
 
 class EmbeddingGenerator:
+    """Singleton with multi-model cache."""
+
     _instance = None
-    _model = None
+    _models = {}  # Cache per model_id
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def get_model(self, model_name: str = 'all-MiniLM-L6-v2'):
-        if self._model is None:
-            logger.info(f"Loading embedding model: {model_name}")
-            self._model = SentenceTransformer(model_name)
-        return self._model
+    def get_model(self, model_id: str = None):
+        """
+        Get or load embedding model with GPU/CPU detection.
 
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        model = self.get_model()
+        Args:
+            model_id: Model identifier from EMBEDDING_MODELS registry
+                      (default: DEFAULT_EMBEDDING_MODEL)
+
+        Returns:
+            Loaded SentenceTransformer model on appropriate device
+        """
+        import torch
+
+        model_id = model_id or DEFAULT_EMBEDDING_MODEL
+
+        if model_id not in self._models:
+            if model_id not in EMBEDDING_MODELS:
+                raise ValueError(
+                    f"Unknown model_id: {model_id}. Available: {list(EMBEDDING_MODELS.keys())}"
+                )
+
+            model_config = EMBEDDING_MODELS[model_id]
+            model_name = model_config["name"]
+            expected_dim = model_config["dim"]
+
+            # Device detection
+            if EMBEDDING_DEVICE == 'auto':
+                device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            else:
+                device = EMBEDDING_DEVICE
+
+            # Logging and warnings
+            if device == 'cpu' and torch.cuda.is_available():
+                logger.warning("GPU available but EMBEDDING_DEVICE set to CPU")
+            elif device == 'cpu':
+                logger.warning("Running on CPU - embedding generation will be slower")
+
+            logger.info(f"Loading embedding model: {model_name} (id: {model_id})")
+            logger.info(f"Device: {device}")
+
+            model = SentenceTransformer(model_name, device=device)
+
+            # Verify embedding dimension
+            actual_dim = model.get_sentence_embedding_dimension()
+            logger.info(f"Embedding dimension: {actual_dim}")
+
+            if actual_dim != expected_dim:
+                logger.warning(f"Dimension mismatch! Expected {expected_dim}, got {actual_dim}")
+
+            self._models[model_id] = model
+
+        return self._models[model_id]
+
+    def get_model_config(self, model_id: str = None) -> dict:
+        """Get model configuration (name, dim) without loading the model."""
+        model_id = model_id or DEFAULT_EMBEDDING_MODEL
+        return EMBEDDING_MODELS.get(model_id)
+
+    def generate_embeddings(self, texts: List[str], model_id: str = None) -> List[List[float]]:
+        """
+        Generate embeddings for a list of texts.
+
+        Args:
+            texts: List of text strings to embed
+            model_id: Model identifier (default: DEFAULT_EMBEDDING_MODEL)
+
+        Returns:
+            List of embedding vectors as float lists
+        """
+        model = self.get_model(model_id)
         # Disable ALL progress bars to avoid sys.stderr issues in Streamlit environment
         # tqdm progress bar causes [Errno 22] when sys.stderr is not available
         embeddings = model.encode(
@@ -226,10 +298,13 @@ class EmbeddingGenerator:
             convert_to_numpy=True,
             normalize_embeddings=False
         )
+
+        logger.debug(f"Generated {len(texts)} embeddings of dimension {embeddings.shape[1]}")
+
         return embeddings.tolist()
 
-def generate_embeddings(texts: List[str]) -> List[List[float]]:
-    return EmbeddingGenerator().generate_embeddings(texts)
+def generate_embeddings(texts: List[str], model_id: str = None) -> List[List[float]]:
+    return EmbeddingGenerator().generate_embeddings(texts, model_id)
 
 
 # ============================================================================ 
@@ -241,16 +316,33 @@ def upload_to_qdrant(
     embeddings: List[List[float]],
     collection_name: str,
     qdrant_host: str,
-    qdrant_port: int
+    qdrant_port: int,
+    model_id: Optional[str] = None
 ) -> Dict:
     """
     Upload chunks to Qdrant vector database.
+
+    Args:
+        chunks: List of chunk dictionaries with text and metadata
+        embeddings: List of embedding vectors
+        collection_name: Qdrant collection name
+        qdrant_host: Qdrant server host
+        qdrant_port: Qdrant server port
+        model_id: Embedding model identifier (default: DEFAULT_EMBEDDING_MODEL)
 
     Returns:
         Dict with 'success' (bool) and 'error' (str) if failed
     """
     if not chunks:
         return {'success': True, 'uploaded': 0}
+
+    # Get model configuration for metadata
+    model_id = model_id or DEFAULT_EMBEDDING_MODEL
+    if model_id not in EMBEDDING_MODELS:
+        error_msg = f"Unknown embedding model: '{model_id}'. Available: {list(EMBEDDING_MODELS.keys())}"
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+    model_config = EMBEDDING_MODELS[model_id]
 
     # Check connection first
     is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
@@ -312,7 +404,12 @@ Collection error: {str(e)}
                 "section_name": chunk.get('section_name', ''),
                 "language": chunk.get('language', 'unknown'),
                 "ingested_at": datetime.now().isoformat(),
-                "strategy": "universal-semantic"
+                "strategy": "universal-semantic",
+                # Embedding model metadata for query auto-detection
+                "embedding_model_id": model_id,
+                "embedding_model_name": model_config.get("name", "unknown"),
+                "embedding_dimension": model_config.get("dim", len(embedding)),
+                "ingest_version": INGEST_VERSION
             }
         ))
 
@@ -346,18 +443,37 @@ def upload_hierarchical_to_qdrant(
     child_embeddings: List[List[float]],
     collection_name: str,
     qdrant_host: str,
-    qdrant_port: int
+    qdrant_port: int,
+    model_id: Optional[str] = None
 ) -> Dict:
     """
     Upload hierarchical chunks (parents + children) to Qdrant.
 
     Parents are uploaded first, then children with parent_id references.
 
+    Args:
+        parent_chunks: List of parent (chapter) chunk dictionaries
+        parent_embeddings: List of parent embedding vectors
+        child_chunks: List of child (semantic) chunk dictionaries
+        child_embeddings: List of child embedding vectors
+        collection_name: Qdrant collection name
+        qdrant_host: Qdrant server host
+        qdrant_port: Qdrant server port
+        model_id: Embedding model identifier (default: DEFAULT_EMBEDDING_MODEL)
+
     Returns:
         Dict with 'success', 'parent_count', 'child_count', 'error'
     """
     if not parent_chunks and not child_chunks:
         return {'success': True, 'parent_count': 0, 'child_count': 0}
+
+    # Get model configuration for metadata
+    model_id = model_id or DEFAULT_EMBEDDING_MODEL
+    if model_id not in EMBEDDING_MODELS:
+        error_msg = f"Unknown embedding model: '{model_id}'. Available: {list(EMBEDDING_MODELS.keys())}"
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+    model_config = EMBEDDING_MODELS[model_id]
 
     # Check connection
     is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
@@ -404,7 +520,12 @@ def upload_hierarchical_to_qdrant(
                 "child_count": chunk.get('child_count', 0),
                 "token_count": chunk.get('token_count', 0),
                 "ingested_at": datetime.now().isoformat(),
-                "strategy": "hierarchical"
+                "strategy": "hierarchical",
+                # Embedding model metadata for query auto-detection
+                "embedding_model_id": model_id,
+                "embedding_model_name": model_config.get("name", "unknown"),
+                "embedding_dimension": model_config.get("dim", len(embedding)),
+                "ingest_version": INGEST_VERSION
             }
         ))
 
@@ -426,7 +547,12 @@ def upload_hierarchical_to_qdrant(
                 "sibling_count": chunk.get('sibling_count', 0),
                 "token_count": chunk.get('token_count', len(chunk.get('text', '').split())),
                 "ingested_at": datetime.now().isoformat(),
-                "strategy": "universal-semantic"
+                "strategy": "universal-semantic",
+                # Embedding model metadata for query auto-detection
+                "embedding_model_id": model_id,
+                "embedding_model_name": model_config.get("name", "unknown"),
+                "embedding_dimension": model_config.get("dim", len(embedding)),
+                "ingest_version": INGEST_VERSION
             }
         ))
 
@@ -465,6 +591,72 @@ def truncate_for_embedding(text: str, max_tokens: int = 8192) -> str:
     if len(words) <= max_words:
         return text
     return ' '.join(words[:max_words]) + ' [truncated]'
+
+
+def delete_book_chunks(
+    book_title: str,
+    collection_name: str,
+    qdrant_host: str = QDRANT_HOST,
+    qdrant_port: int = QDRANT_PORT
+) -> int:
+    """
+    Delete all chunks for a book from Qdrant.
+
+    Args:
+        book_title: Title of the book to delete chunks for
+        collection_name: Qdrant collection name
+        qdrant_host: Qdrant server host
+        qdrant_port: Qdrant server port
+
+    Returns:
+        Number of chunks deleted
+    """
+    # Check connection first
+    is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
+    if not is_connected:
+        logger.error(error_msg)
+        return 0
+
+    try:
+        client = QdrantClient(host=qdrant_host, port=qdrant_port)
+
+        # Check if collection exists
+        collections = [c.name for c in client.get_collections().collections]
+        if collection_name not in collections:
+            logger.warning(f"Collection '{collection_name}' not found - nothing to delete")
+            return 0
+
+        # Count existing points for this book before deletion
+        count_result = client.count(
+            collection_name=collection_name,
+            count_filter=Filter(
+                must=[
+                    FieldCondition(key="book_title", match=MatchValue(value=book_title))
+                ]
+            )
+        )
+        existing_count = count_result.count
+
+        if existing_count == 0:
+            logger.info(f"No chunks found for '{book_title}' in '{collection_name}'")
+            return 0
+
+        # Delete all points matching the book_title
+        client.delete(
+            collection_name=collection_name,
+            points_selector=Filter(
+                must=[
+                    FieldCondition(key="book_title", match=MatchValue(value=book_title))
+                ]
+            )
+        )
+
+        logger.info(f"Deleted {existing_count} chunks for '{book_title}' from '{collection_name}'")
+        return existing_count
+
+    except Exception as e:
+        logger.error(f"Failed to delete chunks for '{book_title}': {e}")
+        return 0
 
 
 def _get_calibre_db() -> Optional[CalibreDB]:
@@ -558,7 +750,9 @@ def ingest_book(
     hierarchical: bool = True,
     threshold: float = 0.55,
     min_chunk_size: int = 200,
-    max_chunk_size: int = 1200
+    max_chunk_size: int = 1200,
+    force_reingest: bool = False,
+    model_id: Optional[str] = None
 ):
     """
     Ingest a book into Qdrant with optional hierarchical chunking.
@@ -576,6 +770,8 @@ def ingest_book(
         threshold: Similarity threshold for chunking (0.0-1.0). Lower = fewer breaks.
         min_chunk_size: Minimum words per chunk.
         max_chunk_size: Maximum words per chunk.
+        force_reingest: If True, delete existing chunks for this book before ingesting.
+        model_id: Embedding model identifier (default: DEFAULT_EMBEDDING_MODEL).
 
     Returns:
         Dict with success status, chunk counts, and metadata
@@ -627,6 +823,20 @@ def ingest_book(
     title = metadata.get('title', 'Unknown')
     author = metadata.get('author', 'Unknown')
     logging.info(f"Ingesting: \"{title}\" by {author}")
+
+    # Resolve model_id early for consistent usage
+    effective_model_id = model_id or DEFAULT_EMBEDDING_MODEL
+
+    # Force reingest: delete existing chunks first
+    if force_reingest:
+        deleted_count = delete_book_chunks(
+            book_title=title,
+            collection_name=collection_name,
+            qdrant_host=qdrant_host,
+            qdrant_port=qdrant_port
+        )
+        if deleted_count > 0:
+            logging.info(f"Force reingest: deleted {deleted_count} existing chunks for '{title}'")
 
     # Setup chunker
     embedder = EmbeddingGenerator()
@@ -712,14 +922,15 @@ def ingest_book(
         child_texts = [c['text'] for c in all_child_chunks]
 
         logging.debug(f"Generating embeddings for {len(parent_texts)} parents and {len(child_texts)} children")
-        parent_embeddings = generate_embeddings(parent_texts)
-        child_embeddings = generate_embeddings(child_texts)
+        parent_embeddings = generate_embeddings(parent_texts, model_id=effective_model_id)
+        child_embeddings = generate_embeddings(child_texts, model_id=effective_model_id)
 
-        # 4. Upload hierarchically
+        # 4. Upload hierarchically (with model metadata)
         upload_result = upload_hierarchical_to_qdrant(
             parent_chunks, parent_embeddings,
             all_child_chunks, child_embeddings,
-            collection_name, qdrant_host, qdrant_port
+            collection_name, qdrant_host, qdrant_port,
+            model_id=effective_model_id
         )
 
         if not upload_result.get('success'):
@@ -745,7 +956,8 @@ def ingest_book(
             'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
             'filepath': display_path,
             'debug_author': debug_info,
-            'hierarchical': True
+            'hierarchical': True,
+            'model_id': effective_model_id
         }
 
     else:
@@ -762,9 +974,12 @@ def ingest_book(
 
         logging.debug(f"Chunks created: {len(chunks)} chunks from {len(text)} characters")
 
-        # Embed & Upload (legacy)
-        embeddings = generate_embeddings([c['text'] for c in chunks])
-        upload_result = upload_to_qdrant(chunks, embeddings, collection_name, qdrant_host, qdrant_port)
+        # Embed & Upload (legacy, with model metadata)
+        embeddings = generate_embeddings([c['text'] for c in chunks], model_id=effective_model_id)
+        upload_result = upload_to_qdrant(
+            chunks, embeddings, collection_name, qdrant_host, qdrant_port,
+            model_id=effective_model_id
+        )
 
         if not upload_result.get('success'):
             logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
@@ -786,7 +1001,8 @@ def ingest_book(
             'file_size_mb': os.path.getsize(normalized_path) / (1024 * 1024),
             'filepath': display_path,
             'debug_author': debug_info,
-            'hierarchical': False
+            'hierarchical': False,
+            'model_id': effective_model_id
         }
 
     logging.info(f"[OK] Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {result['chunks']} chunks)")

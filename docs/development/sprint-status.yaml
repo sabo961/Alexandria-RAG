@@ -1,0 +1,108 @@
+# generated: 2026-02-01
+# project: Alexandria
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: C:\Users\goran\source\repos\Temenos\Akademija\Alexandria\docs\development
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-02-01
+project: Alexandria
+project_key: NOKEY
+tracking_system: file-system
+story_location: C:\Users\goran\source\repos\Temenos\Akademija\Alexandria\docs\development
+
+development_status:
+  # Epic 0: bge-large Model Migration (P0 - FIRST PRIORITY)
+  # Status: in-progress - First story created, ready for development
+  epic-0: in-progress
+  0-1-configure-bge-large-en-v1-5-model-with-gpu-support: done
+  0-2-add-embedding-model-metadata-to-qdrant-payloads: done
+  0-3-re-ingest-book-collection-with-new-model: done
+  epic-0-retrospective: optional
+
+  # Epic 1: Core Book Search & Discovery (P0)
+  # Status: in-progress - Hierarchical chunking, context modes, response patterns DONE
+  # Pending: metadata enrichment, copyright detection, quality metrics
+  epic-1: in-progress
+  1-1-external-metadata-enrichment: backlog
+  1-2-copyright-detection-status-calculation: backlog
+  1-3-calibre-metadata-cleanup-validation: backlog
+  1-4-retrieval-quality-metrics-self-test-suite: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Multi-Collection Organization (P1)
+  # Status: in-progress - Collection manifests and Qdrant utils DONE
+  # Pending: creation wizard, quotas, isolation
+  epic-2: in-progress
+  2-1-collection-creation-configuration: backlog
+  2-2-collection-isolation-safety: backlog
+  2-3-collection-usage-quotas-monitoring: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Multi-Consumer Access & Integration (P1)
+  # Status: in-progress - MCP server (Tier 1) and Python lib (Tier 3) DONE
+  # Pending: HTTP API (Tier 2)
+  epic-3: in-progress
+  3-1-http-rest-api-with-fastapi: backlog
+  3-2-api-authentication-rate-limiting: backlog
+  3-3-api-documentation-client-sdks: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Production Scaling & Performance (P2)
+  # Status: pending - Depends on Epic 0 (GPU acceleration)
+  epic-4: backlog
+  4-1-parallel-batch-ingestion-pipeline: backlog
+  4-2-query-performance-optimization-monitoring: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Quality & Maintainability (P2)
+  # Status: in-progress - Story 5.3 XSS security foundations complete
+  epic-5: in-progress
+  5-1-configuration-technical-debt-fixes: backlog
+  5-2-comprehensive-test-coverage: backlog
+  5-3-xss-prevention-input-sanitization: in-progress
+  epic-5-retrospective: optional
+
+  # Epic 6: Multi-Tenancy & Access Control (P3)
+  # Status: pending - Phase 2-4 features
+  epic-6: backlog
+  6-1-user-account-management-phase-2: backlog
+  6-2-collection-visibility-copyright-based-access-control-phase-3: backlog
+  6-3-team-collections-sso-phase-4: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Audit Logging & Monitoring (P2)
+  # Status: pending - Application logging exists, audit database pending
+  epic-7: backlog
+  7-1-sqlite-audit-logging-system-events: backlog
+  7-2-user-activity-logging-with-privacy-controls-opt-in: backlog
+  7-3-grafana-monitoring-stack: backlog
+  epic-7-retrospective: optional

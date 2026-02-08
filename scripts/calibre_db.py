@@ -65,10 +65,20 @@ class CalibreDB:
         Args:
             library_path: Path to Calibre library root (contains metadata.db)
         """
-        self.library_path = Path(library_path)
-        self.db_path = self.library_path / "metadata.db"
+        # Handle UNC paths specially (Windows network shares like \\server\share)
+        if library_path.startswith('\\\\'):
+            # For UNC paths, use string concatenation to avoid Path mangling
+            self.library_path = library_path
+            self.db_path = library_path.rstrip('\\') + '\\metadata.db'
+        else:
+            # For normal paths, use Path objects
+            self.library_path = Path(library_path)
+            self.db_path = self.library_path / "metadata.db"
 
-        if not self.db_path.exists():
+        # Check if database exists
+        # For UNC paths, use Path for existence check but keep string for connection
+        db_check_path = Path(self.db_path) if isinstance(self.db_path, str) else self.db_path
+        if not db_check_path.exists():
             raise FileNotFoundError(f"Calibre database not found: {self.db_path}")
 
         logger.info(f"Connected to Calibre DB: {self.db_path}")
@@ -101,7 +111,6 @@ class CalibreDB:
             b.path,
             b.timestamp,
             b.pubdate,
-            b.isbn,
             b.series_index,
             GROUP_CONCAT(DISTINCT a.name) as authors,
             GROUP_CONCAT(DISTINCT l.lang_code) as languages,
@@ -163,7 +172,7 @@ class CalibreDB:
                 tags=tags_list,
                 series=row['series_name'],
                 series_index=row['series_index'],
-                isbn=row['isbn'],
+                isbn=None,  # ISBN not available in newer Calibre schemas (moved to identifiers table)
                 publisher=row['publisher'],
                 pubdate=row['pubdate'],
                 timestamp=row['timestamp'],
@@ -366,7 +375,13 @@ class CalibreDB:
         filename = row['name']
         file_format = row['format'].lower()
 
-        full_path = self.library_path / book_path / f"{filename}.{file_format}"
+        # Handle both UNC paths (string) and normal paths (Path object)
+        if isinstance(self.library_path, str):
+            # UNC path - use string concatenation
+            full_path = Path(self.library_path.rstrip('\\') + '\\' + book_path + '\\' + f"{filename}.{file_format}")
+        else:
+            # Normal path - use Path operator
+            full_path = self.library_path / book_path / f"{filename}.{file_format}"
 
         if not full_path.exists():
             logger.warning(f"File not found: {full_path}")

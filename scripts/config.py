@@ -73,6 +73,17 @@ DEFAULT_EMBEDDING_MODEL = os.environ.get('DEFAULT_EMBEDDING_MODEL', 'bge-m3')
 EMBEDDING_DEVICE = os.environ.get('EMBEDDING_DEVICE', 'auto')  # auto, cuda, cpu
 
 # =============================================================================
+# ALEXANDRIA DATABASE (shared SQLite for ingest log + manifest)
+# =============================================================================
+
+# Default: .qdrant/ subfolder inside Calibre library (shared across machines)
+# Fallback: local logs/ folder if CALIBRE_LIBRARY_PATH not set
+_default_db = ''
+if CALIBRE_LIBRARY_PATH:
+    _default_db = str(Path(CALIBRE_LIBRARY_PATH) / '.qdrant' / 'alexandria.db')
+ALEXANDRIA_DB = os.environ.get('ALEXANDRIA_DB', _default_db)
+
+# =============================================================================
 # INGESTION VERSIONING
 # =============================================================================
 
@@ -139,6 +150,7 @@ def print_config():
     print(f"EMBEDDING_MODELS:     {list(EMBEDDING_MODELS.keys())}")
     print(f"DEFAULT_MODEL:        {DEFAULT_EMBEDDING_MODEL}")
     print(f"EMBEDDING_DEVICE:     {EMBEDDING_DEVICE}")
+    print(f"ALEXANDRIA_DB:        {ALEXANDRIA_DB or '(not set - using local fallback)'}")
     print(f"INGEST_VERSION:       {INGEST_VERSION}")
     print(f"OPENROUTER_API_KEY:   {'***' + OPENROUTER_API_KEY[-4:] if OPENROUTER_API_KEY else '(not set)'}")
     print("=" * 40)

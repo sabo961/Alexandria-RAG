@@ -53,6 +53,7 @@ from config import (
     DEFAULT_EMBEDDING_MODEL,
     EMBEDDING_DEVICE,
     INGEST_VERSION,
+    ALEXANDRIA_DB,
 )
 
 # Collection manifest tracking
@@ -78,7 +79,8 @@ logger = logging.getLogger(__name__)
 # INGEST PERFORMANCE LOG (SQLite)
 # ============================================================================
 
-INGEST_LOG_DB = Path(__file__).parent.parent / 'logs' / 'ingest_log.db'
+_LOCAL_FALLBACK_DB = Path(__file__).parent.parent / 'logs' / 'alexandria.db'
+INGEST_LOG_DB = Path(ALEXANDRIA_DB) if ALEXANDRIA_DB else _LOCAL_FALLBACK_DB
 _HOSTNAME = os.environ.get('COMPUTERNAME', os.environ.get('HOSTNAME', 'unknown'))
 
 def _ensure_ingest_log_schema(conn):

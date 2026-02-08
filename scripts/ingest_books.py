@@ -79,6 +79,37 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 INGEST_LOG_DB = Path(__file__).parent.parent / 'logs' / 'ingest_log.db'
+_HOSTNAME = os.environ.get('COMPUTERNAME', os.environ.get('HOSTNAME', 'unknown'))
+
+def _ensure_ingest_log_schema(conn):
+    """Create/migrate ingest_log table schema."""
+    conn.execute('''CREATE TABLE IF NOT EXISTS ingest_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        hostname TEXT,
+        book_title TEXT,
+        author TEXT,
+        language TEXT,
+        source TEXT,
+        source_id TEXT,
+        collection TEXT,
+        chunks INTEGER,
+        file_size_mb REAL,
+        duration_total REAL,
+        duration_embed REAL,
+        duration_chunk REAL,
+        duration_upload REAL,
+        chunks_per_sec REAL,
+        device TEXT,
+        model_id TEXT,
+        batch_size INTEGER,
+        success INTEGER
+    )''')
+    # Migration: add hostname column if missing (for existing DBs)
+    try:
+        conn.execute('SELECT hostname FROM ingest_log LIMIT 1')
+    except sqlite3.OperationalError:
+        conn.execute('ALTER TABLE ingest_log ADD COLUMN hostname TEXT')
 
 def _log_ingest_performance(book_title: str, author: str, language: str,
                             chunks: int, file_size_mb: float,
@@ -87,40 +118,20 @@ def _log_ingest_performance(book_title: str, author: str, language: str,
                             device: str, model_id: str, batch_size: int,
                             collection: str, success: bool,
                             source: str = '', source_id: str = ''):
-    """Log ingest job to SQLite for performance tracking."""
+    """Log ingest job to SQLite for collection-level performance tracking."""
     try:
         INGEST_LOG_DB.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(INGEST_LOG_DB))
-        conn.execute('''CREATE TABLE IF NOT EXISTS ingest_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            book_title TEXT,
-            author TEXT,
-            language TEXT,
-            source TEXT,
-            source_id TEXT,
-            collection TEXT,
-            chunks INTEGER,
-            file_size_mb REAL,
-            duration_total REAL,
-            duration_embed REAL,
-            duration_chunk REAL,
-            duration_upload REAL,
-            chunks_per_sec REAL,
-            device TEXT,
-            model_id TEXT,
-            batch_size INTEGER,
-            success INTEGER
-        )''')
+        _ensure_ingest_log_schema(conn)
         chunks_per_sec = chunks / duration_embed if duration_embed > 0 else 0
         conn.execute(
-            '''INSERT INTO ingest_log (timestamp, book_title, author, language,
-               source, source_id, collection, chunks, file_size_mb,
+            '''INSERT INTO ingest_log (timestamp, hostname, book_title, author,
+               language, source, source_id, collection, chunks, file_size_mb,
                duration_total, duration_embed, duration_chunk, duration_upload,
                chunks_per_sec, device, model_id, batch_size, success)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-            (datetime.now().isoformat(), book_title, author, language,
-             source, source_id, collection, chunks, round(file_size_mb, 3),
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (datetime.now().isoformat(), _HOSTNAME, book_title, author,
+             language, source, source_id, collection, chunks, round(file_size_mb, 3),
              round(duration_total, 2), round(duration_embed, 2),
              round(duration_chunk, 2), round(duration_upload, 2),
              round(chunks_per_sec, 2), device, model_id, batch_size,
@@ -129,7 +140,7 @@ def _log_ingest_performance(book_title: str, author: str, language: str,
         conn.commit()
         conn.close()
         logger.info(f"Performance logged: {chunks} chunks in {duration_total:.1f}s "
-                    f"({chunks_per_sec:.1f} chunks/sec, device={device})")
+                    f"({chunks_per_sec:.1f} chunks/sec, device={device}, host={_HOSTNAME})")
     except Exception as e:
         logger.warning(f"Failed to log performance (non-critical): {e}")
 

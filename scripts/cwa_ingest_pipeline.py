@@ -41,8 +41,11 @@ except ImportError:
     print("[ERROR] Cannot import gutenberg_connector")
     sys.exit(1)
 
-# CWA ingest path (configured via env or --configure)
-CWA_INGEST_PATH = os.environ.get('CWA_INGEST_PATH', '')
+# CWA ingest path - import from central config, fallback to env
+try:
+    from config import CWA_INGEST_PATH
+except ImportError:
+    CWA_INGEST_PATH = os.environ.get('CWA_INGEST_PATH', '')
 
 
 def configure_ingest_path(path: str):

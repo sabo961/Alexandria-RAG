@@ -180,11 +180,16 @@ def download_book(book_id: int, format: str = 'epub', output_dir: str = './downl
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Build filename
-    title = book.get('title', 'Unknown').replace('/', '-')[:100]
+    # Build filename (sanitize illegal characters for Windows: / : * ? " < > |)
+    def sanitize_filename(name):
+        for char in ['/', ':', '*', '?', '"', '<', '>', '|']:
+            name = name.replace(char, '-')
+        return name
+
+    title = sanitize_filename(book.get('title', 'Unknown'))[:100]
     authors = book.get('authors', [])
     author_name = authors[0]['name'] if authors else 'Unknown'
-    author_name = author_name.replace('/', '-')[:50]
+    author_name = sanitize_filename(author_name)[:50]
 
     filename = f"{title} - {author_name}.{format}"
     file_path = output_path / filename

@@ -236,17 +236,22 @@ def download_book(
         print(f"[ERROR] Could not get metadata for {identifier}")
         return None
 
-    # Extract book info
+    # Extract book info (sanitize illegal characters for Windows: / : * ? " < > |)
+    def sanitize_filename(name):
+        for char in ['/', ':', '*', '?', '"', '<', '>', '|']:
+            name = name.replace(char, '-')
+        return name
+
     meta = metadata.get('metadata', {})
     title = meta.get('title', 'Unknown')
     if isinstance(title, list):
         title = title[0]
-    title = str(title).replace('/', '-')[:100]
+    title = sanitize_filename(str(title))[:100]
 
     creator = meta.get('creator', 'Unknown')
     if isinstance(creator, list):
         creator = creator[0] if creator else 'Unknown'
-    creator = str(creator).replace('/', '-')[:50]
+    creator = sanitize_filename(str(creator))[:50]
 
     # Get download URL
     download_url = get_download_url(identifier, format)
@@ -298,6 +303,114 @@ def download_book(
     except requests.exceptions.RequestException as e:
         print(f"\n[ERROR] Download failed: {e}")
         return None
+
+
+def validate_book_quality(file_path: str, download_count: int = 0) -> Dict:
+    """
+    Validate downloaded book quality before pipeline continues.
+
+    Checks:
+    - File size (> 10KB)
+    - Text extraction (> 500 words)
+    - Scanned PDF detection (< 100 words/page average)
+    - Low download count warning (< 50)
+
+    Returns:
+        Dict with 'passed' (bool), 'warnings' (list), 'errors' (list), 'word_count' (int)
+    """
+    result = {'passed': True, 'warnings': [], 'errors': [], 'word_count': 0}
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        result['passed'] = False
+        result['errors'].append(f"File not found: {file_path}")
+        return result
+
+    # Check file size
+    file_size = file_path.stat().st_size
+    if file_size < 10 * 1024:  # < 10KB
+        result['passed'] = False
+        result['errors'].append(f"File too small ({file_size} bytes) - likely corrupt or empty")
+        return result
+
+    # Download count warning
+    if download_count > 0 and download_count < 50:
+        result['warnings'].append(f"Low download count ({download_count}) - may be low quality or obscure")
+
+    # Try text extraction
+    ext = file_path.suffix.lower()
+    word_count = 0
+    page_count = 0
+
+    try:
+        if ext == '.pdf':
+            import fitz
+            doc = fitz.open(str(file_path))
+            page_count = len(doc)
+            full_text = ""
+            for page in doc:
+                full_text += page.get_text()
+            doc.close()
+            word_count = len(full_text.split())
+
+            # Scanned PDF detection
+            if page_count > 0:
+                words_per_page = word_count / page_count
+                if words_per_page < 100:
+                    result['warnings'].append(
+                        f"Possible scanned PDF: {words_per_page:.0f} words/page "
+                        f"(avg across {page_count} pages) - OCR may be needed"
+                    )
+
+        elif ext == '.epub':
+            import ebooklib
+            from ebooklib import epub
+            from bs4 import BeautifulSoup
+            book = epub.read_epub(str(file_path))
+            full_text = ""
+            for item in book.get_items():
+                if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                    content = item.get_content().decode('utf-8', errors='ignore')
+                    soup = BeautifulSoup(content, 'html.parser')
+                    full_text += soup.get_text(separator=' ', strip=True) + " "
+            word_count = len(full_text.split())
+
+        elif ext in ['.txt', '.md', '.html', '.htm']:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                text = f.read()
+            word_count = len(text.split())
+
+        else:
+            result['warnings'].append(f"Cannot validate text for format: {ext}")
+            return result
+
+    except Exception as e:
+        result['passed'] = False
+        result['errors'].append(f"Text extraction failed: {e}")
+        return result
+
+    result['word_count'] = word_count
+
+    if word_count < 500:
+        result['passed'] = False
+        result['errors'].append(f"Too few words extracted ({word_count}) - file may be empty or unreadable")
+    elif word_count < 2000:
+        result['warnings'].append(f"Low word count ({word_count}) - may be a fragment or short text")
+
+    return result
+
+
+def print_quality_report(result: Dict):
+    """Print quality validation report."""
+    if result['passed']:
+        print(f"\n[QUALITY CHECK] PASSED ({result['word_count']:,} words extracted)")
+    else:
+        print(f"\n[QUALITY CHECK] FAILED")
+
+    for error in result['errors']:
+        print(f"  [ERROR] {error}")
+    for warning in result['warnings']:
+        print(f"  [WARN]  {warning}")
 
 
 def print_book_info(book: Dict, index: int = None):

@@ -53,6 +53,9 @@ from config import (
     INGEST_VERSION,
 )
 
+# Collection manifest tracking
+from collection_manifest import CollectionManifest
+
 # Setup logging - configurable via ALEXANDRIA_LOG_LEVEL environment variable
 # Usage: export ALEXANDRIA_LOG_LEVEL=DEBUG or ALEXANDRIA_LOG_LEVEL=INFO
 log_level_str = os.getenv('ALEXANDRIA_LOG_LEVEL', 'INFO').upper()
@@ -516,6 +519,8 @@ def upload_hierarchical_to_qdrant(
                 "section_name": chunk.get('section_name', ''),
                 "section_index": chunk.get('section_index', 0),
                 "language": chunk.get('language', 'unknown'),
+                "source": chunk.get('source', 'unknown'),
+                "source_id": chunk.get('source_id', ''),
                 "chunk_level": "parent",
                 "child_count": chunk.get('child_count', 0),
                 "token_count": chunk.get('token_count', 0),
@@ -541,6 +546,8 @@ def upload_hierarchical_to_qdrant(
                 "author": chunk.get('author', 'Unknown'),
                 "section_name": chunk.get('section_name', ''),
                 "language": chunk.get('language', 'unknown'),
+                "source": chunk.get('source', 'unknown'),
+                "source_id": chunk.get('source_id', ''),
                 "chunk_level": "child",
                 "parent_id": chunk.get('parent_id', ''),
                 "sequence_index": chunk.get('sequence_index', 0),
@@ -752,7 +759,8 @@ def ingest_book(
     min_chunk_size: int = 200,
     max_chunk_size: int = 1200,
     force_reingest: bool = False,
-    model_id: Optional[str] = None
+    model_id: Optional[str] = None,
+    source_meta: Optional[Dict] = None
 ):
     """
     Ingest a book into Qdrant with optional hierarchical chunking.
@@ -819,6 +827,11 @@ def ingest_book(
     else:
         debug_info['final_author'] = metadata.get('author')
 
+    # Merge source metadata if provided (e.g., source='gutenberg', source_id=7204)
+    if source_meta:
+        metadata['source'] = source_meta.get('source', 'unknown')
+        metadata['source_id'] = source_meta.get('source_id', '')
+
     # Log START of ingestion with title and author
     title = metadata.get('title', 'Unknown')
     author = metadata.get('author', 'Unknown')
@@ -882,6 +895,8 @@ def ingest_book(
                 'book_title': metadata.get('title', 'Unknown'),
                 'author': metadata.get('author', 'Unknown'),
                 'language': metadata.get('language', 'unknown'),
+                'source': metadata.get('source', 'unknown'),
+                'source_id': str(metadata.get('source_id', '')),
                 'section_name': chapter.get('title', f"Section {chapter.get('index', 0) + 1}"),
                 'section_index': chapter.get('index', 0),
                 'token_count': int(len(chapter_text.split()) * 1.3),
@@ -895,6 +910,8 @@ def ingest_book(
                 'book_title': metadata.get('title', 'Unknown'),
                 'author': metadata.get('author', 'Unknown'),
                 'language': metadata.get('language', 'unknown'),
+                'source': metadata.get('source', 'unknown'),
+                'source_id': str(metadata.get('source_id', '')),
             }
 
             children = chunker.chunk(chapter_text, metadata=chapter_metadata)
@@ -947,6 +964,8 @@ def ingest_book(
             'title': metadata.get('title', 'Unknown'),
             'author': metadata.get('author', 'Unknown'),
             'language': metadata.get('language', 'unknown'),
+            'source': metadata.get('source', 'unknown'),
+            'source_id': str(metadata.get('source_id', '')),
             'chunks': len(all_child_chunks),
             'parent_chunks': len(parent_chunks),
             'child_chunks': len(all_child_chunks),
@@ -995,6 +1014,8 @@ def ingest_book(
             'title': metadata.get('title', 'Unknown'),
             'author': metadata.get('author', 'Unknown'),
             'language': metadata.get('language', 'unknown'),
+            'source': metadata.get('source', 'unknown'),
+            'source_id': str(metadata.get('source_id', '')),
             'chunks': len(chunks),
             'sentences': sentence_count,
             'strategy': 'Universal Semantic',
@@ -1006,6 +1027,23 @@ def ingest_book(
         }
 
     logging.info(f"[OK] Successfully ingested '{result['title']}' ({result['file_size_mb']:.2f} MB, {result['chunks']} chunks)")
+
+    # Update collection manifest
+    try:
+        manifest = CollectionManifest(collection_name=collection_name)
+        manifest.add_book(
+            collection_name=collection_name,
+            book_path=display_path,
+            book_title=result['title'],
+            author=result['author'],
+            chunks_count=result['chunks'],
+            file_size_mb=result['file_size_mb'],
+            language=result.get('language'),
+            source=result.get('source'),
+            source_id=result.get('source_id'),
+        )
+    except Exception as e:
+        logging.warning(f"Failed to update manifest (non-critical): {e}")
 
     return result
 

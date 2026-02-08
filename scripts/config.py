@@ -3,19 +3,21 @@
 Alexandria Configuration
 ========================
 
-Central configuration for all Alexandria scripts.
-Reads from environment variables with sensible defaults.
+Central configuration loader for all Alexandria scripts.
+All values come from .env file (or environment variables).
 
 Priority:
 1. Environment variables (highest)
 2. .env file in project root
-3. Hardcoded defaults (lowest)
+3. Generic fallback defaults (lowest)
 
-Usage:
-    from config import QDRANT_HOST, CALIBRE_LIBRARY_PATH, ...
+Setup:
+    cp .env.example .env
+    # Edit .env with your values
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Find project root (where .env should be)
@@ -40,7 +42,7 @@ if ENV_FILE.exists():
 # QDRANT CONFIGURATION
 # =============================================================================
 
-QDRANT_HOST = os.environ.get('QDRANT_HOST', '192.168.0.151')
+QDRANT_HOST = os.environ.get('QDRANT_HOST', 'localhost')
 QDRANT_PORT = int(os.environ.get('QDRANT_PORT', '6333'))
 QDRANT_COLLECTION = os.environ.get('QDRANT_COLLECTION', 'alexandria')
 
@@ -48,7 +50,9 @@ QDRANT_COLLECTION = os.environ.get('QDRANT_COLLECTION', 'alexandria')
 # CALIBRE CONFIGURATION
 # =============================================================================
 
-CALIBRE_LIBRARY_PATH = os.environ.get('CALIBRE_LIBRARY_PATH', r'G:\My Drive\alexandria')
+CALIBRE_LIBRARY_PATH = os.environ.get('CALIBRE_LIBRARY_PATH', '')
+CALIBRE_WEB_URL = os.environ.get('CALIBRE_WEB_URL', '')
+CWA_INGEST_PATH = os.environ.get('CWA_INGEST_PATH', '')
 
 # =============================================================================
 # LOCAL FILE INGESTION
@@ -93,6 +97,25 @@ if not OPENROUTER_API_KEY:
             pass
 
 # =============================================================================
+# VALIDATION
+# =============================================================================
+
+_MISSING = []
+if not QDRANT_HOST or QDRANT_HOST == 'localhost':
+    pass  # localhost is a valid default for local dev
+if not CALIBRE_LIBRARY_PATH:
+    _MISSING.append('CALIBRE_LIBRARY_PATH')
+if not CWA_INGEST_PATH:
+    _MISSING.append('CWA_INGEST_PATH')
+
+if _MISSING and not any(arg in sys.argv for arg in ['--help', '-h']):
+    if not ENV_FILE.exists():
+        print(f"[WARN] No .env file found at: {ENV_FILE}")
+        print(f"       Run: cp .env.example .env  (then edit with your values)")
+    else:
+        print(f"[WARN] Missing config in .env: {', '.join(_MISSING)}")
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -105,17 +128,19 @@ def print_config():
     """Print current configuration (for debugging)."""
     print("Alexandria Configuration")
     print("=" * 40)
+    print(f"ENV_FILE:             {ENV_FILE} ({'exists' if ENV_FILE.exists() else 'NOT FOUND'})")
     print(f"QDRANT_HOST:          {QDRANT_HOST}")
     print(f"QDRANT_PORT:          {QDRANT_PORT}")
     print(f"QDRANT_COLLECTION:    {QDRANT_COLLECTION}")
-    print(f"CALIBRE_LIBRARY_PATH: {CALIBRE_LIBRARY_PATH}")
+    print(f"CALIBRE_LIBRARY_PATH: {CALIBRE_LIBRARY_PATH or '(not set)'}")
+    print(f"CALIBRE_WEB_URL:      {CALIBRE_WEB_URL or '(not set)'}")
+    print(f"CWA_INGEST_PATH:      {CWA_INGEST_PATH or '(not set)'}")
     print(f"LOCAL_INGEST_PATH:    {LOCAL_INGEST_PATH}")
     print(f"EMBEDDING_MODELS:     {list(EMBEDDING_MODELS.keys())}")
     print(f"DEFAULT_MODEL:        {DEFAULT_EMBEDDING_MODEL}")
     print(f"EMBEDDING_DEVICE:     {EMBEDDING_DEVICE}")
     print(f"INGEST_VERSION:       {INGEST_VERSION}")
     print(f"OPENROUTER_API_KEY:   {'***' + OPENROUTER_API_KEY[-4:] if OPENROUTER_API_KEY else '(not set)'}")
-    print(f"ENV_FILE:             {ENV_FILE} ({'exists' if ENV_FILE.exists() else 'not found'})")
     print("=" * 40)
 
 

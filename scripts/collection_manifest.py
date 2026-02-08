@@ -187,7 +187,9 @@ class CollectionManifest:
         file_size_mb: float,
         ingested_at: Optional[str] = None,
         file_type: Optional[str] = None,
-        language: Optional[str] = None
+        language: Optional[str] = None,
+        source: Optional[str] = None,
+        source_id: Optional[str] = None
     ):
         """Add book to manifest with metadata"""
         if collection_name not in self.manifest['collections']:
@@ -200,14 +202,21 @@ class CollectionManifest:
 
         collection = self.manifest['collections'][collection_name]
 
-        # Check if book already exists
-        existing_book = next(
-            (b for b in collection['books'] if b['file_path'] == book_path),
-            None
-        )
+        # Check if book already exists (by source+source_id if available, else by path)
+        if source and source_id:
+            existing_book = next(
+                (b for b in collection['books']
+                 if b.get('source') == source and b.get('source_id') == str(source_id)),
+                None
+            )
+        else:
+            existing_book = next(
+                (b for b in collection['books'] if b['file_path'] == book_path),
+                None
+            )
 
         if existing_book:
-            logger.warning(f"Book already in manifest: {book_path}")
+            logger.warning(f"Book already in manifest: {book_title} ({source}:{source_id})")
             return
 
         # Add book
@@ -222,6 +231,8 @@ class CollectionManifest:
             'author': author,
             'file_type': file_type,
             'language': language or 'unknown',
+            'source': source or 'unknown',
+            'source_id': str(source_id) if source_id else '',
             'chunks_count': chunks_count,
             'file_size_mb': round(file_size_mb, 2),
             'ingested_at': ingested_at or datetime.now().isoformat()
@@ -328,8 +339,13 @@ class CollectionManifest:
         host: str = 'localhost',
         port: int = 6333
     ):
-        """Sync manifest with actual Qdrant collection"""
-        logger.info(f"🔄 Syncing manifest with Qdrant collection: {collection_name}")
+        """
+        Sync manifest with actual Qdrant collection.
+
+        Scrolls ALL points (paginated), groups by book_title,
+        and adds any books missing from the manifest.
+        """
+        logger.info(f"Syncing manifest with Qdrant collection: {collection_name}")
 
         # Check connection before attempting to sync
         is_connected, error_msg = check_qdrant_connection(host, port)
@@ -345,31 +361,49 @@ class CollectionManifest:
             logger.error(f"Collection not found in Qdrant: {e}")
             return
 
-        # Sample points to get book list
-        logger.info("Sampling collection...")
-        points, _ = client.scroll(
-            collection_name=collection_name,
-            limit=1000,  # Sample up to 1000 points
-            with_payload=True,
-            with_vectors=False
-        )
+        total_points = info.points_count
+        logger.info(f"Collection has {total_points} points. Scrolling all...")
 
-        # Group by book
+        # Paginated scroll to get ALL points
         books = {}
-        for point in points:
-            payload = point.payload
-            book_title = payload.get('book_title', 'Unknown')
-            author = payload.get('author', 'Unknown')
+        offset = None
+        batch_size = 500
+        scanned = 0
 
-            if book_title not in books:
-                books[book_title] = {
-                    'title': book_title,
-                    'author': author,
-                    'chunks': 0
-                }
-            books[book_title]['chunks'] += 1
+        while True:
+            points, next_offset = client.scroll(
+                collection_name=collection_name,
+                limit=batch_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False
+            )
 
-        logger.info(f"Found {len(books)} unique books in Qdrant")
+            if not points:
+                break
+
+            for point in points:
+                payload = point.payload
+                book_title = payload.get('book_title', 'Unknown')
+                author = payload.get('author', 'Unknown')
+                language = payload.get('language', 'unknown')
+
+                if book_title not in books:
+                    books[book_title] = {
+                        'title': book_title,
+                        'author': author,
+                        'language': language,
+                        'chunks': 0
+                    }
+                books[book_title]['chunks'] += 1
+
+            scanned += len(points)
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        logger.info(f"Scanned {scanned} points, found {len(books)} unique books")
 
         # Update manifest
         if collection_name not in self.manifest['collections']:
@@ -381,16 +415,44 @@ class CollectionManifest:
             }
 
         collection = self.manifest['collections'][collection_name]
-        collection['total_chunks'] = info.points_count
+        collection['total_chunks'] = total_points
 
-        # Sync books (basic - without file paths)
-        logger.info("⚠️  Note: Synced data doesn't include file paths")
-        logger.info("For complete manifest, use batch_ingest.py which logs automatically")
+        # Add books not already in manifest
+        existing_titles = {b['book_title'] for b in collection['books']}
+        added = 0
+
+        for book_title, book_data in books.items():
+            if book_title not in existing_titles:
+                book_entry = {
+                    'file_path': '(synced from qdrant)',
+                    'file_name': '(synced from qdrant)',
+                    'book_title': book_title,
+                    'author': book_data['author'],
+                    'file_type': 'unknown',
+                    'language': book_data['language'],
+                    'chunks_count': book_data['chunks'],
+                    'file_size_mb': 0.0,
+                    'ingested_at': '(synced)'
+                }
+                collection['books'].append(book_entry)
+                added += 1
+            else:
+                # Update chunk count for existing entries
+                for b in collection['books']:
+                    if b['book_title'] == book_title:
+                        b['chunks_count'] = book_data['chunks']
+                        break
 
         logger.info("")
-        logger.info("Books found in Qdrant:")
-        for book_title, book_data in books.items():
-            logger.info(f"  - {book_title} ({book_data['chunks']} chunks)")
+        logger.info("Books in Qdrant:")
+        for book_title, book_data in sorted(books.items()):
+            lang = book_data['language']
+            logger.info(f"  - {book_title} by {book_data['author']} [{lang}] ({book_data['chunks']} chunks)")
+
+        if added > 0:
+            logger.info(f"\nAdded {added} new books to manifest from Qdrant")
+        else:
+            logger.info(f"\nManifest already up to date")
 
         self.save_manifest()
 
@@ -453,7 +515,8 @@ def main():
 
     args = parser.parse_args()
 
-    manifest = CollectionManifest()
+    # Use collection-specific manifest file when collection name is provided
+    manifest = CollectionManifest(collection_name=args.collection)
 
     if args.command == 'list':
         manifest.list_collections()

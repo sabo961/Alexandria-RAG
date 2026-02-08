@@ -27,7 +27,7 @@ from dataclasses import dataclass
 # EPUB parsing
 import ebooklib
 from ebooklib import epub
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 
 # PDF parsing
 import fitz  # PyMuPDF
@@ -194,68 +194,86 @@ def extract_from_ncx(book: epub.EpubBook) -> List[Chapter]:
         if not nav_info:
             return []
 
-        # Check if all nav points reference the same file (single-file EPUB with fragments)
-        unique_hrefs = set(n['href'] for n in nav_info)
+        # Group nav points by base href to handle both single-file and
+        # multi-file EPUBs with per-file fragment extraction.
+        href_groups = {}
+        for i, nav in enumerate(nav_info):
+            href = nav['href']
+            if href not in href_groups:
+                href_groups[href] = []
+            href_groups[href].append((i, nav))
 
-        if len(unique_hrefs) == 1 and nav_info[0]['fragment']:
-            # Single-file EPUB with fragments - extract text between anchors
-            base_href = nav_info[0]['href']
-            if base_href not in href_data:
-                return []
+        for href, nav_list in href_groups.items():
+            if href not in href_data:
+                continue
 
-            file_soup = href_data[base_href]
+            file_soup = href_data[href]
+            has_fragments = any(nav['fragment'] for _, nav in nav_list)
 
-            for i, nav in enumerate(nav_info):
-                fragment_id = nav['fragment']
-                title = nav['title']
-
-                # Find the anchor element
-                anchor = file_soup.find(id=fragment_id) if fragment_id else None
-
-                if anchor:
-                    # Extract text from this anchor until next anchor or end
-                    # Find all siblings and content until next chapter
-                    chapter_text_parts = []
-
-                    # Get text from the anchor element itself
-                    chapter_text_parts.append(anchor.get_text(separator='\n', strip=True))
-
-                    # Get text from siblings until next anchor
-                    for sibling in anchor.find_next_siblings():
-                        # Stop if we hit the next chapter anchor
-                        if sibling.get('id') and i + 1 < len(nav_info):
-                            next_fragment = nav_info[i + 1]['fragment']
-                            if sibling.get('id') == next_fragment:
-                                break
-                        chapter_text_parts.append(sibling.get_text(separator='\n', strip=True))
-
-                    chapter_text = '\n'.join(chapter_text_parts)
-                else:
-                    # No anchor found, skip or use fallback
-                    chapter_text = ''
-
+            if len(nav_list) == 1 and not has_fragments:
+                # Single nav point, no fragment → full file text
+                idx, nav = nav_list[0]
+                chapter_text = file_soup.get_text(separator='\n', strip=True)
                 if chapter_text.strip():
                     chapters.append(Chapter(
-                        title=title,
-                        text=chapter_text,
-                        index=i,
-                        detection_method="epub_ncx_fragments"
+                        title=nav['title'], text=chapter_text,
+                        index=idx, detection_method="epub_ncx"
                     ))
-        else:
-            # Multi-file EPUB - each nav point references a different file
-            for i, nav in enumerate(nav_info):
-                href = nav['href']
-                title = nav['title']
+            elif not has_fragments:
+                # Multiple nav points without fragments → deduplicate to one
+                idx, nav = nav_list[0]
+                chapter_text = file_soup.get_text(separator='\n', strip=True)
+                if chapter_text.strip():
+                    chapters.append(Chapter(
+                        title=nav['title'], text=chapter_text,
+                        index=idx, detection_method="epub_ncx"
+                    ))
+            else:
+                # Fragment-based: extract text between anchors within this file
+                # Collect fragment IDs for this file's nav points
+                file_frag_ids = [nav['fragment'] for _, nav in nav_list if nav['fragment']]
 
-                if href in href_data:
-                    chapter_text = href_data[href].get_text(separator='\n', strip=True)
+                for j, (idx, nav) in enumerate(nav_list):
+                    fragment_id = nav['fragment']
+                    if not fragment_id:
+                        continue
+
+                    anchor = file_soup.find(id=fragment_id)
+                    if not anchor:
+                        continue
+
+                    # Stop IDs: later fragments within THIS file
+                    later_ids = set()
+                    for k in range(j + 1, len(nav_list)):
+                        fid = nav_list[k][1]['fragment']
+                        if fid:
+                            later_ids.add(fid)
+
+                    # Walk document in order from anchor, collecting text nodes
+                    chapter_text_parts = []
+                    current = anchor
+                    while current is not None:
+                        if current is not anchor and later_ids:
+                            eid = current.get('id') if hasattr(current, 'get') else None
+                            if eid in later_ids:
+                                break
+
+                        if isinstance(current, NavigableString):
+                            text = current.strip()
+                            if text:
+                                chapter_text_parts.append(text)
+
+                        current = current.next_element
+
+                    chapter_text = '\n'.join(chapter_text_parts)
                     if chapter_text.strip():
                         chapters.append(Chapter(
-                            title=title,
-                            text=chapter_text,
-                            index=i,
-                            detection_method="epub_ncx"
+                            title=nav['title'], text=chapter_text,
+                            index=idx, detection_method="epub_ncx_fragments"
                         ))
+
+        # Sort by original nav index to preserve document order
+        chapters.sort(key=lambda ch: ch.index)
 
     except Exception as e:
         logger.debug(f"NCX extraction failed: {e}")

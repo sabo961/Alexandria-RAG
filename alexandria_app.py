@@ -21,7 +21,7 @@ if str(scripts_root) not in sys.path:
 
 from config import (
     QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION,
-    CALIBRE_LIBRARY_PATH, OPENROUTER_API_KEY
+    CALIBRE_LIBRARY_PATH, OPENROUTER_API_KEY, ALEXANDRIA_DB
 )
 from qdrant_utils import check_qdrant_connection, list_collections
 from calibre_db import CalibreDB
@@ -331,21 +331,62 @@ with st.expander("📖 Ingested Books (Qdrant)", expanded=False):
     if not qdrant_ok:
         st.error("Qdrant not connected")
     else:
-        # Collection selector
-        stats = get_collection_stats()
-        if "error" not in stats:
-            collections = list(stats.keys())
-            selected_coll = st.selectbox("Collection", collections, key="ingested_coll")
+        # Show only collections that have books in the manifest
+        try:
+            manifest_browser = CollectionManifest()
+            manifest_collections = manifest_browser.list_collection_names()
+        except Exception:
+            manifest_collections = []
 
-            # Load manifest for selected collection
-            manifest_data = load_manifest(selected_coll)
+        if not manifest_collections:
+            manifest_collections = [QDRANT_COLLECTION]
 
-            if manifest_data and manifest_data.get('books'):
-                # Use manifest data (has more metadata like ingest date)
-                st.metric("Total Chunks", f"{manifest_data.get('total_chunks', 0):,}")
-                st.caption("📋 Source: Manifest")
+        if len(manifest_collections) == 1:
+            selected_coll = manifest_collections[0]
+        else:
+            default_idx = manifest_collections.index(QDRANT_COLLECTION) if QDRANT_COLLECTION in manifest_collections else 0
+            selected_coll = st.selectbox("Collection", manifest_collections, index=default_idx, key="ingested_coll")
 
-                books_data = manifest_data.get('books', [])
+        # Load manifest for collection
+        manifest_data = load_manifest(selected_coll)
+
+        if manifest_data and manifest_data.get('books'):
+            st.metric("Total Chunks", f"{manifest_data.get('total_chunks', 0):,}")
+            st.caption(f"📋 Collection: {selected_coll} | Source: SQLite manifest")
+
+            books_data = manifest_data.get('books', [])
+            import pandas as pd
+
+            def _fmt_source(b):
+                src = b.get('source', '') or ''
+                sid = b.get('source_id', '') or ''
+                if not src or src == 'unknown':
+                    return ''
+                return f"{src} #{sid}" if sid else src
+
+            df = pd.DataFrame([
+                {
+                    "Title": b.get('book_title', 'Unknown'),
+                    "Author": b.get('author', 'Unknown'),
+                    "Language": b.get('language', '?'),
+                    "Chunks": b.get('chunks_count', 0),
+                    "Source": _fmt_source(b),
+                    "Ingested": b.get('ingested_at', '')[:10]
+                }
+                for b in books_data
+            ])
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            # Fallback: Query Qdrant directly
+            st.caption(f"📋 Collection: {selected_coll} | Source: Qdrant (no manifest)")
+
+            with st.spinner("Scanning collection..."):
+                books_data = get_books_from_qdrant(selected_coll)
+
+            if books_data:
+                total_chunks = sum(b['chunks_count'] for b in books_data)
+                st.metric("Total Chunks", f"{total_chunks:,}")
+
                 import pandas as pd
                 df = pd.DataFrame([
                     {
@@ -353,40 +394,66 @@ with st.expander("📖 Ingested Books (Qdrant)", expanded=False):
                         "Author": b.get('author', 'Unknown'),
                         "Chunks": b.get('chunks_count', 0),
                         "Language": b.get('language', '?'),
-                        "Ingested": b.get('ingested_at', '')[:10]
                     }
                     for b in books_data
                 ])
                 st.dataframe(df, use_container_width=True, hide_index=True)
             else:
-                # Fallback: Query Qdrant directly
-                st.caption("📋 Source: Qdrant (no manifest)")
-
-                with st.spinner("Scanning collection..."):
-                    books_data = get_books_from_qdrant(selected_coll)
-
-                if books_data:
-                    total_chunks = sum(b['chunks_count'] for b in books_data)
-                    st.metric("Total Chunks", f"{total_chunks:,}")
-
-                    import pandas as pd
-                    df = pd.DataFrame([
-                        {
-                            "Title": b.get('book_title', 'Unknown'),
-                            "Author": b.get('author', 'Unknown'),
-                            "Chunks": b.get('chunks_count', 0),
-                            "Language": b.get('language', '?'),
-                        }
-                        for b in books_data
-                    ])
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Collection is empty or could not be read.")
-        else:
-            st.error("Could not load collections")
+                st.info("Collection is empty or could not be read.")
 
 # =============================================================================
-# SECTION 3: Speaker's Corner
+# SECTION 3: Ingest Log
+# =============================================================================
+with st.expander("📊 Ingest Log", expanded=False):
+    try:
+        import sqlite3
+        from pathlib import Path
+
+        db_path = ALEXANDRIA_DB if ALEXANDRIA_DB else str(Path(__file__).parent / 'logs' / 'alexandria.db')
+        log_collection = selected_coll if 'selected_coll' in dir() else QDRANT_COLLECTION
+
+        if Path(db_path).exists():
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                '''SELECT timestamp, hostname, book_title, author, language,
+                          chunks, duration_total, duration_embed, chunks_per_sec,
+                          device, collection, success
+                   FROM ingest_log WHERE collection=?
+                   ORDER BY timestamp DESC LIMIT 50''',
+                (log_collection,)
+            ).fetchall()
+            conn.close()
+
+            if rows:
+                import pandas as pd
+                df = pd.DataFrame([
+                    {
+                        "Date": r['timestamp'][:16].replace('T', ' '),
+                        "Host": r['hostname'] or '?',
+                        "Book": r['book_title'] or '?',
+                        "Author": r['author'] or '?',
+                        "Lang": r['language'] or '?',
+                        "Chunks": r['chunks'],
+                        "Total (s)": round(r['duration_total'], 1) if r['duration_total'] else 0,
+                        "Embed (s)": round(r['duration_embed'], 1) if r['duration_embed'] else 0,
+                        "Ch/sec": round(r['chunks_per_sec'], 1) if r['chunks_per_sec'] else 0,
+                        "Device": r['device'] or '?',
+                        "OK": "yes" if r['success'] else "no",
+                    }
+                    for r in rows
+                ])
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.caption(f"Collection: {log_collection} | Last {len(rows)} jobs")
+            else:
+                st.info(f"No ingest jobs for '{log_collection}'.")
+        else:
+            st.info(f"Database not found: {db_path}")
+    except Exception as e:
+        st.error(f"Could not load ingest log: {e}")
+
+# =============================================================================
+# SECTION 4: Speaker's Corner
 # =============================================================================
 with st.expander("🗣️ Speaker's Corner", expanded=True):
     if not qdrant_ok:

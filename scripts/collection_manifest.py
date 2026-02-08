@@ -198,6 +198,15 @@ class CollectionManifest:
         logger.info("")
         logger.info("=" * 80)
 
+    def list_collection_names(self) -> List[str]:
+        """Return list of collection names that have books in manifest."""
+        conn = _get_connection()
+        rows = conn.execute(
+            'SELECT DISTINCT collection FROM books ORDER BY collection'
+        ).fetchall()
+        conn.close()
+        return [r['collection'] for r in rows]
+
     def list_collections(self):
         """List all collections."""
         conn = _get_connection()

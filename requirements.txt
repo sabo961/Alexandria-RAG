@@ -27,7 +27,7 @@ PyMuPDF>=1.24.0
 
 # HTML Parsing (for EPUB content extraction)
 beautifulsoup4==4.12.2
-lxml==4.9.3
+lxml>=4.9.3
 
 # Optional: MOBI support (requires additional setup)
 # mobi==0.3.3

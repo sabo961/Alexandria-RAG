@@ -16,6 +16,8 @@ os.environ['TQDM_DISABLE'] = '1'
 
 import argparse
 import uuid
+import time
+import sqlite3
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
@@ -56,6 +58,11 @@ from config import (
 # Collection manifest tracking
 from collection_manifest import CollectionManifest
 
+# GPU Optimization: TF32 for faster matmul on Ampere+ GPUs
+import torch
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+
 # Setup logging - configurable via ALEXANDRIA_LOG_LEVEL environment variable
 # Usage: export ALEXANDRIA_LOG_LEVEL=DEBUG or ALEXANDRIA_LOG_LEVEL=INFO
 log_level_str = os.getenv('ALEXANDRIA_LOG_LEVEL', 'INFO').upper()
@@ -66,6 +73,65 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# INGEST PERFORMANCE LOG (SQLite)
+# ============================================================================
+
+INGEST_LOG_DB = Path(__file__).parent.parent / 'logs' / 'ingest_log.db'
+
+def _log_ingest_performance(book_title: str, author: str, language: str,
+                            chunks: int, file_size_mb: float,
+                            duration_total: float, duration_embed: float,
+                            duration_chunk: float, duration_upload: float,
+                            device: str, model_id: str, batch_size: int,
+                            collection: str, success: bool,
+                            source: str = '', source_id: str = ''):
+    """Log ingest job to SQLite for performance tracking."""
+    try:
+        INGEST_LOG_DB.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(INGEST_LOG_DB))
+        conn.execute('''CREATE TABLE IF NOT EXISTS ingest_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            book_title TEXT,
+            author TEXT,
+            language TEXT,
+            source TEXT,
+            source_id TEXT,
+            collection TEXT,
+            chunks INTEGER,
+            file_size_mb REAL,
+            duration_total REAL,
+            duration_embed REAL,
+            duration_chunk REAL,
+            duration_upload REAL,
+            chunks_per_sec REAL,
+            device TEXT,
+            model_id TEXT,
+            batch_size INTEGER,
+            success INTEGER
+        )''')
+        chunks_per_sec = chunks / duration_embed if duration_embed > 0 else 0
+        conn.execute(
+            '''INSERT INTO ingest_log (timestamp, book_title, author, language,
+               source, source_id, collection, chunks, file_size_mb,
+               duration_total, duration_embed, duration_chunk, duration_upload,
+               chunks_per_sec, device, model_id, batch_size, success)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (datetime.now().isoformat(), book_title, author, language,
+             source, source_id, collection, chunks, round(file_size_mb, 3),
+             round(duration_total, 2), round(duration_embed, 2),
+             round(duration_chunk, 2), round(duration_upload, 2),
+             round(chunks_per_sec, 2), device, model_id, batch_size,
+             1 if success else 0)
+        )
+        conn.commit()
+        conn.close()
+        logger.info(f"Performance logged: {chunks} chunks in {duration_total:.1f}s "
+                    f"({chunks_per_sec:.1f} chunks/sec, device={device})")
+    except Exception as e:
+        logger.warning(f"Failed to log performance (non-critical): {e}")
 
 # Lazy load Calibre DB (uses CALIBRE_LIBRARY_PATH from config)
 calibre_db_instance = None
@@ -295,12 +361,26 @@ class EmbeddingGenerator:
         model = self.get_model(model_id)
         # Disable ALL progress bars to avoid sys.stderr issues in Streamlit environment
         # tqdm progress bar causes [Errno 22] when sys.stderr is not available
-        embeddings = model.encode(
-            texts,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=False
-        )
+        batch_size = 64 if model.device.type == 'cuda' else 32
+
+        # Use automatic mixed precision on GPU for faster inference
+        if model.device.type == 'cuda':
+            with torch.amp.autocast('cuda'):
+                embeddings = model.encode(
+                    texts,
+                    batch_size=batch_size,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=False
+                )
+        else:
+            embeddings = model.encode(
+                texts,
+                batch_size=batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+                normalize_embeddings=False
+            )
 
         logger.debug(f"Generated {len(texts)} embeddings of dimension {embeddings.shape[1]}")
 
@@ -863,6 +943,10 @@ def ingest_book(
     # Calculate rough sentence count for stats
     sentence_count = len(text.split('. '))
 
+    # Timing
+    t_start = time.time()
+    t_chunk_start = time.time()
+
     if hierarchical:
         # ========================================
         # HIERARCHICAL CHUNKING (parent + child)
@@ -933,22 +1017,28 @@ def ingest_book(
             return {'success': False, 'error': 'No chunks created'}
 
         logging.info(f"Created {len(parent_chunks)} parent chunks, {len(all_child_chunks)} child chunks")
+        t_chunk_end = time.time()
 
         # 3. Generate embeddings
+        t_embed_start = time.time()
         parent_texts = [p['text'] for p in parent_chunks]
         child_texts = [c['text'] for c in all_child_chunks]
 
         logging.debug(f"Generating embeddings for {len(parent_texts)} parents and {len(child_texts)} children")
         parent_embeddings = generate_embeddings(parent_texts, model_id=effective_model_id)
         child_embeddings = generate_embeddings(child_texts, model_id=effective_model_id)
+        t_embed_end = time.time()
 
         # 4. Upload hierarchically (with model metadata)
+        t_upload_start = time.time()
         upload_result = upload_hierarchical_to_qdrant(
             parent_chunks, parent_embeddings,
             all_child_chunks, child_embeddings,
             collection_name, qdrant_host, qdrant_port,
             model_id=effective_model_id
         )
+
+        t_upload_end = time.time()
 
         if not upload_result.get('success'):
             logging.error(f"Hierarchical upload failed: {upload_result.get('error')}")
@@ -992,13 +1082,19 @@ def ingest_book(
             return {'success': False, 'error': 'No chunks created'}
 
         logging.debug(f"Chunks created: {len(chunks)} chunks from {len(text)} characters")
+        t_chunk_end = time.time()
 
         # Embed & Upload (legacy, with model metadata)
+        t_embed_start = time.time()
         embeddings = generate_embeddings([c['text'] for c in chunks], model_id=effective_model_id)
+        t_embed_end = time.time()
+
+        t_upload_start = time.time()
         upload_result = upload_to_qdrant(
             chunks, embeddings, collection_name, qdrant_host, qdrant_port,
             model_id=effective_model_id
         )
+        t_upload_end = time.time()
 
         if not upload_result.get('success'):
             logging.error(f"Upload to Qdrant failed: {upload_result.get('error')}")
@@ -1044,6 +1140,29 @@ def ingest_book(
         )
     except Exception as e:
         logging.warning(f"Failed to update manifest (non-critical): {e}")
+
+    # Log performance to SQLite
+    t_end = time.time()
+    _device = EmbeddingGenerator().get_model(effective_model_id).device.type
+    _batch = 64 if _device == 'cuda' else 32
+    _log_ingest_performance(
+        book_title=result.get('title', ''),
+        author=result.get('author', ''),
+        language=result.get('language', ''),
+        chunks=result.get('chunks', 0),
+        file_size_mb=result.get('file_size_mb', 0),
+        duration_total=t_end - t_start,
+        duration_embed=t_embed_end - t_embed_start,
+        duration_chunk=t_chunk_end - t_chunk_start,
+        duration_upload=t_upload_end - t_upload_start,
+        device=_device,
+        model_id=effective_model_id,
+        batch_size=_batch,
+        collection=collection_name,
+        success=result.get('success', False),
+        source=result.get('source', ''),
+        source_id=result.get('source_id', ''),
+    )
 
     return result
 

@@ -74,12 +74,18 @@ def load_calibre_books():
 
 @st.cache_data(ttl=60)
 def load_manifest(collection_name: str):
-    """Load manifest for collection."""
+    """Load manifest for collection from SQLite."""
     try:
         manifest = CollectionManifest(collection_name=collection_name)
-        if collection_name in manifest.manifest.get('collections', {}):
-            return manifest.manifest['collections'][collection_name]
-        return None
+        books = manifest.get_books(collection_name)
+        if not books:
+            return None
+        summary = manifest.get_summary(collection_name)
+        return {
+            'books': books,
+            'total_chunks': summary.get('total_chunks', 0),
+            'total_size_mb': summary.get('total_size_mb', 0),
+        }
     except Exception:
         return None
 

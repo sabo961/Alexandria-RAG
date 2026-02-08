@@ -14,9 +14,9 @@ venv/
 ENV/
 env/
 
-# Logs
+# Logs (all runtime data - SQLite manifest lives on NAS via ALEXANDRIA_DB)
 logs/*.json
-!logs/*_manifest.json
+logs/*.csv
 logs/*.log
 logs/*.db
 *.log

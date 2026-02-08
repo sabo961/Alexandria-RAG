@@ -1,25 +1,17 @@
 """
-Alexandria Collection Manifest Tool
+Alexandria Collection Manifest (SQLite)
 
-Maintain a manifest of what's been ingested into each collection.
-Provides quick overview of collection contents without querying Qdrant.
+Tracks what's been ingested into each Qdrant collection.
+Stored in shared SQLite database (ALEXANDRIA_DB) alongside ingest_log.
 
 Usage:
-    # Show manifest for collection
     python collection_manifest.py show alexandria
-
-    # Show all collections
     python collection_manifest.py list
-
-    # Export manifest to file
-    python collection_manifest.py export alexandria --output ../logs/alexandria_manifest.json
-
-    # Sync manifest with actual Qdrant collection
     python collection_manifest.py sync alexandria
 """
 
 import argparse
-import json
+import sqlite3
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -27,7 +19,7 @@ from datetime import datetime
 
 from qdrant_client import QdrantClient
 from qdrant_utils import check_qdrant_connection
-from config import QDRANT_HOST, QDRANT_PORT
+from config import QDRANT_HOST, QDRANT_PORT, ALEXANDRIA_DB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,147 +27,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Fallback DB path if ALEXANDRIA_DB not configured
+_LOCAL_FALLBACK_DB = str(Path(__file__).parent.parent / 'logs' / 'alexandria.db')
+
+
+def _get_db_path() -> str:
+    return ALEXANDRIA_DB if ALEXANDRIA_DB else _LOCAL_FALLBACK_DB
+
+
+def _get_connection() -> sqlite3.Connection:
+    """Get SQLite connection with schema ensured."""
+    db_path = _get_db_path()
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute('''CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection TEXT NOT NULL,
+        book_title TEXT NOT NULL,
+        author TEXT DEFAULT 'Unknown',
+        language TEXT DEFAULT 'unknown',
+        source TEXT DEFAULT 'unknown',
+        source_id TEXT DEFAULT '',
+        file_path TEXT DEFAULT '',
+        file_name TEXT DEFAULT '',
+        file_type TEXT DEFAULT '',
+        chunks_count INTEGER DEFAULT 0,
+        file_size_mb REAL DEFAULT 0.0,
+        ingested_at TEXT NOT NULL
+    )''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_books_collection
+                    ON books(collection)''')
+    conn.execute('''CREATE INDEX IF NOT EXISTS idx_books_title
+                    ON books(collection, book_title)''')
+    return conn
+
 
 class CollectionManifest:
-    """Manage collection manifests"""
+    """Manage collection manifests in shared SQLite database."""
 
-    def __init__(self, manifest_file: str = '../logs/collection_manifest.json', collection_name: Optional[str] = None):
+    def __init__(self, manifest_file: str = None, collection_name: Optional[str] = None):
         """
         Initialize CollectionManifest.
 
         Args:
-            manifest_file: Path to global manifest (for backward compatibility)
-            collection_name: If provided, use collection-specific manifest file
+            manifest_file: Ignored (kept for backward compatibility)
+            collection_name: Collection name (used for scoped operations)
         """
-        # Support collection-specific manifest files
-        if collection_name:
-            # Detect logs directory (works from both GUI and scripts)
-            logs_dir = Path(__file__).parent.parent / 'logs'
-            if not logs_dir.exists():
-                # Fallback for CLI usage from scripts directory
-                logs_dir = Path('../logs')
-
-            self.manifest_file = logs_dir / f'{collection_name}_manifest.json'
-            self.progress_file = Path(f'batch_ingest_progress_{collection_name}.json')
-        else:
-            self.manifest_file = Path(manifest_file)
-            self.progress_file = Path('batch_ingest_progress.json')
-
-        self.manifest_file.parent.mkdir(parents=True, exist_ok=True)
         self.collection_name = collection_name
-        self.manifest = self._load_manifest()
-
-    def _load_manifest(self) -> Dict:
-        """Load manifest from file"""
-        if self.manifest_file.exists():
-            with open(self.manifest_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {
-            'created_at': datetime.now().isoformat(),
-            'last_updated': datetime.now().isoformat(),
-            'collections': {}
-        }
-
-    def verify_collection_exists(self, collection_name: str, qdrant_host: str = QDRANT_HOST, qdrant_port: int = QDRANT_PORT) -> bool:
-        """
-        Verify collection exists in Qdrant. If not, reset manifest for this collection.
-
-        Args:
-            collection_name: Name of collection to verify
-            qdrant_host: Qdrant server host
-            qdrant_port: Qdrant server port
-
-        Returns:
-            True if collection exists, False if it was deleted (and manifest reset)
-        """
-        # Check connection before attempting to verify collection
-        is_connected, error_msg = check_qdrant_connection(qdrant_host, qdrant_port)
-        if not is_connected:
-            logger.error(error_msg)
-            return False
-
-        try:
-            client = QdrantClient(host=qdrant_host, port=qdrant_port)
-            collections = [c.name for c in client.get_collections().collections]
-
-            if collection_name not in collections:
-                # Collection was deleted - reset manifest
-                if collection_name in self.manifest['collections']:
-                    logger.warning(f"⚠️  Collection '{collection_name}' not found in Qdrant - resetting manifest")
-                    del self.manifest['collections'][collection_name]
-                    self.save_manifest()
-
-                    # Reset progress file if exists
-                    if self.progress_file.exists():
-                        self.progress_file.unlink()
-                        logger.info(f"🗑️  Deleted progress file: {self.progress_file}")
-
-                return False
-
-            return True
-        except Exception as e:
-            logger.error(f"❌ Error verifying collection: {e}")
-            return False
-
-    def save_manifest(self):
-        """Save manifest to file (both JSON and CSV)"""
-        self.manifest['last_updated'] = datetime.now().isoformat()
-
-        # Save JSON
-        with open(self.manifest_file, 'w', encoding='utf-8') as f:
-            json.dump(self.manifest, f, indent=2, ensure_ascii=False)
-
-        # Save CSV (human-readable)
-        csv_file = self.manifest_file.with_suffix('.csv')
-        self._export_csv(csv_file)
-
-        logger.info(f"✅ Manifest saved to: {self.manifest_file}")
-        logger.info(f"✅ CSV export saved to: {csv_file}")
-
-    def _export_csv(self, csv_file: Path):
-        """Export manifest to CSV format"""
-        import csv
-
-        with open(csv_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-
-            # Header
-            writer.writerow([
-                'Collection', 'Book Title', 'Author', 'Language', 'File Type',
-                'Chunks', 'Size (MB)', 'File Name', 'Ingested At'
-            ])
-
-            # Data rows
-            for collection_name, collection in self.manifest['collections'].items():
-                for book in collection['books']:
-                    # Extract file type from filename or use stored value
-                    file_type = book.get('file_type')
-                    if not file_type:
-                        # Fallback: extract from filename
-                        file_type = Path(book['file_name']).suffix.upper().replace('.', '')
-
-                    # Get language (with fallback for old manifests)
-                    language = book.get('language', 'unknown')
-
-                    writer.writerow([
-                        collection_name,
-                        book['book_title'],
-                        book['author'],
-                        language,
-                        file_type,
-                        book['chunks_count'],
-                        book['file_size_mb'],
-                        book['file_name'],
-                        book['ingested_at'][:10]  # Just date, not time
-                    ])
-
-            # Summary row
-            writer.writerow([])
-            writer.writerow(['TOTAL', '', '', '', '',
-                           sum(c['total_chunks'] for c in self.manifest['collections'].values()),
-                           sum(c['total_size_mb'] for c in self.manifest['collections'].values()),
-                           '', ''])
-
 
     def add_book(
         self,
@@ -191,163 +90,157 @@ class CollectionManifest:
         source: Optional[str] = None,
         source_id: Optional[str] = None
     ):
-        """Add book to manifest with metadata"""
-        if collection_name not in self.manifest['collections']:
-            self.manifest['collections'][collection_name] = {
-                'created_at': datetime.now().isoformat(),
-                'books': [],
-                'total_chunks': 0,
-                'total_size_mb': 0.0
-            }
+        """Add book to manifest."""
+        conn = _get_connection()
 
-        collection = self.manifest['collections'][collection_name]
-
-        # Check if book already exists (by source+source_id if available, else by path)
+        # Check duplicate by source+source_id or by title
         if source and source_id:
-            existing_book = next(
-                (b for b in collection['books']
-                 if b.get('source') == source and b.get('source_id') == str(source_id)),
-                None
-            )
+            existing = conn.execute(
+                'SELECT id FROM books WHERE collection=? AND source=? AND source_id=?',
+                (collection_name, source, str(source_id))
+            ).fetchone()
         else:
-            existing_book = next(
-                (b for b in collection['books'] if b['file_path'] == book_path),
-                None
-            )
+            existing = conn.execute(
+                'SELECT id FROM books WHERE collection=? AND book_title=?',
+                (collection_name, book_title)
+            ).fetchone()
 
-        if existing_book:
+        if existing:
             logger.warning(f"Book already in manifest: {book_title} ({source}:{source_id})")
+            conn.close()
             return
 
-        # Add book
-        # Auto-detect file type if not provided
         if not file_type:
             file_type = Path(book_path).suffix.upper().replace('.', '')
 
-        book_entry = {
-            'file_path': book_path,
-            'file_name': Path(book_path).name,
-            'book_title': book_title,
-            'author': author,
-            'file_type': file_type,
-            'language': language or 'unknown',
-            'source': source or 'unknown',
-            'source_id': str(source_id) if source_id else '',
-            'chunks_count': chunks_count,
-            'file_size_mb': round(file_size_mb, 2),
-            'ingested_at': ingested_at or datetime.now().isoformat()
-        }
-
-        collection['books'].append(book_entry)
-        collection['total_chunks'] += chunks_count
-        collection['total_size_mb'] += file_size_mb
-
-        self.save_manifest()
-        logger.info(f"✅ Added to manifest: {book_title} ({chunks_count} chunks)")
-
-    def remove_book(self, collection_name: str, book_path: str):
-        """Remove book from manifest"""
-        if collection_name not in self.manifest['collections']:
-            logger.error(f"Collection not found: {collection_name}")
-            return
-
-        collection = self.manifest['collections'][collection_name]
-
-        book = next(
-            (b for b in collection['books'] if b['file_path'] == book_path),
-            None
+        conn.execute(
+            '''INSERT INTO books (collection, book_title, author, language,
+               source, source_id, file_path, file_name, file_type,
+               chunks_count, file_size_mb, ingested_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (collection_name, book_title, author or 'Unknown',
+             language or 'unknown', source or 'unknown',
+             str(source_id) if source_id else '',
+             book_path, Path(book_path).name, file_type,
+             chunks_count, round(file_size_mb, 2),
+             ingested_at or datetime.now().isoformat())
         )
+        conn.commit()
+        conn.close()
+        logger.info(f"Added to manifest: {book_title} ({chunks_count} chunks)")
 
-        if not book:
-            logger.error(f"Book not found: {book_path}")
-            return
+    def remove_book(self, collection_name: str, book_title: str):
+        """Remove book from manifest by title."""
+        conn = _get_connection()
+        cursor = conn.execute(
+            'DELETE FROM books WHERE collection=? AND book_title=?',
+            (collection_name, book_title)
+        )
+        conn.commit()
+        if cursor.rowcount > 0:
+            logger.info(f"Removed from manifest: {book_title}")
+        else:
+            logger.error(f"Book not found: {book_title}")
+        conn.close()
 
-        collection['books'].remove(book)
-        collection['total_chunks'] -= book['chunks_count']
-        collection['total_size_mb'] -= book['file_size_mb']
+    def get_books(self, collection_name: str) -> List[Dict]:
+        """Get all books for a collection."""
+        conn = _get_connection()
+        rows = conn.execute(
+            'SELECT * FROM books WHERE collection=? ORDER BY ingested_at',
+            (collection_name,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
-        self.save_manifest()
-        logger.info(f"✅ Removed from manifest: {book['book_title']}")
+    def get_summary(self, collection_name: str) -> Dict:
+        """Get collection summary (total books, chunks, size)."""
+        conn = _get_connection()
+        row = conn.execute(
+            '''SELECT COUNT(*) as book_count,
+                      COALESCE(SUM(chunks_count), 0) as total_chunks,
+                      COALESCE(SUM(file_size_mb), 0) as total_size_mb
+               FROM books WHERE collection=?''',
+            (collection_name,)
+        ).fetchone()
+        conn.close()
+        return dict(row)
 
     def show_collection(self, collection_name: str):
-        """Display collection contents"""
-        if collection_name not in self.manifest['collections']:
-            logger.error(f"Collection not found: {collection_name}")
-            return
-
-        collection = self.manifest['collections'][collection_name]
+        """Display collection contents."""
+        summary = self.get_summary(collection_name)
+        books = self.get_books(collection_name)
 
         logger.info("")
         logger.info("=" * 80)
-        logger.info(f"📚 Collection: {collection_name}")
+        logger.info(f"Collection: {collection_name}")
         logger.info("=" * 80)
-        logger.info(f"Created: {collection.get('created_at', 'N/A')}")
-        logger.info(f"Total books: {len(collection['books'])}")
-        logger.info(f"Total chunks: {collection['total_chunks']}")
-        logger.info(f"Total size: {collection['total_size_mb']:.2f} MB")
+        logger.info(f"Total books: {summary['book_count']}")
+        logger.info(f"Total chunks: {summary['total_chunks']}")
+        logger.info(f"Total size: {summary['total_size_mb']:.2f} MB")
+        logger.info(f"Database: {_get_db_path()}")
         logger.info("")
 
-        if not collection['books']:
+        if not books:
             logger.info("No books in collection")
-            logger.info("")
             return
 
         logger.info("Books:")
         logger.info("-" * 80)
-
-        for idx, book in enumerate(collection['books'], 1):
+        for idx, book in enumerate(books, 1):
             logger.info(f"\n{idx}. {book['book_title']}")
             logger.info(f"   Author: {book['author']}")
-            logger.info(f"   File: {book['file_name']}")
+            logger.info(f"   Language: {book['language']}")
             logger.info(f"   Chunks: {book['chunks_count']}")
             logger.info(f"   Size: {book['file_size_mb']} MB")
+            logger.info(f"   Source: {book['source']}:{book['source_id']}")
             logger.info(f"   Ingested: {book['ingested_at'][:10]}")
-
         logger.info("")
         logger.info("=" * 80)
 
     def list_collections(self):
-        """List all collections"""
+        """List all collections."""
+        conn = _get_connection()
+        rows = conn.execute(
+            '''SELECT collection,
+                      COUNT(*) as book_count,
+                      COALESCE(SUM(chunks_count), 0) as total_chunks,
+                      COALESCE(SUM(file_size_mb), 0) as total_size_mb
+               FROM books GROUP BY collection'''
+        ).fetchall()
+        conn.close()
+
         logger.info("")
         logger.info("=" * 80)
-        logger.info("📚 Collection Manifest")
+        logger.info(f"Collection Manifest (SQLite)")
         logger.info("=" * 80)
-        logger.info(f"Manifest file: {self.manifest_file}")
-        logger.info(f"Last updated: {self.manifest['last_updated']}")
+        logger.info(f"Database: {_get_db_path()}")
         logger.info("")
 
-        if not self.manifest['collections']:
+        if not rows:
             logger.info("No collections in manifest")
-            logger.info("")
             return
 
-        logger.info(f"Total collections: {len(self.manifest['collections'])}")
-        logger.info("")
-
-        for name, collection in self.manifest['collections'].items():
-            logger.info(f"📁 {name}")
-            logger.info(f"   Books: {len(collection['books'])}")
-            logger.info(f"   Chunks: {collection['total_chunks']}")
-            logger.info(f"   Size: {collection['total_size_mb']:.2f} MB")
+        for r in rows:
+            logger.info(f"  {r['collection']}")
+            logger.info(f"   Books: {r['book_count']}")
+            logger.info(f"   Chunks: {r['total_chunks']}")
+            logger.info(f"   Size: {r['total_size_mb']:.2f} MB")
             logger.info("")
-
         logger.info("=" * 80)
 
     def sync_with_qdrant(
         self,
         collection_name: str,
-        host: str = 'localhost',
-        port: int = 6333
+        host: str = None,
+        port: int = None
     ):
-        """
-        Sync manifest with actual Qdrant collection.
+        """Sync manifest with actual Qdrant collection (paginated scroll)."""
+        host = host or QDRANT_HOST
+        port = port or QDRANT_PORT
 
-        Scrolls ALL points (paginated), groups by book_title,
-        and adds any books missing from the manifest.
-        """
-        logger.info(f"Syncing manifest with Qdrant collection: {collection_name}")
+        logger.info(f"Syncing manifest with Qdrant: {collection_name}")
 
-        # Check connection before attempting to sync
         is_connected, error_msg = check_qdrant_connection(host, port)
         if not is_connected:
             logger.error(error_msg)
@@ -358,17 +251,16 @@ class CollectionManifest:
         try:
             info = client.get_collection(collection_name)
         except Exception as e:
-            logger.error(f"Collection not found in Qdrant: {e}")
+            logger.error(f"Collection not found: {e}")
             return
 
         total_points = info.points_count
-        logger.info(f"Collection has {total_points} points. Scrolling all...")
+        logger.info(f"Collection has {total_points} points. Scrolling...")
 
-        # Paginated scroll to get ALL points
-        books = {}
+        # Paginated scroll
+        qdrant_books = {}
         offset = None
         batch_size = 500
-        scanned = 0
 
         while True:
             points, next_offset = client.scroll(
@@ -378,171 +270,114 @@ class CollectionManifest:
                 with_payload=True,
                 with_vectors=False
             )
-
             if not points:
                 break
 
             for point in points:
-                payload = point.payload
-                book_title = payload.get('book_title', 'Unknown')
-                author = payload.get('author', 'Unknown')
-                language = payload.get('language', 'unknown')
-
-                if book_title not in books:
-                    books[book_title] = {
-                        'title': book_title,
-                        'author': author,
-                        'language': language,
+                p = point.payload
+                title = p.get('book_title', 'Unknown')
+                if title not in qdrant_books:
+                    qdrant_books[title] = {
+                        'author': p.get('author', 'Unknown'),
+                        'language': p.get('language', 'unknown'),
+                        'source': p.get('source', 'unknown'),
+                        'source_id': str(p.get('source_id', '')),
                         'chunks': 0
                     }
-                books[book_title]['chunks'] += 1
-
-            scanned += len(points)
+                qdrant_books[title]['chunks'] += 1
 
             if next_offset is None:
                 break
             offset = next_offset
 
-        logger.info(f"Scanned {scanned} points, found {len(books)} unique books")
+        logger.info(f"Found {len(qdrant_books)} unique books in Qdrant")
 
-        # Update manifest
-        if collection_name not in self.manifest['collections']:
-            self.manifest['collections'][collection_name] = {
-                'created_at': datetime.now().isoformat(),
-                'books': [],
-                'total_chunks': 0,
-                'total_size_mb': 0.0
-            }
+        # Get existing manifest books
+        existing_books = {b['book_title'] for b in self.get_books(collection_name)}
 
-        collection = self.manifest['collections'][collection_name]
-        collection['total_chunks'] = total_points
-
-        # Add books not already in manifest
-        existing_titles = {b['book_title'] for b in collection['books']}
+        # Add missing books
         added = 0
-
-        for book_title, book_data in books.items():
-            if book_title not in existing_titles:
-                book_entry = {
-                    'file_path': '(synced from qdrant)',
-                    'file_name': '(synced from qdrant)',
-                    'book_title': book_title,
-                    'author': book_data['author'],
-                    'file_type': 'unknown',
-                    'language': book_data['language'],
-                    'chunks_count': book_data['chunks'],
-                    'file_size_mb': 0.0,
-                    'ingested_at': '(synced)'
-                }
-                collection['books'].append(book_entry)
+        for title, data in qdrant_books.items():
+            if title not in existing_books:
+                self.add_book(
+                    collection_name=collection_name,
+                    book_path='(synced from qdrant)',
+                    book_title=title,
+                    author=data['author'],
+                    chunks_count=data['chunks'],
+                    file_size_mb=0.0,
+                    language=data['language'],
+                    source=data['source'],
+                    source_id=data['source_id'],
+                    ingested_at='(synced)'
+                )
                 added += 1
             else:
-                # Update chunk count for existing entries
-                for b in collection['books']:
-                    if b['book_title'] == book_title:
-                        b['chunks_count'] = book_data['chunks']
-                        break
+                # Update chunk count
+                conn = _get_connection()
+                conn.execute(
+                    'UPDATE books SET chunks_count=? WHERE collection=? AND book_title=?',
+                    (data['chunks'], collection_name, title)
+                )
+                conn.commit()
+                conn.close()
 
+        # Show results
         logger.info("")
-        logger.info("Books in Qdrant:")
-        for book_title, book_data in sorted(books.items()):
-            lang = book_data['language']
-            logger.info(f"  - {book_title} by {book_data['author']} [{lang}] ({book_data['chunks']} chunks)")
+        for title, data in sorted(qdrant_books.items()):
+            logger.info(f"  - {title} by {data['author']} [{data['language']}] ({data['chunks']} chunks)")
 
         if added > 0:
-            logger.info(f"\nAdded {added} new books to manifest from Qdrant")
+            logger.info(f"\nAdded {added} new books from Qdrant")
         else:
             logger.info(f"\nManifest already up to date")
 
-        self.save_manifest()
+    def verify_collection_exists(self, collection_name: str,
+                                  qdrant_host: str = None,
+                                  qdrant_port: int = None) -> bool:
+        """Verify collection exists in Qdrant."""
+        host = qdrant_host or QDRANT_HOST
+        port = qdrant_port or QDRANT_PORT
 
-    def export_manifest(self, collection_name: str, output_file: str):
-        """Export collection manifest to file"""
-        if collection_name not in self.manifest['collections']:
-            logger.error(f"Collection not found: {collection_name}")
-            return
+        is_connected, error_msg = check_qdrant_connection(host, port)
+        if not is_connected:
+            return False
 
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        export_data = {
-            'collection_name': collection_name,
-            'exported_at': datetime.now().isoformat(),
-            'collection': self.manifest['collections'][collection_name]
-        }
-
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, indent=2, ensure_ascii=False)
-
-        logger.info(f"✅ Manifest exported to: {output_path}")
+        try:
+            client = QdrantClient(host=host, port=port)
+            collections = [c.name for c in client.get_collections().collections]
+            return collection_name in collections
+        except Exception:
+            return False
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Alexandria Collection Manifest Tool'
-    )
-    parser.add_argument(
-        'command',
-        choices=['show', 'list', 'export', 'sync', 'remove'],
-        help='Command to execute'
-    )
-    parser.add_argument(
-        'collection',
-        nargs='?',
-        help='Collection name (required for show/export/sync/remove)'
-    )
-    parser.add_argument(
-        '--book',
-        type=str,
-        help='Book file path (for remove command)'
-    )
-    parser.add_argument(
-        '--output',
-        type=str,
-        help='Output file for export'
-    )
-    parser.add_argument(
-        '--host',
-        default=QDRANT_HOST,
-        help=f'Qdrant host (default: {QDRANT_HOST})'
-    )
-    parser.add_argument(
-        '--port',
-        type=int,
-        default=QDRANT_PORT,
-        help=f'Qdrant port (default: {QDRANT_PORT})'
-    )
+    parser = argparse.ArgumentParser(description='Alexandria Collection Manifest')
+    parser.add_argument('command', choices=['show', 'list', 'sync', 'remove'],
+                        help='Command to execute')
+    parser.add_argument('collection', nargs='?', help='Collection name')
+    parser.add_argument('--book', type=str, help='Book title (for remove)')
+    parser.add_argument('--host', default=QDRANT_HOST)
+    parser.add_argument('--port', type=int, default=QDRANT_PORT)
 
     args = parser.parse_args()
-
-    # Use collection-specific manifest file when collection name is provided
     manifest = CollectionManifest(collection_name=args.collection)
 
     if args.command == 'list':
         manifest.list_collections()
-
     elif args.command == 'show':
         if not args.collection:
             logger.error("Collection name required")
             return
         manifest.show_collection(args.collection)
-
-    elif args.command == 'export':
-        if not args.collection:
-            logger.error("Collection name required")
-            return
-        output = args.output or f'../logs/{args.collection}_manifest.json'
-        manifest.export_manifest(args.collection, output)
-
     elif args.command == 'sync':
         if not args.collection:
             logger.error("Collection name required")
             return
         manifest.sync_with_qdrant(args.collection, args.host, args.port)
-
     elif args.command == 'remove':
         if not args.collection or not args.book:
-            logger.error("Collection name and --book path required")
+            logger.error("Collection name and --book title required")
             return
         manifest.remove_book(args.collection, args.book)
 

@@ -28,10 +28,18 @@ scripts/batch_ingest_progress.json
 ingest/
 ingested/
 
+# Temporary download folders
+scripts/downloads/
+scripts/gutenberg_downloads/
+scripts/public_domain_downloads/
+scripts/archive_downloads/
+
 # IDE
 .vscode/
 .idea/
-.claude/
+.claude/settings.local.json
+.claude/audio/              # Audio files (too large)
+.claude/piper_voices/       # TTS voice files (too large)
 *.swp
 *.swo
 *~

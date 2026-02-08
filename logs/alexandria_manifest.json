@@ -1,0 +1,142 @@
+{
+  "created_at": "2026-02-08T19:04:27.117111",
+  "last_updated": "2026-02-08T21:07:34.942514",
+  "collections": {
+    "alexandria": {
+      "created_at": "2026-02-08T19:04:27.117128",
+      "books": [
+        {
+          "file_path": "C:\\Users\\Sabo\\source\\repos\\Alexandria\\Alexandria-RAG\\scripts\\public_domain_downloads\\Notes from the Underground - Dostoyevsky, Fyodor.epub",
+          "file_name": "Notes from the Underground - Dostoyevsky, Fyodor.epub",
+          "book_title": "notes from the underground",
+          "author": "fyodor dostoyevsky",
+          "file_type": "EPUB",
+          "language": "en",
+          "chunks_count": 236,
+          "file_size_mb": 0.19,
+          "ingested_at": "2026-02-08T19:04:27.117169"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "crime and punishment",
+          "author": "fyodor dostoyevsky",
+          "file_type": "unknown",
+          "language": "en",
+          "chunks_count": 1169,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "meditations",
+          "author": "emperor of rome marcus aurelius",
+          "file_type": "unknown",
+          "language": "en",
+          "chunks_count": 420,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "",
+          "author": "",
+          "file_type": "unknown",
+          "language": "hr",
+          "chunks_count": 791,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "die verwandlung",
+          "author": "franz kafka",
+          "file_type": "unknown",
+          "language": "de",
+          "chunks_count": 166,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "Unknown",
+          "author": "Unknown",
+          "file_type": "unknown",
+          "language": "unknown",
+          "chunks_count": 243,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "(synced from qdrant)",
+          "file_name": "(synced from qdrant)",
+          "book_title": "jenseits von gut und böse",
+          "author": "friedrich wilhelm nietzsche",
+          "file_type": "unknown",
+          "language": "de",
+          "chunks_count": 13,
+          "file_size_mb": 0.0,
+          "ingested_at": "(synced)"
+        },
+        {
+          "file_path": "c:\\Users\\Sabo\\source\\repos\\Alexandria\\Alexandria-RAG\\public_domain_downloads\\Aphorismen zur Lebensweisheit - Schopenhauer, Arthur.epub",
+          "file_name": "Aphorismen zur Lebensweisheit - Schopenhauer, Arthur.epub",
+          "book_title": "aphorismen zur lebensweisheit",
+          "author": "arthur schopenhauer",
+          "file_type": "EPUB",
+          "language": "de",
+          "source": "gutenberg",
+          "source_id": "47406",
+          "chunks_count": 202,
+          "file_size_mb": 0.25,
+          "ingested_at": "2026-02-08T20:33:20.793855"
+        },
+        {
+          "file_path": "c:\\Users\\Sabo\\source\\repos\\Alexandria\\Alexandria-RAG\\public_domain_downloads\\Les misérables Tome I- Fantine - Hugo, Victor.epub",
+          "file_name": "Les misérables Tome I- Fantine - Hugo, Victor.epub",
+          "book_title": "les misérables tome i: fantine",
+          "author": "victor hugo",
+          "file_type": "EPUB",
+          "language": "fr",
+          "source": "gutenberg",
+          "source_id": "17489",
+          "chunks_count": 539,
+          "file_size_mb": 0.34,
+          "ingested_at": "2026-02-08T20:48:50.507997"
+        },
+        {
+          "file_path": "c:\\Users\\Sabo\\source\\repos\\Alexandria\\Alexandria-RAG\\public_domain_downloads\\La Divina Commedia di Dante - Dante Alighieri.epub",
+          "file_name": "La Divina Commedia di Dante - Dante Alighieri.epub",
+          "book_title": "la divina commedia di dante",
+          "author": "dante alighieri",
+          "file_type": "EPUB",
+          "language": "it",
+          "source": "gutenberg",
+          "source_id": "1012",
+          "chunks_count": 496,
+          "file_size_mb": 0.32,
+          "ingested_at": "2026-02-08T21:04:47.503028"
+        },
+        {
+          "file_path": "c:\\Users\\Sabo\\source\\repos\\Alexandria\\Alexandria-RAG\\public_domain_downloads\\De Officiis - Cicero, Marcus Tullius.epub",
+          "file_name": "De Officiis - Cicero, Marcus Tullius.epub",
+          "book_title": "de officiis",
+          "author": "marcus tullius cicero",
+          "file_type": "EPUB",
+          "language": "en",
+          "source": "gutenberg",
+          "source_id": "47001",
+          "chunks_count": 383,
+          "file_size_mb": 0.45,
+          "ingested_at": "2026-02-08T21:07:34.942505"
+        }
+      ],
+      "total_chunks": 4658,
+      "total_size_mb": 1.5475120544433594
+    }
+  }
+}

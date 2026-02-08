@@ -14,8 +14,9 @@ venv/
 ENV/
 env/
 
-# Logs
+# Logs (but keep manifest files - they track what's in Qdrant)
 logs/*.json
+!logs/*_manifest.json
 logs/*.log
 *.log
 scripts/Gemini failed session-bitni dio.txt

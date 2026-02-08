@@ -1,0 +1,12 @@
+Collection,Book Title,Author,Language,File Type,Chunks,Size (MB),File Name,Ingested At
+alexandria,notes from the underground,fyodor dostoyevsky,en,EPUB,236,0.19,"Notes from the Underground - Dostoyevsky, Fyodor.epub",2026-02-08
+alexandria,crime and punishment,fyodor dostoyevsky,en,unknown,1169,0.0,(synced from qdrant),(synced)
+alexandria,meditations,emperor of rome marcus aurelius,en,unknown,420,0.0,(synced from qdrant),(synced)
+alexandria,die verwandlung,franz kafka,de,unknown,166,0.0,(synced from qdrant),(synced)
+alexandria,jenseits von gut und böse,friedrich wilhelm nietzsche,de,unknown,13,0.0,(synced from qdrant),(synced)
+alexandria,aphorismen zur lebensweisheit,arthur schopenhauer,de,EPUB,202,0.25,"Aphorismen zur Lebensweisheit - Schopenhauer, Arthur.epub",2026-02-08
+alexandria,les misérables tome i: fantine,victor hugo,fr,EPUB,539,0.34,"Les misérables Tome I- Fantine - Hugo, Victor.epub",2026-02-08
+alexandria,la divina commedia di dante,dante alighieri,it,EPUB,496,0.32,La Divina Commedia di Dante - Dante Alighieri.epub,2026-02-08
+alexandria,de officiis,marcus tullius cicero,en,EPUB,383,0.45,"De Officiis - Cicero, Marcus Tullius.epub",2026-02-08
+
+TOTAL,,,,,4658,1.5475120544433594,,

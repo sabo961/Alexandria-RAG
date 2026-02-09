@@ -35,12 +35,14 @@ scripts/gutenberg_downloads/
 scripts/public_domain_downloads/
 scripts/archive_downloads/
 
-# IDE
+# IDE & local config
 .vscode/
 .idea/
-.claude/settings.local.json
-.claude/audio/              # Audio files (too large)
-.claude/piper_voices/       # TTS voice files (too large)
+# Claude Code: ignore local config, keep shared commands
+.claude/*
+!.claude/commands/
+!.claude/CLAUDE.md
+scripts/.claude/
 .obsidian/                  # Obsidian vault config (local)
 **/.space/                  # JetBrains Space metadata
 *.swp

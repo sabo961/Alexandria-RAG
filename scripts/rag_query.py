@@ -251,6 +251,13 @@ from config import QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION, OPENROUTER_API_K
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from ingest_books import generate_embeddings
 
+# Fix Windows terminal encoding for Croatian/multilingual output
+import sys
+import io
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'

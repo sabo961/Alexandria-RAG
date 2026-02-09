@@ -84,6 +84,17 @@ if CALIBRE_LIBRARY_PATH:
 ALEXANDRIA_DB = os.environ.get('ALEXANDRIA_DB', _default_db)
 
 # =============================================================================
+# GUARDIAN PERSONAS
+# =============================================================================
+
+# Directory containing guardian .md files with alexandria: frontmatter
+# Default: docs/development/guardians/ relative to project root
+GUARDIANS_DIR = os.environ.get(
+    'GUARDIANS_DIR',
+    str(PROJECT_ROOT / 'docs' / 'development' / 'guardians')
+)
+
+# =============================================================================
 # INGESTION VERSIONING
 # =============================================================================
 

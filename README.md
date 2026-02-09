@@ -95,7 +95,7 @@ python rag_query.py "your question here" --limit 5 --context-mode contextual
 
 - **Interface:** MCP Server (Model Context Protocol via FastMCP)
 - **Vector DB:** Qdrant (192.168.0.151:6333)
-- **Embeddings:** sentence-transformers (BAAI/bge-large-en-v1.5, 1024-dim)
+- **Embeddings:** sentence-transformers (BAAI/bge-m3, 1024-dim, multilingual 100+ languages)
 - **LLM:** OpenRouter API (optional, for RAG answers)
 - **Testing:** pytest (unit tests + integration tests)
 - **DB Explorer:** Datasette (web UI for Calibre SQLite exploration)
@@ -113,16 +113,17 @@ Alexandria supports multiple embedding models with runtime selection and GPU acc
 
 | Model ID | Full Name | Dimensions | Use Case |
 |----------|-----------|------------|----------|
-| `minilm` | all-MiniLM-L6-v2 | 384 | Fast, lightweight |
-| `bge-large` | BAAI/bge-large-en-v1.5 | 1024 | Higher quality (default) |
+| `minilm` | all-MiniLM-L6-v2 | 384 | Fast, lightweight (legacy) |
+| `bge-large` | BAAI/bge-large-en-v1.5 | 1024 | English-only, high quality |
+| `bge-m3` | BAAI/bge-m3 | 1024 | **Default** — multilingual (100+ languages) |
 
 ### Configuration
 
 Set in `.env` or environment:
 
 ```bash
-# Default model (minilm or bge-large)
-DEFAULT_EMBEDDING_MODEL=bge-large
+# Default model (minilm, bge-large, or bge-m3)
+DEFAULT_EMBEDDING_MODEL=bge-m3
 
 # Device selection: auto, cuda, cpu (default: auto)
 EMBEDDING_DEVICE=auto
@@ -139,7 +140,7 @@ GPU acceleration significantly speeds up embedding generation (~10x faster).
 **Requirements:**
 - NVIDIA GPU with CUDA support
 - CUDA Toolkit 12.1+ (or compatible version)
-- ~2-3GB GPU memory for bge-large inference
+- ~2-3GB GPU memory for bge-m3 inference
 
 **Installation:**
 ```bash
@@ -159,15 +160,15 @@ gen = EmbeddingGenerator()
 model1 = gen.get_model("minilm")
 print(f"MiniLM dim: {model1.get_sentence_embedding_dimension()}")  # 384
 
-model2 = gen.get_model("bge-large")
-print(f"BGE-Large dim: {model2.get_sentence_embedding_dimension()}")  # 1024
+model2 = gen.get_model("bge-m3")
+print(f"BGE-M3 dim: {model2.get_sentence_embedding_dimension()}")  # 1024
 
 # Test GPU
 import torch
 print(f"CUDA available: {torch.cuda.is_available()}")
 ```
 
-**Note:** Models download on first use (bge-large ~1.3GB). CPU fallback works but is slower.
+**Note:** Models download on first use (bge-m3 ~2.2GB). CPU fallback works but is slower.
 
 ---
 

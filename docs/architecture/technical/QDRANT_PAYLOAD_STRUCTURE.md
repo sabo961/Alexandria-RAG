@@ -15,7 +15,7 @@ Book File (EPUB/PDF/TXT)
     ↓
 2. CHUNK TEXT → Chunks with context
     ↓
-3. GENERATE EMBEDDINGS → vectors (384-dim minilm or 1024-dim bge-large)
+3. GENERATE EMBEDDINGS → vectors (384-dim minilm, 1024-dim bge-large/bge-m3)
     ↓
 4. UPLOAD TO QDRANT → Points with payload
 ```
@@ -55,8 +55,8 @@ Alexandria uses **two-level hierarchical chunking**:
     "strategy": "hierarchical",
 
     // Embedding metadata (multi-model support)
-    "embedding_model_id": "bge-large",
-    "embedding_model_name": "BAAI/bge-large-en-v1.5",
+    "embedding_model_id": "bge-m3",
+    "embedding_model_name": "BAAI/bge-m3",
     "embedding_dimension": 1024
   }
 }
@@ -87,8 +87,8 @@ Alexandria uses **two-level hierarchical chunking**:
     "strategy": "hierarchical",
 
     // Embedding metadata (multi-model support)
-    "embedding_model_id": "bge-large",
-    "embedding_model_name": "BAAI/bge-large-en-v1.5",
+    "embedding_model_id": "bge-m3",
+    "embedding_model_name": "BAAI/bge-m3",
     "embedding_dimension": 1024
   }
 }
@@ -282,18 +282,18 @@ metadata['title'] = doc.metadata.get('title', Path(filepath).stem)
 #### `embedding_model_id` (string)
 **Source:** From EMBEDDING_MODELS registry key
 **Purpose:** Identify model for query matching (query must use same model)
-**Values:** `"minilm"`, `"bge-large"`
-**Example:** `"bge-large"`
+**Values:** `"minilm"`, `"bge-large"` (legacy), `"bge-m3"` (current)
+**Example:** `"bge-m3"`
 
 #### `embedding_model_name` (string)
 **Source:** From EMBEDDING_MODELS registry (full HuggingFace name)
 **Purpose:** Human-readable reference, audit trail
-**Example:** `"BAAI/bge-large-en-v1.5"`
+**Example:** `"BAAI/bge-m3"` (current), `"BAAI/bge-large-en-v1.5"` (legacy)
 
 #### `embedding_dimension` (integer)
 **Source:** From model config or runtime detection
 **Purpose:** Vector dimension for validation
-**Values:** `384` (minilm), `1024` (bge-large)
+**Values:** `384` (minilm), `1024` (bge-large, bge-m3)
 
 #### `embedding_model` (string) - LEGACY
 **Source:** Hardcoded model name (pre-2026-02)
@@ -365,8 +365,8 @@ def upload_to_qdrant(
                 "chunk_strategy": f"{domain}-overlap",
 
                 # Embedding metadata (multi-model)
-                "embedding_model_id": model_id,  # e.g., "bge-large"
-                "embedding_model_name": model_config["name"],  # e.g., "BAAI/bge-large-en-v1.5"
+                "embedding_model_id": model_id,  # e.g., "bge-m3"
+                "embedding_model_name": model_config["name"],  # e.g., "BAAI/bge-m3"
                 "embedding_dimension": model_config["dim"],  # e.g., 1024
 
                 # Open WebUI compatibility
@@ -421,8 +421,8 @@ chunk = {
 #### 3. Generate Embedding
 ```python
 # From EmbeddingGenerator (multi-model)
-model = generator.get_model("bge-large")  # or "minilm"
-embedding = model.encode(chunk['text'])  # 1024-dim for bge-large, 384-dim for minilm
+model = generator.get_model("bge-m3")  # or "minilm", "bge-large" (legacy)
+embedding = model.encode(chunk['text'])  # 1024-dim for bge-m3/bge-large, 384-dim for minilm
 ```
 
 #### 4. Create Qdrant Point
@@ -430,7 +430,7 @@ embedding = model.encode(chunk['text'])  # 1024-dim for bge-large, 384-dim for m
 # From upload_to_qdrant()
 point = PointStruct(
     id=0,
-    vector=embedding,  # 1024-dim for bge-large, 384-dim for minilm
+    vector=embedding,  # 1024-dim for bge-m3/bge-large, 384-dim for minilm
     payload={
         "text": chunk['text'],
         "text_length": 575,
@@ -444,8 +444,8 @@ point = PointStruct(
         "ingested_at": "2026-01-21T18:14:12.363110",
         "chunk_strategy": "technical-overlap",
         # Multi-model embedding metadata
-        "embedding_model_id": "bge-large",
-        "embedding_model_name": "BAAI/bge-large-en-v1.5",
+        "embedding_model_id": "bge-m3",
+        "embedding_model_name": "BAAI/bge-m3",
         "embedding_dimension": 1024,
         "metadata": {
             "source": "The Data Model Resource Book Vol 3...",
@@ -585,7 +585,7 @@ payload={
 **Payload Structure Creation:**
 1. Extract text from book → sections with metadata
 2. Chunk text → chunks with location info
-3. Generate embeddings → vectors (384-dim minilm or 1024-dim bge-large)
+3. Generate embeddings → vectors (384-dim minilm, 1024-dim bge-m3/bge-large)
 4. Combine into Qdrant point → vector + payload + embedding metadata
 
 **Key Payload Components:**
@@ -599,4 +599,4 @@ payload={
 
 ---
 
-**Last Updated:** 2026-02-01 (Added multi-model embedding metadata: embedding_model_id, embedding_model_name, embedding_dimension)
+**Last Updated:** 2026-02-09 (Updated current embedding model from bge-large to bge-m3 multilingual; bge-large retained as legacy)

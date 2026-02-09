@@ -64,6 +64,9 @@ from calibre_db import CalibreDB, CalibreBook
 from qdrant_utils import check_qdrant_connection
 from ingest_books import ingest_book, test_chunking, compare_chunking, extract_text
 from collection_manifest import CollectionManifest
+from guardian_personas import (
+    get_guardian, list_guardians, compose_instruction, get_default_guardian_id
+)
 
 # Configure logging - reduce verbosity for MCP server
 logging.basicConfig(
@@ -93,7 +96,7 @@ COLLECTION_NAME = QDRANT_COLLECTION  # Alias for compatibility
 
 mcp = FastMCP(
     name="alexandria",
-    instructions="Alexandria RAG system - access knowledge from ~9,000 books. Use alexandria_query for semantic search, alexandria_search for metadata search, alexandria_book for book details, alexandria_stats for statistics. For ingestion: use alexandria_ingest_preview to find books, alexandria_test_chunking to test parameters, and alexandria_ingest to upload to Qdrant."
+    instructions="Alexandria RAG system - access knowledge from ~9,000 books. Use alexandria_query for semantic search (with guardian personas for character-flavored responses), alexandria_guardians to list available guardians, alexandria_search for metadata search, alexandria_book for book details, alexandria_stats for statistics. For ingestion: use alexandria_ingest_preview to find books, alexandria_test_chunking to test parameters, and alexandria_ingest to upload to Qdrant."
 )
 
 
@@ -130,13 +133,47 @@ def _get_pattern_template(pattern_name: str) -> Optional[str]:
     return None
 
 
+def _build_response_instruction(
+    guardian: str,
+    response_pattern: str,
+    response: dict
+) -> None:
+    """Compose guardian personality + response pattern into response dict (in-place)."""
+    pattern_template = None
+    if response_pattern and response_pattern != "free":
+        pattern_template = _get_pattern_template(response_pattern)
+        if pattern_template:
+            response["response_pattern"] = response_pattern
+        else:
+            response["response_pattern_error"] = f"Unknown pattern: {response_pattern}"
+
+    if guardian and guardian != "none":
+        try:
+            response["response_instruction"] = compose_instruction(
+                guardian_id=guardian,
+                pattern_template=pattern_template
+            )
+            guardian_info = get_guardian(guardian)
+            if guardian_info:
+                response["guardian"] = guardian
+                response["guardian_name"] = guardian_info.name
+                response["guardian_emoji"] = guardian_info.emoji
+        except ValueError:
+            response["guardian_error"] = f"Unknown guardian: {guardian}"
+            if pattern_template:
+                response["response_instruction"] = pattern_template
+    elif pattern_template:
+        response["response_instruction"] = pattern_template
+
+
 @mcp.tool()
 def alexandria_query(
     query: str,
     limit: int = 5,
     threshold: float = 0.5,
     context_mode: str = "precise",
-    response_pattern: str = "free"
+    response_pattern: str = "free",
+    guardian: str = "zec"
 ) -> dict:
     """
     Search Alexandria knowledge base using semantic similarity.
@@ -159,6 +196,13 @@ def alexandria_query(
             - "extraction": Structured extraction with citations
             - "critical": Find contradictions, analyze assumptions
             - Or specific pattern id: "tldr", "cross_perspective", etc.
+        guardian: Which guardian persona flavors the response (default: "zec")
+            - "zec": Sharp, ironic meta-postman. Questions your assumptions.
+            - "vault_e": Neurotic archivist. Knows every duplicate and gap.
+            - "ariadne": Patient guide. Weaves paths through complex results.
+            - "hipatija": Intellectual challenger. Finds contradictions.
+            - "klepac": Formatting artisan. Quality guardian, detects BS.
+            - "none": No guardian personality (plain Alexandria).
 
     Returns:
         dict with:
@@ -167,7 +211,10 @@ def alexandria_query(
                       section_name, and text
             - result_count: Number of results returned
             - context_mode: The context mode used
-            - response_instruction: How to format response (if pattern specified)
+            - response_instruction: How to respond (guardian personality + pattern)
+            - guardian: Guardian ID used
+            - guardian_name: Guardian display name
+            - guardian_emoji: Guardian emoji
             - parent_chunks: Parent chapter context (if context_mode != "precise")
             - hierarchy_stats: Stats about hierarchical retrieval
             - error: Error message if any
@@ -177,7 +224,8 @@ def alexandria_query(
         alexandria_query("What is the shipment pattern?", limit=10)
         alexandria_query("loss aversion", context_mode="contextual")
         alexandria_query("cognitive biases", response_pattern="direct")
-        alexandria_query("data modeling approaches", response_pattern="synthesis")
+        alexandria_query("Seneka", guardian="hipatija", response_pattern="critical")
+        alexandria_query("Seneka", guardian="none")
     """
     # Validate inputs
     limit = min(max(1, limit), 20)  # Clamp to 1-20
@@ -208,15 +256,8 @@ def alexandria_query(
             "error": result.error
         }
 
-        # Include response instruction if pattern specified (not "free")
-        if response_pattern and response_pattern != "free":
-            template = _get_pattern_template(response_pattern)
-            if template:
-                response["response_instruction"] = template
-                response["response_pattern"] = response_pattern
-            else:
-                response["response_instruction"] = None
-                response["response_pattern_error"] = f"Unknown pattern: {response_pattern}"
+        # Compose guardian personality + response pattern into response
+        _build_response_instruction(guardian, response_pattern, response)
 
         # Include hierarchical data if not in precise mode
         if context_mode != "precise":
@@ -234,6 +275,35 @@ def alexandria_query(
             "context_mode": context_mode,
             "error": str(e)
         }
+
+
+# ============================================================================
+# TOOL: alexandria_guardians
+# ============================================================================
+
+@mcp.tool()
+def alexandria_guardians() -> dict:
+    """
+    List available guardian personas for Alexandria responses.
+
+    Guardians are characters from the Temenos world who give personality
+    to Alexandria's responses. Each guardian has a distinct voice, specialty,
+    and approach to presenting knowledge.
+
+    Use the guardian ID with alexandria_query(guardian="...") to activate.
+
+    Returns:
+        dict with:
+            - guardians: List of available guardians with id, name, emoji, role, greeting
+            - default: The default guardian ID
+            - count: Number of available guardians
+    """
+    guardians = list_guardians()
+    return {
+        "guardians": guardians,
+        "default": get_default_guardian_id(),
+        "count": len(guardians)
+    }
 
 
 # ============================================================================

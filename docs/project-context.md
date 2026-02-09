@@ -1,7 +1,7 @@
 ---
 project_name: 'Alexandria'
 user_name: 'Sabo'
-date: '2026-01-30'
+date: '2026-02-09'
 sections_completed: ['technology_stack', 'python_rules', 'streamlit_rules', 'testing_rules', 'code_quality', 'workflow_rules', 'critical_rules']
 status: 'complete'
 rule_count: 45
@@ -36,10 +36,12 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **flake8 7.0.0** - Linter
 
 ### MCP Server (Claude Code Integration)
-- **Script**: `scripts/mcp_server.py` - FastMCP server with 5 read-only tools
+- **Script**: `scripts/mcp_server.py` - FastMCP server with 14 tools
 - **Config**: `.mcp.json` - MCP server configuration for Claude Code
-- **Tools**: `alexandria_query`, `alexandria_search`, `alexandria_book`, `alexandria_stats`, `alexandria_domains`
-- **Docs**: `docs/reference/mcp-server.md`
+- **Query Tools**: `alexandria_query` (with `guardian` param), `alexandria_guardians`, `alexandria_search`, `alexandria_book`, `alexandria_stats`
+- **Ingest Tools (Calibre)**: `alexandria_ingest_preview`, `alexandria_ingest`, `alexandria_batch_ingest`, `alexandria_test_chunking`, `alexandria_compare_chunking`
+- **Ingest Tools (Local)**: `alexandria_browse_local`, `alexandria_ingest_file`, `alexandria_test_chunking_file`
+- **Docs**: `docs/api-contracts-main.md`
 - **Transport**: stdio (standard for Claude Code)
 
 ### Development Tools (Optional but Useful)
@@ -57,8 +59,11 @@ _This file contains critical rules and patterns that AI agents must follow when 
 ### Critical Version Constraints
 - **Embedding models**: Multi-model registry (see `config.py:EMBEDDING_MODELS`)
   - `minilm`: all-MiniLM-L6-v2 (384-dim) - legacy, lightweight
-  - `bge-large`: BAAI/bge-large-en-v1.5 (1024-dim) - default, GPU-accelerated
+  - `bge-large`: BAAI/bge-large-en-v1.5 (1024-dim) - English-only
+  - `bge-m3`: BAAI/bge-m3 (1024-dim) - **default**, multilingual (100+ languages)
   - Model locked per collection - changing requires re-ingestion
+- **Why bge-m3**: Preserves semantic distinctions in original languages (Dasein != being-there, dukkha != suffering). This is the foundation, not a feature.
+- **The English Filter Problem**: English-only embeddings collapse all concepts into English semantics. BGE-M3 preserves the original semantic fingerprint — "Dasein" in German occupies a DIFFERENT vector region than "being-there" in English. The killer query only multilingual embeddings can answer: *"Show me concepts in my library that resist English translation and are connected to each other across languages."* (Dasein ↔ śūnyatā, тоска ↔ saudade, mono no aware ↔ čežnja). No English-first system can formulate this.
 - **Qdrant distance metric**: COSINE - hardcoded across ingestion and query scripts
 - **tqdm**: Must be disabled globally (`os.environ['TQDM_DISABLE'] = '1'`) to prevent `[Errno 22]` stderr issues in Streamlit
 
@@ -245,9 +250,20 @@ test_file = Path("tests/fixtures/sample.epub")
 **File Organization:**
 - **Flat structure**: All modules in `scripts/` (no subdirectories)
 - **File categories**:
-  - Production: `ingest_books.py`, `rag_query.py`, `calibre_db.py`, `collection_manifest.py`, `qdrant_utils.py`, `universal_chunking.py`
+  - Production: `ingest_books.py`, `rag_query.py`, `calibre_db.py`, `collection_manifest.py`, `qdrant_utils.py`, `universal_chunking.py`, `guardian_personas.py`
+  - Connectors: `archive_connector.py`, `gutenberg_connector.py`, `calibre_web_connector.py`
   - Utilities: `check_*.py`, `fix_*.py`, `count_*.py`
   - Experiments: `experiment_*.py`
+
+### Guardian Persona System
+
+**Architecture:** Guardians load from `.md` files with `alexandria:` YAML frontmatter in `docs/development/guardians/`.
+- **Loader**: `scripts/guardian_personas.py` — parses frontmatter, returns guardian data
+- **MCP integration**: `guardian` param on `alexandria_query()`, `alexandria_guardians()` lists all
+- **Config**: `GUARDIANS_DIR` env var in `config.py` (default: `docs/development/guardians`)
+- **Orthogonal design**: guardian = WHO speaks (personality), pattern = HOW to structure (compose at runtime)
+- **Adding new guardian**: Add `alexandria:` frontmatter to any `.md` in guardians dir — no code changes needed
+- **Active (11)**: alan_kay, ariadne, fantom, hector, hipatija, klepac, mrljac, lupita, roda, vault_e, zec (default)
 
 **Comment Style:**
 - Inline comments: Capitalize first letter, explain "what" code does
@@ -326,7 +342,8 @@ Examples:
    - **Why**: Creates divergence, maintenance burden, breaks CLI/API consistency
 
 2. **Embedding model is LOCKED per collection**
-   - Multi-model registry: `minilm` (384-dim), `bge-large` (1024-dim)
+   - Multi-model registry: `minilm` (384-dim), `bge-large` (1024-dim), `bge-m3` (1024-dim, multilingual)
+   - Default: `bge-m3` (multilingual, original-language-primary philosophy)
    - Changing model for existing collection = full re-ingestion required
    - Query MUST use same model as collection's ingestion model
    - Different collections CAN use different models (A/B testing)
@@ -485,4 +502,4 @@ When a BMad agent starts work:
 
 ---
 
-**Last Updated:** 2026-01-30
+**Last Updated:** 2026-02-09

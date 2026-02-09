@@ -31,6 +31,8 @@ An **Architecture Decision Record (ADR)** captures a significant architectural d
 | [0009](0009-http-api-wrapper.md) | HTTP API Wrapper for Non-MCP Consumers | 🚧 Proposed | 2026-01-31 | HTTP API |
 | [0010](0010-gpu-accelerated-embeddings.md) | GPU-Accelerated Embedding Model Selection | ✅ Accepted | 2026-01-31 | ML/Embeddings |
 | [0011](0011-phased-growth-architecture.md) | Phased Growth Architecture (Personal → SaaS) | ✅ Accepted | 2026-01-31 | Strategic Planning |
+| [0012](0012-original-language-primary.md) | Original Language Primary | ✅ Accepted | 2026-02-09 | Epistemology |
+| [0013](0013-skos-ontology-backbone.md) | SKOS Ontology Backbone | ✅ Accepted | 2026-02-09 | Knowledge Organization |
 
 **Legend:**
 - ✅ Accepted - Implemented and in use

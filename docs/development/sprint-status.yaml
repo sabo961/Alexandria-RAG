@@ -40,9 +40,9 @@ tracking_system: file-system
 story_location: C:\Users\goran\source\repos\Temenos\Akademija\Alexandria\docs\development
 
 development_status:
-  # Epic 0: bge-large Model Migration (P0 - FIRST PRIORITY)
-  # Status: in-progress - First story created, ready for development
-  epic-0: in-progress
+  # Epic 0: Embedding Model Migration (P0 - COMPLETED)
+  # Migrated to bge-m3 (multilingual, 1024-dim) — originally planned as bge-large-en-v1.5
+  epic-0: done
   0-1-configure-bge-large-en-v1-5-model-with-gpu-support: done
   0-2-add-embedding-model-metadata-to-qdrant-payloads: done
   0-3-re-ingest-book-collection-with-new-model: done

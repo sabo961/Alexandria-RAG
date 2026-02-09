@@ -123,7 +123,7 @@ python ingest_books.py --file "../ingest/Silverston Vol 3.epub"
 **What happens:**
 1. Extracts chapters from EPUB
 2. Creates hierarchical parent/child chunks
-3. Generates embeddings using configured model (default: `bge-large` 1024-dim)
+3. Generates embeddings using configured model (default: `bge-m3` 1024-dim, multilingual)
 4. Uploads to Qdrant collection `alexandria`
 
 ### Example 2: Batch Ingestion
@@ -203,7 +203,7 @@ docker ps | grep qdrant
 Sentence-transformers downloads model on first run. Be patient or:
 ```bash
 # Pre-download models
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-large-en-v1.5')"
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 ```
 

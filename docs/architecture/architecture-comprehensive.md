@@ -43,6 +43,7 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
    - **Multi-model support:** Runtime model selection per collection
      - all-MiniLM-L6-v2 (384-dim) - lightweight, CPU-friendly
      - BAAI/bge-large-en-v1.5 (1024-dim) - high quality, GPU-accelerated
+     - BAAI/bge-m3 (1024-dim) - multilingual (100+ languages), GPU-accelerated **(default)**
    - Collection metadata tracks which model was used for ingestion
 
 2. **Hierarchical Chunking (FR-002)**
@@ -69,9 +70,9 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
 ### Non-Functional Requirements
 
 **Performance (NFR-001):**
-- Ingestion: ~11-13 sec/book (CPU), **~0.3 sec/book (GPU with bge-large)** - ADR-0010
+- Ingestion: ~11-13 sec/book (CPU), **~0.3 sec/book (GPU with bge-m3)** - ADR-0010
 - Query: <100ms (search only), 0.15-5.5 sec (with LLM)
-- Target scale: 1.35M chunks, ~6GB vectors (bge-large-en-v1.5)
+- Target scale: 1.35M chunks, ~6GB vectors (bge-m3, 1024-dim)
 
 **Immutability Constraints (NFR-002):** - CRITICAL
 - Embedding model locked per collection (changing = full re-ingestion)
@@ -134,8 +135,8 @@ Alexandria is a **Retrieval-Augmented Generation (RAG) system** for semantic sea
 **Hard Constraints (Cannot Change Without Migration):**
 
 1. **Embedding Models (ADR-0010):**
-   - **Supported:** all-MiniLM-L6-v2 (384-dim), BAAI/bge-large-en-v1.5 (1024-dim)
-   - **Default:** bge-large-en-v1.5 (better quality, GPU-accelerated)
+   - **Supported:** all-MiniLM-L6-v2 (384-dim), BAAI/bge-large-en-v1.5 (1024-dim), BAAI/bge-m3 (1024-dim)
+   - **Default:** bge-m3 (multilingual, 100+ languages, GPU-accelerated — ADR-0012: original language primary)
    - **Constraint:** Model locked per collection at ingestion time
    - **Runtime selection:** Query uses collection's model automatically
    - **Model registry:** Configurable via EMBEDDING_MODELS in config.py
@@ -277,8 +278,9 @@ From `docs/project-context.md` (45 rules):
 - **huggingface_hub[hf_xet]** (optional) - Xet protocol for faster model downloads
 - **Models (multi-model registry):**
   - all-MiniLM-L6-v2 (384-dim) - lightweight, fast, CPU-friendly
-  - BAAI/bge-large-en-v1.5 (1024-dim) - high quality, GPU-accelerated (default)
-- **Rationale:** Runtime model selection enables A/B testing, gradual migration, and hardware-appropriate choices. GPU acceleration for bge-large (3-4h for 9K books vs 50-63h CPU), local/free (no API costs). Xet protocol enables chunked parallel downloads with resume capability for large models (1GB+).
+  - BAAI/bge-large-en-v1.5 (1024-dim) - high quality, English-only, GPU-accelerated
+  - BAAI/bge-m3 (1024-dim) - multilingual (100+ languages), GPU-accelerated **(default)**
+- **Rationale:** Runtime model selection enables A/B testing, gradual migration, and hardware-appropriate choices. Default changed to bge-m3 for multilingual support (ADR-0012: original language primary — preserves semantic fingerprints across languages). GPU acceleration for bge-m3 (3-4h for 9K books vs 50-63h CPU), local/free (no API costs). Xet protocol enables chunked parallel downloads with resume capability for large models (1GB+).
 
 **Vector Database:**
 - **Qdrant ≥1.7.1** (self-hosted)
@@ -377,7 +379,8 @@ From `docs/project-context.md` (45 rules):
 **Single Embedding Model (one-size-fits-all):**
 - ❌ Rejected: No flexibility for A/B testing, hardware constraints, gradual migration
 - ✅ Chosen: Multi-model registry with runtime selection
-  - Default: bge-large-en-v1.5 (best quality, GPU-accelerated)
+  - Default: bge-m3 (multilingual, GPU-accelerated — ADR-0012)
+  - Alternative: bge-large-en-v1.5 (English-only, high quality, GPU-accelerated)
   - Fallback: all-MiniLM-L6-v2 (lightweight, CPU-friendly, comparison baseline)
 
 ---
@@ -415,8 +418,9 @@ def perform_rag_query(query: str, collection_name: str, limit: int = 5) -> RAGRe
 EMBEDDING_MODELS = {
     "minilm": {"name": "all-MiniLM-L6-v2", "dim": 384},
     "bge-large": {"name": "BAAI/bge-large-en-v1.5", "dim": 1024},
+    "bge-m3": {"name": "BAAI/bge-m3", "dim": 1024},
 }
-DEFAULT_EMBEDDING_MODEL = "bge-large"
+DEFAULT_EMBEDDING_MODEL = "bge-m3"
 qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 calibre_db_instance = None
 chapter_list = []
@@ -521,8 +525,8 @@ DANGEROUS_TAGS = {"script", "iframe", "object", "embed", "link", "style"}
 DANGEROUS_ATTRIBUTES = {"onclick", "onerror", "onload", "href"}
 
 # Model constants
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-EMBEDDING_DIMENSIONS = 384
+DEFAULT_EMBEDDING_MODEL = "bge-m3"
+EMBEDDING_DIMENSIONS = 1024
 ```
 
 ---

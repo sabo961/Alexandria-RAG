@@ -48,6 +48,13 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
             }
 
             # ============================================
+            # GUI - Optional Web Interface
+            # ============================================
+            webUI = container "Web Dashboard" "Optional Streamlit UI for browsing library, querying, monitoring ingestion" "Python 3.14, Streamlit" {
+                tags "Interface"
+            }
+
+            # ============================================
             # SCRIPTS PACKAGE - Business Logic
             # ============================================
             scripts = container "Scripts Package" "Core business logic for ingestion, chunking, querying" "Python 3.14" {
@@ -65,7 +72,7 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
                     tags "Ingestion" "Core" "AI"
                 }
 
-                embedder = component "Embedder" "Converts text to 384-dim vectors" "SentenceTransformer" {
+                embedder = component "Embedder" "Converts text to 1024-dim vectors (bge-m3, multilingual)" "SentenceTransformer" {
                     tags "Ingestion" "Query" "AI"
                 }
 
@@ -91,12 +98,30 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
                 }
 
                 # --- MANAGEMENT COMPONENTS ---
-                collectionManifest = component "Collection Manifest" "Tracks ingested books per collection with CSV export" "collection_manifest.py" {
+                collectionManifest = component "Collection Manifest" "Tracks ingested books in shared SQLite DB on NAS" "collection_manifest.py" {
                     tags "Management"
                 }
 
                 calibreDB = component "Calibre Integration" "SQLite access to Calibre library metadata" "calibre_db.py" {
                     tags "Integration"
+                }
+
+                # --- BOOK SOURCE CONNECTORS (Feb 2026) ---
+                archiveConnector = component "Archive.org Connector" "Fetch books from Internet Archive" "archive_connector.py" {
+                    tags "Integration" "Ingestion"
+                }
+
+                gutenbergConnector = component "Gutenberg Connector" "Fetch public domain books from Project Gutenberg" "gutenberg_connector.py" {
+                    tags "Integration" "Ingestion"
+                }
+
+                calibreWebConnector = component "Calibre-Web Connector" "Automated ingest pipeline from Calibre-Web API" "calibre_web_connector.py" {
+                    tags "Integration" "Ingestion"
+                }
+
+                # --- MIGRATION TOOLS (Feb 2026) ---
+                modelMigrator = component "Embedding Model Migrator" "Re-embed collection with new model (e.g. bge-m3)" "migrate_to_bge_m3.py" {
+                    tags "Management"
                 }
 
                 # Internal Flow - Ingestion
@@ -131,6 +156,10 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
             tags "External" "AI"
         }
 
+        manifestDB = softwareSystem "Manifest Database" "Shared SQLite DB on NAS (\\Sinovac\docker\calibre\alexandria\.qdrant\alexandria.db)" {
+            tags "External" "Database"
+        }
+
         # ============================================
         # RELATIONSHIPS - System Context
         # ============================================
@@ -142,12 +171,15 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         # ============================================
         # RELATIONSHIPS - Container Level
         # ============================================
+        user -> webUI "Browser access (optional)"
         claudeCode -> mcpServer "stdio (MCP protocol)"
         mcpServer -> scripts "Calls business logic"
+        webUI -> scripts "Calls business logic"
         scripts -> filesystem "Reads books, writes logs"
         scripts -> calibreLibrary "Queries metadata"
         scripts -> qdrant "Vector operations"
         scripts -> openrouter "LLM calls"
+        scripts -> manifestDB "Tracks ingested books"
 
         # ============================================
         # RELATIONSHIPS - MCP Tools to Components
@@ -171,6 +203,12 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         qdrantUploader -> qdrant "Upserts vectors"
         ragQueryEngine -> qdrant "Searches vectors"
         ragQueryEngine -> openrouter "Generates answers"
+        collectionManifest -> manifestDB "Logs book ingestion"
+
+        # Connectors to External
+        archiveConnector -> textExtractor "Fetched books"
+        gutenbergConnector -> textExtractor "Fetched books"
+        calibreWebConnector -> textExtractor "Auto-ingested books"
     }
 
     views {
@@ -211,32 +249,28 @@ workspace "Alexandria RAG System" "Semantic search and knowledge synthesis acros
         }
 
         # ============================================
-        # DYNAMIC - Query Flow
+        # DYNAMIC - Query Flow (Container-level)
         # ============================================
         dynamic alexandriaSystem "RAGQueryFlow" "How a query flows through the system" {
-            queryTool -> ragQueryEngine "1. Execute search"
-            ragQueryEngine -> embedder "2. Embed query"
-            ragQueryEngine -> qdrant "3. Vector search"
-            ragQueryEngine -> parentFetcher "4. Fetch parent context"
-            ragQueryEngine -> responsePatterns "5. Apply RAG template"
-            ragQueryEngine -> openrouter "6. Generate answer"
+            claudeCode -> mcpServer "1. Query via MCP tool"
+            mcpServer -> scripts "2. Execute search"
+            scripts -> qdrant "3. Vector search"
+            scripts -> openrouter "4. Generate answer"
+            mcpServer -> claudeCode "5. Return result"
             autolayout lr
         }
 
         # ============================================
-        # DYNAMIC - Ingestion Flow
+        # DYNAMIC - Ingestion Flow (Container-level)
         # ============================================
         dynamic alexandriaSystem "BookIngestionFlow" "How a book gets ingested" {
-            ingestTool -> calibreDB "1. Get book info"
-            ingestTool -> textExtractor "2. Start extraction"
-            calibreDB -> textExtractor "3. File path + metadata"
-            textExtractor -> chapterDetector "4. Raw text"
-            chapterDetector -> universalChunker "5. Chapters"
-            universalChunker -> embedder "6. Similarities"
-            universalChunker -> hierarchicalIngester "7. Chunks"
-            hierarchicalIngester -> qdrantUploader "8. Batch"
-            qdrantUploader -> qdrant "9. Upsert"
-            qdrantUploader -> collectionManifest "10. Log"
+            claudeCode -> mcpServer "1. Ingest book"
+            mcpServer -> scripts "2. Start pipeline"
+            scripts -> calibreLibrary "3. Get book metadata"
+            scripts -> filesystem "4. Read book file"
+            scripts -> qdrant "5. Upload vectors"
+            scripts -> manifestDB "6. Log success"
+            mcpServer -> claudeCode "7. Confirm completion"
             autolayout lr
         }
 

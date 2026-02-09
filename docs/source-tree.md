@@ -1,6 +1,6 @@
 # Alexandria - Source Tree Analysis
 
-**Date:** 2026-01-31
+**Date:** 2026-02-09 (Updated)
 **Project Type:** Monolith (Python Backend)
 **Primary Language:** Python 3.14
 **Architecture:** MCP-first design
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Alexandria is a RAG (Retrieval-Augmented Generation) system providing semantic search across 9,000+ books in the Temenos Academy Library. The system uses an MCP Server as the primary interface, with all business logic contained in the `scripts/` package.
+Alexandria is a multilingual knowledge platform over 9,000+ books in the Temenos Academy Library. RAG engine with semantic chunking, MCP-first architecture, guardian persona system (11 guardians), and multilingual embeddings (bge-m3, 1024-dim). All business logic lives in the `scripts/` package.
 
 ---
 
@@ -23,18 +23,40 @@ alexandria/
 ├── AGENTS.md                      # AI agent entry point
 ├── TODO.md                        # Task backlog
 ├── CHANGELOG.md                   # Completed work archive
+├── billboard.md                   # Strategic pointer → brief + notebook
+├── alexandria_app.py              # GUI: Streamlit dashboard (optional)
 │
 ├── scripts/                       # BUSINESS LOGIC + MCP SERVER
-│   ├── mcp_server.py              # Entry point - MCP Server (63K)
-│   ├── ingest_books.py            # Book ingestion pipeline (48K)
-│   ├── rag_query.py               # Semantic search & RAG (31K)
-│   ├── calibre_db.py              # Calibre SQLite interface (19K)
-│   ├── qdrant_utils.py            # Qdrant operations (22K)
-│   ├── collection_manifest.py     # Ingestion tracking (18K)
-│   ├── chapter_detection.py       # Chapter boundary detection (18K)
+│   ├── mcp_server.py              # Entry point - MCP Server (14 tools)
+│   ├── ingest_books.py            # Book ingestion pipeline
+│   ├── rag_query.py               # Semantic search & RAG
+│   ├── calibre_db.py              # Calibre SQLite interface
+│   ├── qdrant_utils.py            # Qdrant operations
+│   ├── collection_manifest.py     # SQLite manifest manager
+│   ├── chapter_detection.py       # Chapter boundary detection
 │   ├── universal_chunking.py      # Semantic chunking (ADR 0007)
-│   ├── html_sanitizer.py          # HTML content sanitization
-│   ├── config.py                  # Configuration management
+│   ├── html_sanitizer.py          # XSS prevention (Story 5.3)
+│   ├── config.py                  # Configuration loader (.env)
+│   ├── guardian_personas.py       # Guardian persona loader (NEW: Feb 2026)
+│   │
+│   ├── # Book Source Connectors
+│   ├── archive_connector.py       # Internet Archive integration
+│   ├── gutenberg_connector.py     # Project Gutenberg connector
+│   ├── calibre_web_connector.py   # Calibre-Web API client
+│   ├── cwa_ingest_pipeline.py     # Auto-ingest automation
+│   ├── public_domain_pipeline.py  # Public domain sourcing
+│   │
+│   ├── # Batch & Migration Tools
+│   ├── batch_ingest.py            # Batch orchestrator
+│   ├── batch_ingest_from_file.py  # Batch from file list
+│   ├── migrate_to_bge_m3.py       # BGE-M3 model migration
+│   ├── reingest_collection.py     # Collection re-ingestion
+│   │
+│   ├── # Utility Scripts
+│   ├── list_books.py              # List books in collection
+│   ├── test_multilingual.py       # Multilingual RAG test (Croatian)
+│   ├── pick_sample_books.py       # Sample book selector
+│   │
 │   └── README.md                  # Scripts package overview
 │
 ├── docs/                          # DOCUMENTATION
@@ -76,6 +98,15 @@ alexandria/
 │   │
 │   └── development/               # BMAD internal workflow
 │       ├── README.md
+│       ├── strategic-brief-v1.md  # Vision poster (2026-02-09)
+│       ├── strategic-notebook-2026-02-09.md  # Technical companion
+│       ├── guardians/             # Guardian persona .md files (11 active)
+│       │   ├── alan_kay.md
+│       │   ├── ariadne.md
+│       │   ├── hipatija.md
+│       │   ├── lupita.md
+│       │   ├── zec.md             # Default guardian
+│       │   └── ...                # (+6 more)
 │       ├── ideas/                 # Future visions
 │       ├── backlog/               # Active TODO details
 │       ├── research/              # Background analysis
@@ -114,11 +145,12 @@ alexandria/
 **Entry Point:** `mcp_server.py`
 
 Key modules:
-- `mcp_server.py` - MCP protocol handler, exposes all tools
+- `mcp_server.py` - MCP protocol handler, 14 tools (query, ingest, guardians)
 - `ingest_books.py` - Book extraction, chunking, embedding, upload
 - `rag_query.py` - Semantic search, context retrieval, LLM integration
 - `calibre_db.py` - Calibre library metadata access
 - `qdrant_utils.py` - Vector database operations
+- `guardian_personas.py` - Guardian persona loader (11 guardians from .md files)
 
 ### `docs/`
 
@@ -143,19 +175,30 @@ Critical files:
 
 ## Entry Points
 
-### Main Entry: `scripts/mcp_server.py`
+### Primary Entry: `scripts/mcp_server.py`
 
 **Protocol:** MCP (Model Context Protocol) over stdio
 **Configuration:** `.mcp.json`
 
 ```
-Claude Code → scripts/mcp_server.py
-    ├── alexandria_query()      → rag_query.py
-    ├── alexandria_ingest()     → ingest_books.py
+Claude Code → scripts/mcp_server.py (14 tools)
+    ├── alexandria_query()      → rag_query.py + guardian_personas.py
+    ├── alexandria_guardians()  → guardian_personas.py
     ├── alexandria_search()     → calibre_db.py
+    ├── alexandria_book()       → calibre_db.py
     ├── alexandria_stats()      → qdrant_utils.py
-    └── alexandria_*()          → various modules
+    ├── alexandria_ingest()     → ingest_books.py
+    ├── alexandria_batch_ingest() → ingest_books.py
+    └── alexandria_*()          → various modules (7 more tools)
 ```
+
+### Secondary Entry: `alexandria_app.py` (Optional GUI)
+
+**Protocol:** HTTP (Streamlit web interface)
+**Launch:** `streamlit run alexandria_app.py`
+**Port:** 8501
+
+Thin presentation layer - all business logic delegates to `scripts/` modules
 
 ---
 

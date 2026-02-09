@@ -1,7 +1,7 @@
 # ADR-0010: GPU-Accelerated Embedding Model Selection
 
 ## Status
-**Accepted** (2026-01-31)
+**Accepted** (2026-01-31) — **Implementation Note:** Actual migration used **BAAI/bge-m3** (multilingual, 100+ languages) instead of the originally recommended bge-large-en-v1.5 (English-only). The change was driven by epistemological requirements — see [ADR-0012: Original Language Primary](0012-original-language-primary.md). GPU acceleration design and all other aspects of this ADR remain valid.
 
 ## Date
 2026-01-31

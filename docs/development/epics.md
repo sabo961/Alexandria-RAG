@@ -19,8 +19,8 @@ This document provides the complete epic and story breakdown for Alexandria, dec
 - Vector similarity search using embeddings
 - Context modes: precise/contextual/comprehensive
 - Optional LLM answer generation (OpenRouter API)
-- Current: all-MiniLM-L6-v2 (384-dim)
-- Migrating to: bge-large-en-v1.5 (1024-dim, GPU-accelerated) - ADR-0010
+- ~~Current: all-MiniLM-L6-v2 (384-dim)~~ migrated
+- Migrated to: **bge-m3** (1024-dim, multilingual 100+ languages, GPU-accelerated) - ADR-0010, ADR-0012
 
 **FR-002: Hierarchical Chunking**
 - Parent chunks: Full chapters (detected via EPUB/PDF structure)
@@ -46,9 +46,9 @@ This document provides the complete epic and story breakdown for Alexandria, dec
 ### Non-Functional Requirements
 
 **NFR-001: Performance**
-- Ingestion: ~11-13 sec/book (CPU), **~0.3 sec/book (GPU with bge-large)** - ADR-0010
+- Ingestion: ~11-13 sec/book (CPU), **~0.3 sec/book (GPU with bge-m3)** - ADR-0010
 - Query: <100ms (search only), 0.15-5.5 sec (with LLM)
-- Target scale: 1.35M chunks, ~6GB vectors (bge-large-en-v1.5)
+- Target scale: 1.35M chunks, ~6GB vectors (bge-m3, 1024-dim)
 
 **NFR-002: Immutability Constraints** (CRITICAL)
 - Embedding model locked per collection (changing = full re-ingestion)
@@ -84,7 +84,7 @@ This document provides the complete epic and story breakdown for Alexandria, dec
 **From Architecture Document:**
 
 - **Starter Template:** None (brownfield project, existing codebase in scripts/)
-- **GPU Acceleration (ADR-0010):** Migrate to bge-large-en-v1.5 for 10x ingestion speedup
+- **GPU Acceleration (ADR-0010):** Migrated to bge-m3 (multilingual, 1024-dim) with GPU acceleration
 - **HTTP API Wrapper (ADR-0009):** FastAPI REST API for multi-consumer support (Phase 1+)
 - **Implementation Patterns:** 18 conflict points documented, 15 mandatory rules for consistency
 - **Competitive Differentiation:** GPU acceleration, hierarchical chunking, multi-consumer architecture, collection isolation
@@ -107,7 +107,7 @@ This document provides the complete epic and story breakdown for Alexandria, dec
 ### FR Coverage Map
 
 **FR-001 (Semantic Book Search):**
-- Epic 0: Model migration to bge-large-en-v1.5
+- Epic 0: ~~Model migration to bge-large-en-v1.5~~ **DONE** — migrated to bge-m3 (multilingual)
 - Epic 1: Search interface and context modes
 - Epic 3: MCP/HTTP API access
 
@@ -156,23 +156,23 @@ This document provides the complete epic and story breakdown for Alexandria, dec
 
 ## Epic List
 
-### Epic 0: bge-large Model Migration
+### Epic 0: Embedding Model Migration ✅ COMPLETED
 
-**FIRST PRIORITY** - Migrate embedding model to bge-large-en-v1.5 for superior search quality. GPU acceleration is a bonus (10x speedup), but quality improvement is the primary goal.
+~~**FIRST PRIORITY** - Migrate embedding model to bge-large-en-v1.5~~ **DONE**
 
-**User Outcome:** Users experience dramatically improved search relevance and precision when querying the book collection.
+Migrated to **bge-m3** (1024-dim, multilingual 100+ languages, GPU-accelerated). The model choice was upgraded from the originally planned bge-large-en-v1.5 (English-only) to bge-m3 for epistemological reasons — preserving semantic fingerprints in original languages across 100+ linguistic traditions. See [ADR-0012](../architecture/decisions/0012-original-language-primary.md).
 
-**FRs Covered:** FR-001 (partial - model upgrade), NFR-001 (performance), NFR-002 (immutability window)
+**User Outcome:** Users experience multilingual semantic search that preserves meaning in the original language. "Dasein" and "being-there" occupy different regions of semantic space — this is the feature, not the bug.
 
-**ADR References:** ADR-0010 (GPU-Accelerated Embeddings)
+**FRs Covered:** FR-001 (model upgrade), NFR-001 (performance), NFR-002 (immutability window)
+
+**ADR References:** ADR-0010 (GPU-Accelerated Embeddings), ADR-0012 (Original Language Primary)
 
 **Implementation Notes:**
-- Decision window closing: Re-ingestion manageable NOW (150 books), prohibitive later (9,000 books)
-- Model: bge-large-en-v1.5 (1024-dim, best-in-class for semantic search)
-- GPU: PyTorch CUDA support for 10x ingestion speedup (~0.3 sec/book vs 11-13 sec)
-- Immutability: Changing model later = full collection re-ingestion
-- Quality focus: Better embeddings = better search results (primary goal)
-- Performance: GPU acceleration enables fast batch processing (secondary benefit)
+- Model: **bge-m3** (1024-dim, multilingual, GPU-accelerated) — replaces originally planned bge-large-en-v1.5
+- GPU: PyTorch CUDA on BUCO (A2000 12GB) for 10x ingestion speedup (~0.3 sec/book vs 11-13 sec)
+- Re-ingestion completed for all collections
+- Immutability: Model is now locked (changing = full re-ingestion of 9,000+ books)
 
 ---
 
@@ -432,27 +432,106 @@ Implement comprehensive audit logging and observability stack for compliance, de
 
 ---
 
-## Future Epics (Phase 3-4+)
+## Future Epics (Strategic Roadmap Day 0-4)
 
-These concepts are documented in [docs/development/ideas/](./README.md) for future implementation:
+> **Updated 2026-02-09:** Aligned with [Strategic Brief v1.0](./strategic-brief-v1.md) and [Strategic Notebook](./strategic-notebook-2026-02-09.md). The Day 0-4 roadmap replaces the earlier Phase 3-4+ timeline for knowledge infrastructure epics. Each day builds on the previous — connectors feed SKOS, SKOS feeds agents, agents feed the graph, the graph feeds temporal knowledge.
 
-### Epic 8 (Future): Librarians - AI Agent Orchestration Layer
+These concepts are documented in [docs/development/ideas/](./README.md) and the strategic brief:
 
-**Vision:** Specialized BMad agents that serve as interface between Alexandria and users.
+### Epic 8: Source Connectors - Multilingual Public Domain Sources
 
-**Agents:**
-- 📚 **LIBRARIAN**: Cataloging, metadata integrity, taxonomy
-- 🔍 **RESEARCHER**: Deep semantic search, cross-referencing, synthesis
-- 🎯 **CURATOR**: Personalized recommendations, reading paths
-- 🗄️ **ARCHIVIST**: Maintenance, quality checks, health monitoring
+**Vision:** Expand Alexandria's source base beyond Internet Archive and Gutenberg with 5 new multilingual public domain connectors.
 
-**Phase:** Phase 3-4 (after basic RAG operational)
+**Connectors:**
+| # | Source | Languages | Effort |
+|---|--------|-----------|--------|
+| 1 | **Wikisource** (6.75M texts, 82 languages) | ALL | 2-3 days |
+| 2 | **Chinese Text Project** (30,000 works) | Classical Chinese + EN | 1-2 days |
+| 3 | **SuttaCentral** (Buddhist canon, parallel texts) | Pali, Sanskrit, Chinese, Tibetan + 30 modern | 1-2 days |
+| 4 | **Gallica (BnF)** (10M docs) | French, Latin, Arabic | 3-4 days |
+| 5 | **Perseus** (Classical texts, TEI) | Ancient Greek, Latin | 2-3 days |
 
-**Source:** [librarians.md](./librarians.md)
+**Architecture:** Common `BaseConnector` interface (`search()`, `metadata()`, `download()`, `languages()`). All connectors conform to same pattern. LIBRARIAN agent calls them uniformly.
+
+**Roadmap:** **Day 0 SOURCE** — "There is no library without books." Before ontologies, before agents, before graphs.
+
+**ADR References:** [ADR-0012](../architecture/decisions/0012-original-language-primary.md) (original language primary drives connector selection)
+
+**Source:** [Strategic Brief — Day 0](./strategic-brief-v1.md#day-0-project-source), [Strategic Notebook — Connector Architecture](./strategic-notebook-2026-02-09.md#day-0-project-source--connector-details)
 
 ---
 
-### Epic 9 (Future): Makers - Consensus Voting for Critical Decisions
+### Epic 9: SKOS Ontology Backbone + Neo4j
+
+**Vision:** Replace flat Calibre tags with W3C SKOS concept organization. Neo4j as runtime query engine on BUCO server.
+
+**Components:**
+- **SKOS concepts** in YAML: `prefLabel` (original language), `altLabel` (English approximation), `broader`/`narrower`/`related` relationships
+- **Alexandria extensions**: `translation_fidelity` (low/medium/high), `untranslatable` flag, `original_language`, `source_taxonomy`
+- **Neo4j** on BUCO (Dell PowerEdge 3660, 80GB RAM, 8TB NVMe): Import YAML concepts as nodes/edges
+- **Concept seeding**: Import taxonomies from CText, SuttaCentral, Perseus, Gallica, Wikisource — NOT invented from scratch
+- **Interoperability**: Dublin Core for book metadata, SKOS for concepts, Wikidata links via `skos:exactMatch`
+
+**Roadmap:** **Day 1 SKOS** — 200-300 seed concepts, grow organically. LIBRARIAN agent expands as books are ingested.
+
+**ADR References:** [ADR-0013](../architecture/decisions/0013-skos-ontology-backbone.md) (SKOS backbone), [ADR-0012](../architecture/decisions/0012-original-language-primary.md) (original language as prefLabel)
+
+**Source:** [Strategic Brief — Day 1](./strategic-brief-v1.md#day-1-skos-ontology-backbone), [Strategic Notebook — SKOS Schema](./strategic-notebook-2026-02-09.md#day-1-skos-schema-and-data-formats)
+
+---
+
+### Epic 10: Librarians - AI Agent Orchestration Layer
+
+**Vision:** Specialized agents that serve as interface between Alexandria and users. Orthogonal with Guardian personas: Librarian = WHAT they do, Guardian = WHO speaks.
+
+**Agents:**
+- **LIBRARIAN**: Cataloging, metadata integrity, SKOS tagging
+- **RESEARCHER**: Deep semantic search, cross-referencing, synthesis
+- **CURATOR**: Personalized recommendations, reading paths, "unknown unknowns"
+- **ARCHIVIST**: Maintenance, quality checks, health monitoring
+
+**Dispatcher:** Query classification routes to specialist. Simple lookup -> LIBRARIAN. Deep research -> RESEARCHER. "What should I read?" -> CURATOR. Maintenance -> ARCHIVIST.
+
+**Roadmap:** **Day 2 AGENTS** — requires SKOS backbone (Day 1) for LIBRARIAN tagging and CURATOR recommendations.
+
+**Source:** [librarians.md](./ideas/librarians.md), [Strategic Brief — Day 2](./strategic-brief-v1.md#day-2-agents-librarians--guardians)
+
+---
+
+### Epic 11: Knowledge Graph - LightRAG + Neo4j
+
+**Vision:** Graph-enhanced retrieval combining Qdrant (fast vector similarity) with Neo4j (relationship traversal). LightRAG proof-of-concept on 100-200 books.
+
+**Components:**
+- **Neo4j** (already deployed in Epic 9): SKOS concepts + book-concept relationships
+- **LightRAG** (HKU, EMNLP 2025): Graph-enhanced RAG on top of existing Qdrant. Supports `QdrantVectorDBStorage`. 84.8% win rate vs Microsoft GraphRAG at 99% token reduction.
+- **Hybrid retrieval**: Qdrant for fast similarity, Neo4j for relationship traversal. Shared IDs. Combined context for LLM.
+
+**Roadmap:** **Day 3 GRAPH** — PoC on one topic cluster. Validate that graph-enhanced retrieval beats pure vector search. If yes, scale. If no, investigate.
+
+**Source:** [Strategic Brief — Day 3](./strategic-brief-v1.md#day-3-knowledge-graph), [Strategic Notebook — Knowledge Graph Technology](./strategic-notebook-2026-02-09.md#day-3-knowledge-graph-technology-landscape)
+
+---
+
+### Epic 12: Temporal Knowledge Layer - Graphiti + Citaonica
+
+**Vision:** Conversation memory and temporal knowledge tracking. Citaonica (reading room) replaces Speaker's Corner with guardian-powered conversational interface.
+
+**Components:**
+- **Graphiti** (Zep): Temporal knowledge graph for conversation memory. Bi-temporal model: t_event (when it happened), t_ingested (when we learned).
+- **Citaonica**: Two-step approach — (1) quick guardian swap in existing Streamlit UI now, (2) full chat with Graphiti memory later.
+- **Event logging** (starts Day 0): Track queries, found-useful signals, reading history. Feeds the temporal layer.
+- **Temporal queries**: "How did my understanding evolve?", "What did I read before discovering X?"
+
+**Roadmap:** **Day 4 TEMPORAL** — requires Knowledge Graph (Day 3) and event data accumulated from Day 0.
+
+**Privacy Note:** User journey tracking must be opt-in, GDPR compliant, with data retention limits.
+
+**Source:** [temporal-knowledge-layer.md](./ideas/temporal-knowledge-layer.md), [Strategic Brief — Day 4](./strategic-brief-v1.md#day-4-temporal-knowledge-layer)
+
+---
+
+### Epic 13 (Parked): Makers - Consensus Voting for Critical Decisions
 
 **Vision:** MAKER methodology (atomic steps, parallel agents, k-threshold voting) for zero-error critical decisions.
 
@@ -468,31 +547,13 @@ These concepts are documented in [docs/development/ideas/](./README.md) for futu
 - Red-flagging: Reject suspicious responses before voting
 - Escalation: Human review if no consensus
 
-**Phase:** Phase 4+ (quality control layer)
+**Status:** **Parked** — needs autonomous agents (Epic 10) operational first.
 
-**Source:** [makers.md](./makers.md)
-
----
-
-### Epic 10 (Future): Temporal Knowledge Layer - Graphiti + Neo4j
-
-**Vision:** Knowledge graph with temporal dimension - track user journey through knowledge space.
-
-**Components:**
-- **Graphiti + Neo4j**: Entities (Books, Authors, Concepts, Users), Relationships (WROTE, CITES, READ, SEARCHED)
-- **Bi-temporal model**: t_event (when it happened), t_ingested (when we learned)
-- **Personalized retrieval**: "Next book" recommendations based on reading history
-- **Temporal queries**: "How did my understanding evolve?", "What did I read before discovering X?"
-
-**Phase:** Phase 4+ (requires Neo4j integration, significant complexity)
-
-**Privacy Note:** User journey tracking must be opt-in, GDPR compliant, with data retention limits.
-
-**Source:** [temporal-knowledge-layer.md](./temporal-knowledge-layer.md)
+**Source:** [makers.md](./ideas/makers.md)
 
 ---
 
-### Epic 11 (Future): Author Geography Map
+### Epic 14 (Future): Author Geography Map
 
 **Vision:** Visualize geographic distribution of authors using Datasette cluster-map.
 
@@ -503,11 +564,27 @@ These concepts are documented in [docs/development/ideas/](./README.md) for futu
 
 **Dependencies:** Epic 1 metadata enrichment (capture wikidata_id, birthplace during ingestion)
 
-**Phase:** Phase 2-3 (visualization feature)
+**Phase:** Phase 2-3 (visualization feature, independent of Day 0-4 roadmap)
 
-**Source:** [author-geography-map.md](./author-geography-map.md)
+**Source:** [author-geography-map.md](./ideas/author-geography-map.md)
 
 ---
+
+## Roadmap Dependency Graph
+
+```
+Day 0: SOURCE (Epic 8)     ─── Connectors feed books into Alexandria
+         │
+Day 1: SKOS (Epic 9)       ─── Concepts organize what connectors bring
+         │
+Day 2: AGENTS (Epic 10)    ─── Librarians use SKOS to tag and recommend
+         │
+Day 3: GRAPH (Epic 11)     ─── Neo4j + LightRAG enable "unknown unknowns"
+         │
+Day 4: TEMPORAL (Epic 12)  ─── Graphiti + Citaonica track knowledge journeys
+```
+
+> See [Strategic Brief v1.0](./strategic-brief-v1.md) for the full roadmap and [Strategic Notebook](./strategic-notebook-2026-02-09.md) for technical details.
 
 ## Next Steps
 

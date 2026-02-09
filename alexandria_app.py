@@ -166,14 +166,21 @@ with st.sidebar:
 
     st.divider()
 
-    # Quick Stats
+    # Quick Stats - only show manifest-tracked collections
     st.subheader("📊 Quick Stats")
 
     if qdrant_ok:
         stats = get_collection_stats()
+        try:
+            _manifest = CollectionManifest()
+            _book_collections = set(_manifest.list_collection_names())
+        except Exception:
+            _book_collections = {QDRANT_COLLECTION}
+
         if "error" not in stats:
             for coll_name, count in stats.items():
-                st.metric(f"📦 {coll_name}", f"{count:,} chunks")
+                if coll_name in _book_collections:
+                    st.metric(f"📦 {coll_name}", f"{count:,} chunks")
         else:
             st.warning("Could not load stats")
 
@@ -190,8 +197,6 @@ with st.sidebar:
         st.subheader("🤖 OpenRouter")
 
         if OPENROUTER_API_KEY:
-            st.success("🔑 API Key configured")
-
             # Fetch Models button
             if st.button("🔄 Fetch Models", use_container_width=True, key="fetch_models"):
                 with st.spinner("Fetching models..."):

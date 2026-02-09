@@ -33,7 +33,7 @@ from collection_manifest import CollectionManifest
 # =============================================================================
 st.set_page_config(
     page_title="Alexandria",
-    page_icon="📚",
+    page_icon="assets/logo.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -271,7 +271,15 @@ with st.sidebar:
 # =============================================================================
 # MAIN AREA
 # =============================================================================
-st.title("📚 Alexandria of Temenos")
+_logo_path = project_root / "assets" / "logo.png"
+if _logo_path.exists():
+    _left, _right = st.columns([0.07, 0.93])
+    with _left:
+        st.image(str(_logo_path), width=64)
+    with _right:
+        st.title("Alexandria of Temenos")
+else:
+    st.title("📚 Alexandria of Temenos")
 st.caption("Knowledge Management Dashboard")
 
 # =============================================================================
